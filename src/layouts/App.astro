@@ -30,8 +30,7 @@ const aktiv = (href: string) => pfad === href || pfad.startsWith(href + '/');
     <aside class="seite dunkel" id="seitenleiste">
       <div class="seite-kopf">
         <a href="/app" class="marke" aria-label="Let's Meet Backoffice, Start">
-          <Logo variante="weiss" hoehe={28} />
-          <span class="app-name">Let's Meet<span class="punkt">.</span></span>
+          <Logo variante="weiss" hoehe={44} klasse="marke-logo" />
         </a>
         <button type="button" class="menue-knopf" aria-expanded="false" aria-controls="hauptnavi" id="menue-knopf">
           <Icon name="menue" /><span class="sr-only">Menü</span>
@@ -129,8 +128,7 @@ const aktiv = (href: string) => pfad === href || pfad.startsWith(href + '/');
     background: var(--n-900); color: var(--farbe-papier);
   }
   .seite-kopf { padding: var(--raum-6) var(--raum-6) var(--raum-4); display: flex; align-items: center; justify-content: space-between; }
-  .marke { display: grid; gap: var(--raum-2); text-decoration: none; }
-  .app-name { font-family: var(--schrift-display); font-weight: 900; font-size: var(--text-lg); line-height: 1; }
+  .marke { display: block; line-height: 0; text-decoration: none; }
   .menue-knopf { display: none; background: none; border: 1px solid var(--n-700); color: inherit; width: 44px; height: 44px; place-items: center; cursor: pointer; }
   .navi { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   .navi ul { list-style: none; margin: var(--raum-4) 0 0; padding: 0 var(--raum-3); display: grid; gap: 2px; }
@@ -164,13 +162,10 @@ const aktiv = (href: string) => pfad === href || pfad.startsWith(href + '/');
     .rahmen { grid-template-columns: minmax(0, 1fr); }
     .seite { position: sticky; height: auto; z-index: 20; }
     .seite-kopf { padding: var(--raum-3) var(--raum-4); }
-    .marke { grid-auto-flow: column; align-items: center; gap: var(--raum-3); }
+    .marke :global(.marke-logo) { width: 150px; }
     .menue-knopf { display: grid; }
     .navi { display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--n-900); max-height: calc(100vh - 70px); overflow-y: auto; box-shadow: var(--schatten-3); }
     .navi.offen { display: flex; }
     .inhalt { padding-top: var(--raum-6); }
-  }
-  @media (max-width: 420px) {
-    .app-name { display: none; }
   }
 </style>
