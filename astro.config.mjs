@@ -5,7 +5,7 @@ import cloudflare from '@astrojs/cloudflare';
 // Let's Meet läuft komplett serverseitig auf Cloudflare Workers.
 // Statische Dateien (Schriften, Logos, embed.js) liefert Workers Assets aus.
 export default defineConfig({
-  site: 'https://termine.thatsit.marketing',
+  site: 'https://letsmeet.thatsit.marketing',
   output: 'server',
   adapter: cloudflare({ imageService: 'passthrough' }),
   security: { checkOrigin: true },

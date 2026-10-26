@@ -46,14 +46,14 @@ Ein Pages Projekt funktioniert mit diesem Setup nicht (liefert 404), weil der As
 4. Buildbefehl `pnpm build`, Deploybefehl `pnpm run deploy:cloudflare`, Produktionsbranch nach Wahl (aktuell liegt der Code auf `claude/affectionate-pasteur-q3ennq`)
 5. Unter Einstellungen, Variablen und Geheimnisse als Secret setzen: `SESSION_SECRET`, `SETUP_TOKEN`, später die übrigen aus `.env.example`
 6. Der Deploybefehl wendet die Migrationen auf die D1 an. Falls dem Build Token die D1 Rechte fehlen: einmal lokal `pnpm db:migrate:remote` ausführen
-7. Custom Domain `termine.thatsit.marketing` im Worker hinterlegen und `SITE_URL` in `wrangler.jsonc` prüfen
+7. Custom Domain `letsmeet.thatsit.marketing` im Worker hinterlegen und `SITE_URL` in `wrangler.jsonc` prüfen
 8. `/app/setup` aufrufen, mit `SETUP_TOKEN` das erste Admin Konto anlegen. Danach ist die Seite gesperrt
 
 ### Google Kalender einrichten
 
 1. Google Cloud Console: Projekt anlegen, Google Calendar API aktivieren
 2. OAuth Zustimmungsbildschirm (intern oder extern), Scopes `calendar.events` und `calendar.freebusy`
-3. OAuth Client vom Typ Webanwendung, Weiterleitungs URI `https://termine.thatsit.marketing/api/google/rueckruf` (lokal `http://localhost:4321/api/google/rueckruf`)
+3. OAuth Client vom Typ Webanwendung, Weiterleitungs URI `https://letsmeet.thatsit.marketing/api/google/rueckruf` (lokal `http://localhost:4321/api/google/rueckruf`). Die URI wird aus der Adresse im Browser gebildet (`url.origin`), daher jede genutzte Domain eintragen, auch `https://let-s-meet.<konto>.workers.dev/api/google/rueckruf`, solange die Custom Domain noch nicht läuft. Sonst meldet Google `redirect_uri_mismatch`
 4. `GOOGLE_CLIENT_ID` und `GOOGLE_CLIENT_SECRET` als Secret setzen
 5. Jedes Teammitglied verbindet sich selbst unter Backoffice, Integrationen
 
@@ -167,7 +167,6 @@ Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `termina
 * Pages Projekt `let-s-meet` löschen und stattdessen den Worker anlegen (siehe Deployment)
 * Secrets in Cloudflare setzen, Resend Domain verifizieren, Turnstile Widget anlegen
 * Google OAuth Client anlegen (Anleitung oben). Google Verbindung, freeBusy und Meet Links sind mangels Zugang in der Entwicklung nicht live getestet
-* Domain: Vorschlag `termine.thatsit.marketing`, in `astro.config.mjs` (`site`) und `wrangler.jsonc` (`SITE_URL`) hinterlegt, noch zu bestätigen
 * Datenschutzerklärung auf thatsit.marketing um Let's Meet ergänzen (Zweck, Rechtsgrundlage, Speicherdauer 12 Monate, Empfänger Cloudflare, Resend, Google)
 * Profilbilder des Teams als https Link unter Einstellungen hinterlegen
 * Optional später: Rundenverteilung im Team, mehrere Verfügbarkeitspläne pro Person, Zahlungen, Microsoft Kalender
@@ -176,3 +175,5 @@ Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `termina
 
 * 2026-10-26: Erstversion. Buchungsseiten, Widget, Backoffice (Terminarten, Termine, Verfügbarkeit, Einbetten, Integrationen, Einstellungen, Team), Google Kalender, Resend Mails mit ICS, Webhooks, Cron für Erinnerungen und Löschfristen. Build, Typprüfung, Klickstrecke und Responsive Check in fünf Breiten lokal geprüft
 * 2026-10-26: D1 Datenbank `terminethatsitmarketing` verknüpft, Workername `let-s-meet`, Deploybefehl inklusive Migrationen, Anleitung für Workers Builds
+* 2026-10-26: Hinweis ergänzt, dass die Google Weiterleitungs URI zur aufgerufenen Domain passen muss (Ursache für `redirect_uri_mismatch`)
+* 2026-10-26: Domain festgelegt auf `letsmeet.thatsit.marketing` (vorher Vorschlag `termine.thatsit.marketing`), angepasst in `astro.config.mjs`, `wrangler.jsonc`, `public/embed.js` und Anleitung. Google Weiterleitungs URI: `https://letsmeet.thatsit.marketing/api/google/rueckruf`
