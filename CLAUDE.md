@@ -164,7 +164,7 @@ Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `termina
 
 ## Offene Punkte
 
-* Pages Projekt `let-s-meet` löschen und stattdessen den Worker anlegen (siehe Deployment)
+* Worker `let-s-meet` läuft unter `let-s-meet.aged-brook-9137.workers.dev`. Pages Projekt `let-s-meet` kann gelöscht werden
 * Secrets in Cloudflare setzen, Resend Domain verifizieren, Turnstile Widget anlegen
 * Google OAuth Client anlegen (Anleitung oben). Google Verbindung, freeBusy und Meet Links sind mangels Zugang in der Entwicklung nicht live getestet
 * Domain: Vorschlag `termine.thatsit.marketing`, in `astro.config.mjs` (`site`) und `wrangler.jsonc` (`SITE_URL`) hinterlegt, noch zu bestätigen
@@ -176,3 +176,4 @@ Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `termina
 
 * 2026-10-26: Erstversion. Buchungsseiten, Widget, Backoffice (Terminarten, Termine, Verfügbarkeit, Einbetten, Integrationen, Einstellungen, Team), Google Kalender, Resend Mails mit ICS, Webhooks, Cron für Erinnerungen und Löschfristen. Build, Typprüfung, Klickstrecke und Responsive Check in fünf Breiten lokal geprüft
 * 2026-10-26: D1 Datenbank `terminethatsitmarketing` verknüpft, Workername `let-s-meet`, Deploybefehl inklusive Migrationen, Anleitung für Workers Builds
+* 2026-10-26: Schema `0001_grundschema.sql` auf die D1 `terminethatsitmarketing` eingespielt und in `d1_migrations` vermerkt, damit `wrangler d1 migrations apply` es nicht doppelt ausführt
