@@ -53,7 +53,7 @@ Ein Pages Projekt funktioniert mit diesem Setup nicht (liefert 404), weil der As
 
 1. Google Cloud Console: Projekt anlegen, Google Calendar API aktivieren
 2. OAuth Zustimmungsbildschirm (intern oder extern), Scopes `calendar.events` und `calendar.freebusy`
-3. OAuth Client vom Typ Webanwendung, Weiterleitungs URI `https://termine.thatsit.marketing/api/google/rueckruf` (lokal `http://localhost:4321/api/google/rueckruf`)
+3. OAuth Client vom Typ Webanwendung, Weiterleitungs URI `https://termine.thatsit.marketing/api/google/rueckruf` (lokal `http://localhost:4321/api/google/rueckruf`). Die URI wird aus der Adresse im Browser gebildet (`url.origin`), daher jede genutzte Domain eintragen, auch `https://let-s-meet.<konto>.workers.dev/api/google/rueckruf`, solange die Custom Domain noch nicht läuft. Sonst meldet Google `redirect_uri_mismatch`
 4. `GOOGLE_CLIENT_ID` und `GOOGLE_CLIENT_SECRET` als Secret setzen
 5. Jedes Teammitglied verbindet sich selbst unter Backoffice, Integrationen
 
@@ -176,3 +176,4 @@ Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `termina
 
 * 2026-10-26: Erstversion. Buchungsseiten, Widget, Backoffice (Terminarten, Termine, Verfügbarkeit, Einbetten, Integrationen, Einstellungen, Team), Google Kalender, Resend Mails mit ICS, Webhooks, Cron für Erinnerungen und Löschfristen. Build, Typprüfung, Klickstrecke und Responsive Check in fünf Breiten lokal geprüft
 * 2026-10-26: D1 Datenbank `terminethatsitmarketing` verknüpft, Workername `let-s-meet`, Deploybefehl inklusive Migrationen, Anleitung für Workers Builds
+* 2026-10-26: Hinweis ergänzt, dass die Google Weiterleitungs URI zur aufgerufenen Domain passen muss (Ursache für `redirect_uri_mismatch`)
