@@ -1,0 +1,179 @@
+---
+import App from '../../layouts/App.astro';
+import Icon from '../../components/ui/Icon.astro';
+import { terminartenVon } from '../../lib/abfragen';
+
+const nutzer = Astro.locals.nutzer!;
+const arten = await terminartenVon(nutzer.id);
+const basis = Astro.url.origin;
+const ziele = [
+  { url: `${basis}/${nutzer.slug}`, text: 'Profilseite mit allen Terminarten' },
+  ...arten.filter((a) => a.aktiv).map((a) => ({ url: `${basis}/${nutzer.slug}/${a.slug}`, text: `${a.titel} (${a.dauer_min} Min)` })),
+];
+const vorwahl = Astro.url.searchParams.get('ziel');
+---
+<App titel="Einbetten" eyebrow="Auf Websites einbauen">
+  <div class="raster" id="einbetten" data-basis={basis}>
+    <form class="karte block optionen" id="optionen" onsubmit="return false">
+      <fieldset class="arten">
+        <legend class="feld-label">Wie soll Let's Meet erscheinen?</legend>
+        <label class="art-karte">
+          <input type="radio" name="art" value="inline" checked />
+          <span>
+            <span class="art-bild inline" aria-hidden="true"><i></i><i></i><b></b></span>
+            <strong>Inline</strong>
+            <span class="leise klein">Kalender direkt in der Seite</span>
+          </span>
+        </label>
+        <label class="art-karte">
+          <input type="radio" name="art" value="badge" />
+          <span>
+            <span class="art-bild badge-bild" aria-hidden="true"><i></i><i></i><b></b></span>
+            <strong>Popup Button</strong>
+            <span class="leise klein">Schwebender Button unten rechts</span>
+          </span>
+        </label>
+        <label class="art-karte">
+          <input type="radio" name="art" value="text" />
+          <span>
+            <span class="art-bild text-bild" aria-hidden="true"><i></i><u></u><i></i></span>
+            <strong>Popup Link</strong>
+            <span class="leise klein">Eigener Link oder Button öffnet das Popup</span>
+          </span>
+        </label>
+      </fieldset>
+
+      <div class="feld">
+        <label for="ziel">Was wird eingebettet?</label>
+        <select id="ziel" class="auswahl">
+          {ziele.map((z) => <option value={z.url} selected={vorwahl === z.url}>{z.text}</option>)}
+        </select>
+      </div>
+      <div class="feld nur-badge nur-text">
+        <label for="text">Beschriftung</label>
+        <input id="text" class="eingabe" value="Termin buchen" maxlength="40" />
+      </div>
+      <fieldset class="feld nur-badge">
+        <legend class="feld-label">Farbe des Buttons</legend>
+        <div class="reihe">
+          <label class="haken"><input type="radio" name="farbe" value="orange" checked />Orange</label>
+          <label class="haken"><input type="radio" name="farbe" value="schwarz" />Schwarz</label>
+        </div>
+      </fieldset>
+      <label class="schalter"><input type="checkbox" id="details" checked />Details zum Termin anzeigen</label>
+
+      <div class="feld">
+        <div class="code-kopf">
+          <label for="code">Code für die Website</label>
+          <button type="button" class="knopf knopf--orange knopf--klein" data-kopieren="#code"><Icon name="kopieren" />Code kopieren</button>
+        </div>
+        <textarea id="code" class="textfeld code" readonly rows="8"></textarea>
+        <p class="hilfe">Füg den Code dort ein, wo das Widget erscheinen soll, zum Beispiel in einem HTML Block in WordPress, Webflow oder Astro. Hinweis für die Datenschutzerklärung der einbindenden Seite: Let's Meet läuft auf Cloudflare und setzt keine Cookies für Gäste.</p>
+      </div>
+
+      <div class="feld">
+        <label for="direktlink">Oder direkt teilen</label>
+        <div class="reihe">
+          <input id="direktlink" class="eingabe" readonly />
+          <button type="button" class="knopf knopf--rahmen" data-kopieren="#direktlink"><Icon name="link" />Kopieren</button>
+        </div>
+      </div>
+    </form>
+
+    <section class="vorschau karte" aria-labelledby="vorschau-titel">
+      <div class="vorschau-kopf">
+        <h2 id="vorschau-titel" class="eyebrow">Vorschau</h2>
+        <span class="punkte" aria-hidden="true"><i></i><i></i><i></i></span>
+      </div>
+      <div class="vorschau-flaeche" id="vorschau"></div>
+    </section>
+  </div>
+</App>
+
+<script is:inline src="/embed.js"></script>
+<script>
+  const wurzel = document.getElementById('einbetten')!;
+  const basis = wurzel.dataset.basis!;
+  const form = document.getElementById('optionen') as HTMLFormElement;
+  const code = document.getElementById('code') as HTMLTextAreaElement;
+  const direkt = document.getElementById('direktlink') as HTMLInputElement;
+  const vorschau = document.getElementById('vorschau')!;
+  const lm = () => (window as unknown as { LetsMeet: Record<string, (...a: unknown[]) => void> }).LetsMeet;
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+  function aktualisieren() {
+    const art = (form.querySelector('input[name="art"]:checked') as HTMLInputElement).value;
+    const zielBasis = (document.getElementById('ziel') as HTMLSelectElement).value;
+    const text = (document.getElementById('text') as HTMLInputElement).value.trim() || 'Termin buchen';
+    const farbe = (form.querySelector('input[name="farbe"]:checked') as HTMLInputElement).value;
+    const details = (document.getElementById('details') as HTMLInputElement).checked;
+    const ziel = details ? zielBasis : `${zielBasis}?details=0`;
+    form.querySelectorAll<HTMLElement>('.nur-badge, .nur-text').forEach((el) => {
+      el.hidden = !el.classList.contains(`nur-${art}`);
+    });
+    const skript = `<script src="${basis}/embed.js" async><\/script>`;
+    if (art === 'inline') {
+      code.value = `<!-- Let's Meet Inline Widget -->\n<div class="letsmeet-inline-widget" data-url="${esc(ziel)}" style="min-width:320px;"></div>\n${skript}`;
+    } else if (art === 'badge') {
+      code.value = `<!-- Let's Meet Popup Button -->\n${skript}\n<script>\n  window.addEventListener('load', function () {\n    LetsMeet.initBadgeWidget({ url: '${ziel}', text: '${text.replace(/'/g, "\\'")}', farbe: '${farbe}' });\n  });\n<\/script>`;
+    } else {
+      code.value = `<!-- Let's Meet Popup Link -->\n${skript}\n<a href="${esc(zielBasis)}" data-letsmeet-popup="${esc(ziel)}">${esc(text)}</a>`;
+    }
+    direkt.value = zielBasis;
+
+    // Vorschau neu aufbauen
+    document.querySelector('.lm-badge')?.remove();
+    vorschau.innerHTML = '';
+    vorschau.dataset.art = art;
+    if (art === 'inline') {
+      const box = document.createElement('div');
+      vorschau.appendChild(box);
+      lm().initInlineWidget({ url: ziel, parentElement: box, hoehe: 640 });
+    } else if (art === 'badge') {
+      vorschau.innerHTML = '<p class="leise klein">Der Button sitzt auf deiner Website unten rechts. Hier siehst du ihn unten rechts im Fenster.</p>';
+      lm().initBadgeWidget({ url: ziel, text, farbe });
+    } else {
+      const p = document.createElement('p');
+      p.innerHTML = `So sieht ein Satz auf deiner Website aus, in dem der Link steckt: <a href="#" data-letsmeet-popup="${esc(ziel)}">${esc(text)}</a>. Klick ihn an, um das Popup zu testen.`;
+      vorschau.appendChild(p);
+    }
+  }
+  form.addEventListener('input', aktualisieren);
+  form.addEventListener('change', aktualisieren);
+  aktualisieren();
+</script>
+
+<style>
+  .raster { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: var(--raum-6); align-items: start; }
+  .block { padding: var(--raum-6); display: grid; gap: var(--raum-6); }
+  .arten { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--raum-2); }
+  .arten legend { margin-bottom: var(--raum-3); }
+  .art-karte input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .art-karte > span {
+    display: grid; gap: 4px; padding: var(--raum-3); border: 1px solid var(--farbe-rahmen-stark); cursor: pointer; height: 100%; border-radius: var(--radius-s);
+  }
+  .art-karte input:checked + span { border-color: var(--n-900); box-shadow: inset 0 0 0 1px var(--n-900); }
+  .art-karte input:focus-visible + span { outline: 2px solid var(--n-900); outline-offset: 2px; }
+  .art-bild { position: relative; display: grid; gap: 4px; height: 56px; padding: 6px; background: var(--n-100); margin-bottom: var(--raum-2); }
+  .art-bild i { display: block; height: 6px; background: var(--n-300); }
+  .art-bild.inline b { display: block; height: 22px; background: var(--farbe-papier); border: 1px solid var(--n-900); }
+  .art-bild.badge-bild b { position: absolute; right: 6px; bottom: 6px; width: 26px; height: 10px; background: var(--farbe-akzent); }
+  .art-bild.text-bild u { display: block; height: 6px; width: 50%; background: var(--n-900); }
+  .reihe { display: flex; gap: var(--raum-4); align-items: center; }
+  .reihe .eingabe { flex: 1; min-width: 0; }
+  .code-kopf { display: flex; justify-content: space-between; align-items: center; gap: var(--raum-2); }
+  .code-kopf label { font-weight: 600; font-size: var(--text-sm); }
+  .code { font-family: var(--schrift-mono); font-size: 0.8125rem; line-height: 1.5; background: var(--n-900); color: var(--n-100); border-color: var(--n-900); min-height: 180px; }
+  .vorschau { position: sticky; top: var(--raum-6); overflow: hidden; }
+  .vorschau-kopf { display: flex; justify-content: space-between; align-items: center; padding: var(--raum-3) var(--raum-4); border-bottom: 1px solid var(--farbe-rahmen); background: var(--n-050); }
+  .punkte { display: flex; gap: 6px; }
+  .punkte i { width: 8px; height: 8px; background: var(--n-300); }
+  .punkte i:last-child { background: var(--farbe-akzent); }
+  .vorschau-flaeche { padding: var(--raum-6); min-height: 300px; background: var(--farbe-papier); }
+  .vorschau-flaeche[data-art='inline'] { background: var(--n-050); padding: var(--raum-2); }
+  @media (max-width: 1100px) {
+    .raster { grid-template-columns: 1fr; }
+    .vorschau { position: static; }
+  }
+  @media (max-width: 480px) { .arten { grid-template-columns: 1fr; } }
+</style>

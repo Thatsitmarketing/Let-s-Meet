@@ -1,0 +1,25 @@
+{
+  // Cloudflare Workers Konfiguration für Let's Meet.
+  // Schlüssel und Passwörter gehören NICHT hierher, sondern als Secret in Cloudflare
+  // (wrangler secret put NAME). Lokal liegen sie in .dev.vars (nicht eingecheckt).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lets-meet",
+  "main": "./src/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lets-meet",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Erinnerungsmails und Löschfristen laufen alle 10 Minuten
+  "triggers": { "crons": ["*/10 * * * *"] },
+  "vars": {
+    "SITE_URL": "https://termine.thatsit.marketing",
+    "MAIL_FROM": "That's it. Marketing <termine@thatsit.marketing>",
+    "MAIL_REPLY_TO": "info@thatsit.marketing"
+  }
+}

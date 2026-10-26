@@ -1,0 +1,131 @@
+---
+import App from '../../../layouts/App.astro';
+import Icon from '../../../components/ui/Icon.astro';
+import OrtIcon from '../../../components/OrtIcon.astro';
+import { terminartenVon } from '../../../lib/abfragen';
+import { alle, ausfuehren, db, eins, jetztIso, neueId } from '../../../lib/db';
+import { meldungAusUrl } from '../../../lib/meldungen';
+import { ORT_LABEL, type Terminart } from '../../../lib/typen';
+
+const nutzer = Astro.locals.nutzer!;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const id = String(form.get('id') ?? '');
+  const aktion = String(form.get('aktion') ?? '');
+  const ta = await eins<Terminart>('SELECT * FROM terminarten WHERE id = ? AND nutzer_id = ?', id, nutzer.id);
+  if (ta) {
+    if (aktion === 'umschalten') {
+      await ausfuehren('UPDATE terminarten SET aktiv = ?, aktualisiert_am = ? WHERE id = ?', ta.aktiv ? 0 : 1, jetztIso(), id);
+      return Astro.redirect('/app/terminarten?ok=gespeichert');
+    }
+    if (aktion === 'duplizieren') {
+      const slugs = new Set((await alle<{ slug: string }>('SELECT slug FROM terminarten WHERE nutzer_id = ?', nutzer.id)).map((s) => s.slug));
+      let slug = `${ta.slug}-kopie`;
+      for (let i = 2; slugs.has(slug); i++) slug = `${ta.slug}-kopie-${i}`;
+      const jetzt = jetztIso();
+      await db()
+        .prepare(
+          `INSERT INTO terminarten (id, nutzer_id, slug, titel, beschreibung, dauer_min, farbe, ort_typ, ort_wert, puffer_vor_min, puffer_nach_min,
+            vorlauf_min, max_tage_voraus, raster_min, max_pro_tag, fragen, erinnerung_std, bestaetigung_text, weiterleitung_url, aktiv, geheim, reihenfolge, erstellt_am, aktualisiert_am)
+           SELECT ?, nutzer_id, ?, titel || ' (Kopie)', beschreibung, dauer_min, farbe, ort_typ, ort_wert, puffer_vor_min, puffer_nach_min,
+            vorlauf_min, max_tage_voraus, raster_min, max_pro_tag, fragen, erinnerung_std, bestaetigung_text, weiterleitung_url, 0, geheim, reihenfolge + 1, ?, ?
+           FROM terminarten WHERE id = ?`,
+        )
+        .bind(neueId(), slug, jetzt, jetzt, id)
+        .run();
+      return Astro.redirect('/app/terminarten?ok=dupliziert');
+    }
+    if (aktion === 'loeschen') {
+      const offen = await eins<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM buchungen WHERE terminart_id = ? AND status = 'bestaetigt' AND start_utc > ?",
+        id,
+        jetztIso(),
+      );
+      if (offen?.n) {
+        return Astro.redirect(`/app/terminarten?fehler=${encodeURIComponent(`Es gibt noch ${offen.n} anstehende Termine dieser Art. Deaktiviere sie stattdessen oder sag die Termine vorher ab.`)}`);
+      }
+      await ausfuehren('DELETE FROM terminarten WHERE id = ?', id);
+      return Astro.redirect('/app/terminarten?ok=geloescht');
+    }
+  }
+  return Astro.redirect('/app/terminarten');
+}
+
+const arten = await terminartenVon(nutzer.id);
+const basis = Astro.url.origin;
+---
+<App titel="Terminarten" eyebrow={`${basis.replace(/^https?:\/\//, '')}/${nutzer.slug}`} meldung={meldungAusUrl(Astro.url)}>
+  <Fragment slot="aktionen">
+    <button type="button" class="knopf knopf--rahmen" data-kopieren={`${basis}/${nutzer.slug}`}><Icon name="link" />Profillink kopieren</button>
+    <a class="knopf knopf--orange" href="/app/terminarten/neu"><Icon name="plus" />Neue Terminart</a>
+  </Fragment>
+
+  {arten.length === 0 ? (
+    <div class="leer karte">
+      <h2>Noch keine Terminart<span class="punkt">.</span></h2>
+      <p class="leise">Leg fest, welche Gespräche man bei dir buchen kann, zum Beispiel ein Erstgespräch über 30 Minuten.</p>
+      <a class="knopf knopf--orange" href="/app/terminarten/neu"><Icon name="plus" />Erste Terminart anlegen</a>
+    </div>
+  ) : (
+    <ul class="raster" role="list">
+      {arten.map((ta) => (
+        <li class:list={['art', 'karte', { inaktiv: !ta.aktiv }]} style={`--farbe:${ta.farbe}`}>
+          <div class="art-kopf">
+            <form method="post">
+              <input type="hidden" name="id" value={ta.id} />
+              <input type="hidden" name="aktion" value="umschalten" />
+              <label class="schalter">
+                <input type="checkbox" checked={Boolean(ta.aktiv)} onchange="this.form.requestSubmit()" aria-label={`${ta.titel} ${ta.aktiv ? 'deaktivieren' : 'aktivieren'}`} />
+                <span class="leise">{ta.aktiv ? 'Aktiv' : 'Aus'}</span>
+              </label>
+              <noscript><button class="knopf knopf--klein knopf--leise">Umschalten</button></noscript>
+            </form>
+            {ta.geheim ? <span class="badge badge--hell">Geheim</span> : null}
+          </div>
+          <a class="art-titel" href={`/app/terminarten/${ta.id}`}>{ta.titel}</a>
+          <p class="art-meta">
+            <span><Icon name="uhr" groesse={16} />{ta.dauer_min} Min</span>
+            <span><OrtIcon typ={ta.ort_typ} groesse={16} />{ORT_LABEL[ta.ort_typ]}</span>
+          </p>
+          <a class="art-link leise klein" href={`/${nutzer.slug}/${ta.slug}`} target="_blank" rel="noopener">/{nutzer.slug}/{ta.slug}</a>
+          <div class="art-fuss">
+            <button type="button" class="knopf knopf--rahmen knopf--klein" data-kopieren={`${basis}/${nutzer.slug}/${ta.slug}`}><Icon name="kopieren" />Link kopieren</button>
+            <div class="art-mehr">
+              <a class="symbol" href={`/app/terminarten/${ta.id}`} title="Bearbeiten"><Icon name="stift" /><span class="sr-only">{ta.titel} bearbeiten</span></a>
+              <form method="post">
+                <input type="hidden" name="id" value={ta.id} />
+                <button class="symbol" name="aktion" value="duplizieren" title="Duplizieren"><Icon name="kopieren" /><span class="sr-only">{ta.titel} duplizieren</span></button>
+              </form>
+              <form method="post" data-rueckfrage={`Terminart „${ta.titel}“ wirklich löschen?`}>
+                <input type="hidden" name="id" value={ta.id} />
+                <button class="symbol gefahr" name="aktion" value="loeschen" title="Löschen"><Icon name="loeschen" /><span class="sr-only">{ta.titel} löschen</span></button>
+              </form>
+            </div>
+          </div>
+        </li>
+      ))}
+    </ul>
+  )}
+</App>
+
+<style>
+  .leer { padding: var(--raum-12); display: grid; gap: var(--raum-4); justify-items: start; }
+  .raster { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: var(--raum-4); }
+  .art { display: flex; flex-direction: column; gap: var(--raum-3); padding: var(--raum-6); border-top: 4px solid var(--farbe); }
+  .art.inaktiv { opacity: 0.6; border-top-color: var(--n-300); }
+  .art-kopf { display: flex; justify-content: space-between; align-items: center; gap: var(--raum-2); }
+  .art-titel { font-family: var(--schrift-display); font-weight: 900; font-size: var(--text-h3); line-height: 1.05; text-decoration: none; }
+  .art-titel:hover { text-decoration: underline; text-decoration-color: var(--farbe-akzent); }
+  .art-meta { display: flex; flex-wrap: wrap; gap: var(--raum-2) var(--raum-4); font-size: var(--text-sm); color: var(--farbe-text-2); }
+  .art-meta span { display: inline-flex; align-items: center; gap: 6px; }
+  .art-link { overflow-wrap: anywhere; }
+  .art-fuss { margin-top: auto; padding-top: var(--raum-4); border-top: 1px solid var(--farbe-rahmen); display: flex; justify-content: space-between; align-items: center; gap: var(--raum-2); }
+  .art-mehr { display: flex; gap: 2px; }
+  .symbol {
+    display: grid; place-items: center; width: 36px; height: 36px; background: none; border: 1px solid transparent;
+    color: var(--n-700); cursor: pointer; border-radius: var(--radius-s);
+  }
+  .symbol:hover { border-color: var(--n-900); color: var(--n-900); }
+  .symbol.gefahr:hover { border-color: var(--farbe-fehler); color: var(--farbe-fehler); }
+</style>

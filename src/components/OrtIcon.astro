@@ -1,0 +1,8 @@
+---
+import Icon from './ui/Icon.astro';
+import type { OrtTyp } from '../lib/typen';
+interface Props { typ: OrtTyp; groesse?: number }
+const { typ, groesse = 20 } = Astro.props;
+const name = typ === 'google_meet' || typ === 'link' ? 'video' : typ === 'vor_ort' ? 'ort' : 'telefon';
+---
+<Icon name={name} groesse={groesse} />

@@ -1,0 +1,127 @@
+---
+import Oeffentlich from '../../../layouts/Oeffentlich.astro';
+import Icon from '../../../components/ui/Icon.astro';
+import OrtIcon from '../../../components/OrtIcon.astro';
+import { buchungNachId, nutzerNachId, terminartNachId } from '../../../lib/abfragen';
+import { googleKalenderLink, outlookKalenderLink } from '../../../lib/ics';
+import { formatDatumLang, formatSpanne, zonenName } from '../../../lib/zeit';
+
+const buchung = await buchungNachId(Astro.params.id ?? '');
+if (!buchung) return Astro.rewrite('/404');
+const [terminart, nutzer] = await Promise.all([terminartNachId(buchung.terminart_id), nutzerNachId(buchung.nutzer_id)]);
+if (!terminart || !nutzer) return Astro.rewrite('/404');
+
+const embed = Astro.url.searchParams.get('embed') === '1';
+const neu = Astro.url.searchParams.get('neu') === '1';
+const abgesagt = Astro.url.searchParams.get('abgesagt') === '1';
+const tz = buchung.gast_zeitzone;
+const vorbei = Date.parse(buchung.start_utc) < Date.now();
+const storniert = buchung.status === 'storniert';
+const nachfolger = buchung.umgebucht_zu ? `/termin/${buchung.umgebucht_zu}` : null;
+const suffix = embed ? '&embed=1' : '';
+const kalDaten = {
+  titel: `${terminart.titel} mit ${nutzer.name} (That's it. Marketing)`,
+  start: buchung.start_utc,
+  ende: buchung.ende_utc,
+  beschreibung: [buchung.meeting_url ? `Meeting: ${buchung.meeting_url}` : '', `Termin verwalten: ${Astro.url.origin}/termin/${buchung.id}`].filter(Boolean).join('\n'),
+  ort: buchung.meeting_url || buchung.ort_text,
+};
+---
+<Oeffentlich titel={storniert ? 'Termin abgesagt' : neu ? 'Termin bestätigt' : 'Dein Termin'}>
+  <article class="bestaetigung karte">
+    {storniert ? (
+      <>
+        <p class="eyebrow">{buchung.storno_grund === 'Umgebucht' ? 'Umgebucht' : 'Abgesagt'}</p>
+        <h1>{buchung.storno_grund === 'Umgebucht' ? 'Dieser Termin wurde verschoben' : 'Termin abgesagt'}<span class="punkt">.</span></h1>
+        {abgesagt && <p class="hinweis hinweis--erfolg" role="status"><Icon name="check" />Die Absage ist raus. Du bekommst gleich eine Bestätigung per Mail.</p>}
+      </>
+    ) : (
+      <>
+        <span class="haken-gross" aria-hidden="true"><Icon name="check" groesse={28} /></span>
+        <p class="eyebrow">{neu ? 'Gebucht' : 'Dein Termin'}</p>
+        <h1>{neu ? 'Dein Termin steht' : terminart.titel}<span class="punkt">.</span></h1>
+        {neu && <p class="unterzeile">Eine Bestätigung mit Kalendereintrag ist unterwegs an <strong>{buchung.gast_email}</strong>.</p>}
+      </>
+    )}
+
+    <dl class="details">
+      <div><dt><Icon name="kalender-check" /><span class="sr-only">Termin</span></dt><dd><strong>{terminart.titel}</strong> mit {nutzer.name}</dd></div>
+      <div><dt><Icon name="uhr" /><span class="sr-only">Wann</span></dt><dd class:list={{ durch: storniert }}>{formatDatumLang(buchung.start_utc, tz)}<br />{formatSpanne(buchung.start_utc, buchung.ende_utc, tz)}</dd></div>
+      <div><dt><Icon name="globus" /><span class="sr-only">Zeitzone</span></dt><dd>{zonenName(tz)}</dd></div>
+      {!storniert && (
+        <div><dt><OrtIcon typ={terminart.ort_typ} /><span class="sr-only">Ort</span></dt><dd>
+          {buchung.meeting_url ? <a href={buchung.meeting_url} target="_blank" rel="noopener">{buchung.meeting_url}</a> : buchung.ort_text}
+        </dd></div>
+      )}
+      {storniert && buchung.storno_grund && buchung.storno_grund !== 'Umgebucht' && (
+        <div><dt><Icon name="info" /><span class="sr-only">Grund</span></dt><dd>{buchung.storno_grund}</dd></div>
+      )}
+    </dl>
+
+    {!storniert && (
+      <>
+        {buchung.meeting_url && !vorbei && <a class="knopf knopf--orange" href={buchung.meeting_url} target="_blank" rel="noopener"><Icon name="video" />Zum Meeting</a>}
+        <section class="kalender-links" aria-labelledby="kal-titel">
+          <h2 id="kal-titel" class="klein-titel">In deinen Kalender</h2>
+          <div class="reihe">
+            <a class="knopf knopf--rahmen knopf--klein" href={googleKalenderLink(kalDaten)} target="_blank" rel="noopener">Google</a>
+            <a class="knopf knopf--rahmen knopf--klein" href={outlookKalenderLink(kalDaten)} target="_blank" rel="noopener">Outlook</a>
+            <a class="knopf knopf--rahmen knopf--klein" href={`/termin/${buchung.id}/kalender.ics`}><Icon name="download" />Apple und andere</a>
+          </div>
+        </section>
+        {!vorbei && (
+          <section class="verwalten" aria-labelledby="verwalten-titel">
+            <h2 id="verwalten-titel" class="klein-titel">Passt doch nicht?</h2>
+            <div class="reihe">
+              <a class="knopf" href={`/${nutzer.slug}/${terminart.slug}?umbuchen=${buchung.id}${suffix}`}><Icon name="umbuchen" />Umbuchen</a>
+              <a class="knopf knopf--gefahr" href={`/termin/${buchung.id}/absagen${embed ? '?embed=1' : ''}`}><Icon name="x" />Absagen</a>
+            </div>
+          </section>
+        )}
+      </>
+    )}
+
+    {storniert && (
+      <div class="reihe">
+        {nachfolger ? (
+          <a class="knopf knopf--orange" href={`${nachfolger}${embed ? '?embed=1' : ''}`}>Zum neuen Termin</a>
+        ) : (
+          <a class="knopf knopf--orange" href={`/${nutzer.slug}/${terminart.slug}${embed ? '?embed=1' : ''}`}>Neuen Termin buchen</a>
+        )}
+      </div>
+    )}
+
+    <p class="kontakt leise klein">Fragen? Antworte einfach auf die Bestätigungsmail oder ruf uns an: <a href="tel:+4920936660644">0209 36660644</a>.</p>
+  </article>
+</Oeffentlich>
+
+<style>
+  .bestaetigung {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: clamp(1.5rem, 5vw, 3rem);
+    display: grid;
+    gap: var(--raum-6);
+    justify-items: start;
+  }
+  .haken-gross {
+    display: grid; place-items: center; width: 56px; height: 56px;
+    background: var(--n-900); color: var(--farbe-akzent);
+  }
+  .unterzeile { color: var(--farbe-text-2); }
+  .details { margin: 0; width: 100%; display: grid; border-top: 2px solid var(--n-900); }
+  .details div { display: flex; gap: var(--raum-4); padding: var(--raum-4) 0; border-bottom: 1px solid var(--farbe-rahmen); }
+  .details dt { flex: none; padding-top: 2px; }
+  .details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .durch { text-decoration: line-through; color: var(--farbe-text-leise); }
+  .klein-titel { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-base); letter-spacing: 0; margin-bottom: var(--raum-3); }
+  .reihe { display: flex; flex-wrap: wrap; gap: var(--raum-2); }
+  .kalender-links, .verwalten { width: 100%; }
+  .kontakt { border-top: 1px solid var(--farbe-rahmen); padding-top: var(--raum-4); width: 100%; }
+</style>
+
+{neu && embed && (
+  <script is:inline define:vars={{ id: buchung.id }}>
+    window.parent?.postMessage({ typ: 'letsmeet:bestaetigt', buchung: id }, '*');
+  </script>
+)}

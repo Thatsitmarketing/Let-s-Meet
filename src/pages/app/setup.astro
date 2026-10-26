@@ -1,0 +1,81 @@
+---
+import { env } from 'cloudflare:workers';
+import Zugang from '../../layouts/Zugang.astro';
+import Icon from '../../components/ui/Icon.astro';
+import { sitzungStarten } from '../../lib/auth';
+import { eins } from '../../lib/db';
+import { emailGueltig, trimmen } from '../../lib/eingabe';
+import { kontoAnlegen, slugPruefen } from '../../lib/konten';
+
+const anzahl = await eins<{ n: number }>('SELECT COUNT(*) AS n FROM nutzer');
+if (anzahl?.n) return Astro.redirect('/app/login');
+
+const fehler: Record<string, string> = {};
+const werte = { name: '', email: '', slug: '' };
+const ohneToken = !env.SETUP_TOKEN || !env.SESSION_SECRET;
+
+if (Astro.request.method === 'POST' && !ohneToken) {
+  const form = await Astro.request.formData();
+  werte.name = trimmen(form.get('name'), 120);
+  werte.email = trimmen(form.get('email'), 180).toLowerCase();
+  const passwort = String(form.get('passwort') ?? '');
+  const slugErgebnis = await slugPruefen(trimmen(form.get('slug'), 60) || werte.name);
+  werte.slug = slugErgebnis.slug;
+
+  if (trimmen(form.get('token'), 200) !== env.SETUP_TOKEN) fehler.token = 'Der Einrichtungsschlüssel stimmt nicht.';
+  if (werte.name.length < 2) fehler.name = 'Bitte gib deinen Namen an.';
+  if (!emailGueltig(werte.email)) fehler.email = 'Bitte prüf die E Mail Adresse.';
+  if (slugErgebnis.fehler) fehler.slug = slugErgebnis.fehler;
+  if (passwort.length < 10) fehler.passwort = 'Mindestens 10 Zeichen.';
+
+  if (!Object.keys(fehler).length) {
+    const id = await kontoAnlegen({ name: werte.name, email: werte.email, slug: werte.slug, passwort, rolle: 'admin' });
+    await sitzungStarten(Astro.cookies, id, Astro.url.protocol === 'https:');
+    return Astro.redirect('/app/terminarten?ok=willkommen');
+  }
+}
+---
+<Zugang titel="Einrichtung">
+  <div>
+    <p class="eyebrow">Ersteinrichtung</p>
+    <h1>Let's Meet einrichten<span class="punkt">.</span></h1>
+  </div>
+  {ohneToken ? (
+    <p class="hinweis hinweis--fehler"><Icon name="warnung" />SETUP_TOKEN und SESSION_SECRET fehlen. Lege beide als Secret in Cloudflare an und lade die Seite neu.</p>
+  ) : (
+    <form method="post" class="formular" novalidate>
+      <p class="leise klein">Du legst das erste Admin Konto an. Danach ist diese Seite gesperrt.</p>
+      <div class="feld">
+        <label for="token">Einrichtungsschlüssel</label>
+        <input id="token" name="token" type="password" class="eingabe" required aria-invalid={fehler.token ? 'true' : undefined} aria-describedby="hilfe-token" />
+        <p class="hilfe" id="hilfe-token">Wert der Umgebungsvariable SETUP_TOKEN.</p>
+        {fehler.token && <p class="fehlertext">{fehler.token}</p>}
+      </div>
+      <div class="feld">
+        <label for="name">Dein Name</label>
+        <input id="name" name="name" class="eingabe" autocomplete="name" required value={werte.name} aria-invalid={fehler.name ? 'true' : undefined} />
+        {fehler.name && <p class="fehlertext">{fehler.name}</p>}
+      </div>
+      <div class="feld">
+        <label for="email">E Mail</label>
+        <input id="email" name="email" type="email" class="eingabe" autocomplete="email" required value={werte.email} aria-invalid={fehler.email ? 'true' : undefined} />
+        {fehler.email && <p class="fehlertext">{fehler.email}</p>}
+      </div>
+      <div class="feld">
+        <label for="slug">Adresse deiner Buchungsseite</label>
+        <input id="slug" name="slug" class="eingabe" placeholder="vorname" value={werte.slug} aria-invalid={fehler.slug ? 'true' : undefined} aria-describedby="hilfe-slug" />
+        <p class="hilfe" id="hilfe-slug">Wird Teil des Links, zum Beispiel {Astro.url.host}/vorname</p>
+        {fehler.slug && <p class="fehlertext">{fehler.slug}</p>}
+      </div>
+      <div class="feld">
+        <label for="passwort">Passwort</label>
+        <input id="passwort" name="passwort" type="password" class="eingabe" autocomplete="new-password" required minlength="10" aria-invalid={fehler.passwort ? 'true' : undefined} />
+        {fehler.passwort && <p class="fehlertext">{fehler.passwort}</p>}
+      </div>
+      <button type="submit" class="knopf knopf--orange knopf--breit">Konto anlegen</button>
+    </form>
+  )}
+</Zugang>
+<style>
+  .formular { display: grid; gap: var(--raum-4); }
+</style>

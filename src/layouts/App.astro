@@ -1,0 +1,176 @@
+---
+import Basis from './Basis.astro';
+import Logo from '../components/ui/Logo.astro';
+import Icon, { type IconName } from '../components/ui/Icon.astro';
+import Avatar from '../components/Avatar.astro';
+
+interface Props {
+  titel: string;
+  eyebrow?: string;
+  meldung?: { art: 'erfolg' | 'fehler'; text: string } | null;
+}
+const { titel, eyebrow, meldung } = Astro.props;
+const nutzer = Astro.locals.nutzer!;
+const pfad = Astro.url.pathname;
+
+const navi: { href: string; text: string; icon: IconName; nurAdmin?: boolean }[] = [
+  { href: '/app/terminarten', text: 'Terminarten', icon: 'raster' },
+  { href: '/app/termine', text: 'Termine', icon: 'kalender-check' },
+  { href: '/app/verfuegbarkeit', text: 'Verfügbarkeit', icon: 'uhr' },
+  { href: '/app/einbetten', text: 'Einbetten', icon: 'code' },
+  { href: '/app/integrationen', text: 'Integrationen', icon: 'stecker' },
+  { href: '/app/einstellungen', text: 'Einstellungen', icon: 'regler' },
+  { href: '/app/team', text: 'Team', icon: 'team', nurAdmin: true },
+];
+const aktiv = (href: string) => pfad === href || pfad.startsWith(href + '/');
+---
+<Basis titel={`${titel} | Let's Meet Backoffice`} klasse="app">
+  <a class="springen" href="#inhalt">Zum Inhalt springen</a>
+  <div class="rahmen">
+    <aside class="seite dunkel" id="seitenleiste">
+      <div class="seite-kopf">
+        <a href="/app" class="marke" aria-label="Let's Meet Backoffice, Start">
+          <Logo variante="weiss" hoehe={28} />
+          <span class="app-name">Let's Meet<span class="punkt">.</span></span>
+        </a>
+        <button type="button" class="menue-knopf" aria-expanded="false" aria-controls="hauptnavi" id="menue-knopf">
+          <Icon name="menue" /><span class="sr-only">Menü</span>
+        </button>
+      </div>
+      <nav id="hauptnavi" class="navi" aria-label="Backoffice">
+        <ul role="list">
+          {navi.filter((n) => !n.nurAdmin || nutzer.rolle === 'admin').map((n) => (
+            <li>
+              <a href={n.href} aria-current={aktiv(n.href) ? 'page' : undefined}>
+                <Icon name={n.icon} />{n.text}
+              </a>
+            </li>
+          ))}
+        </ul>
+        <div class="seite-fuss">
+          <a class="eigene-seite" href={`/${nutzer.slug}`} target="_blank" rel="noopener">
+            <Icon name="extern" groesse={16} />Meine Buchungsseite
+          </a>
+          <div class="ich">
+            <Avatar name={nutzer.name} url={nutzer.avatar_url} groesse={36} />
+            <span class="ich-text"><span class="ich-name">{nutzer.name}</span><span class="ich-mail">{nutzer.email}</span></span>
+          </div>
+          <form method="post" action="/app/abmelden">
+            <button type="submit" class="abmelden"><Icon name="abmelden" groesse={16} />Abmelden</button>
+          </form>
+        </div>
+      </nav>
+    </aside>
+
+    <main id="inhalt" class="inhalt">
+      <header class="seitenkopf">
+        <div class="titelgruppe">
+          {eyebrow && <p class="eyebrow">{eyebrow}</p>}
+          <h1>{titel}<span class="punkt">.</span></h1>
+        </div>
+        <div class="aktionen"><slot name="aktionen" /></div>
+      </header>
+      {meldung && (
+        <p class:list={['hinweis', `hinweis--${meldung.art}`, 'meldung']} role={meldung.art === 'fehler' ? 'alert' : 'status'}>
+          <Icon name={meldung.art === 'fehler' ? 'warnung' : 'check'} />{meldung.text}
+        </p>
+      )}
+      <slot />
+    </main>
+  </div>
+</Basis>
+
+<script>
+  const knopf = document.getElementById('menue-knopf');
+  const navi = document.getElementById('hauptnavi');
+  knopf?.addEventListener('click', () => {
+    const offen = knopf.getAttribute('aria-expanded') === 'true';
+    knopf.setAttribute('aria-expanded', String(!offen));
+    navi?.classList.toggle('offen', !offen);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && knopf?.getAttribute('aria-expanded') === 'true') {
+      knopf.setAttribute('aria-expanded', 'false');
+      navi?.classList.remove('offen');
+      knopf.focus();
+    }
+  });
+  // Kopierknöpfe im ganzen Backoffice
+  document.addEventListener('click', async (e) => {
+    const k = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-kopieren]');
+    if (!k) return;
+    const quelle = k.dataset.kopieren!;
+    const text = quelle.startsWith('#') ? (document.querySelector<HTMLTextAreaElement | HTMLInputElement>(quelle)?.value ?? '') : quelle;
+    try {
+      await navigator.clipboard.writeText(text);
+      const alt = k.innerHTML;
+      k.textContent = 'Kopiert';
+      setTimeout(() => (k.innerHTML = alt), 1600);
+    } catch {
+      window.prompt('Zum Kopieren markieren:', text);
+    }
+  });
+  // Rückfrage vor gefährlichen Aktionen
+  document.addEventListener('submit', (e) => {
+    const f = e.target as HTMLFormElement;
+    if (f.dataset.rueckfrage && !window.confirm(f.dataset.rueckfrage)) e.preventDefault();
+  });
+</script>
+
+<style>
+  :global(body.app) { background: var(--farbe-flaeche-alt); }
+  .springen {
+    position: absolute; left: var(--raum-2); top: -100px; z-index: 100; background: var(--farbe-akzent); color: var(--n-900); padding: var(--raum-2) var(--raum-4);
+  }
+  .springen:focus { top: var(--raum-2); }
+  .rahmen { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; }
+  .seite {
+    position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column;
+    background: var(--n-900); color: var(--farbe-papier);
+  }
+  .seite-kopf { padding: var(--raum-6) var(--raum-6) var(--raum-4); display: flex; align-items: center; justify-content: space-between; }
+  .marke { display: grid; gap: var(--raum-2); text-decoration: none; }
+  .app-name { font-family: var(--schrift-display); font-weight: 900; font-size: var(--text-lg); line-height: 1; }
+  .menue-knopf { display: none; background: none; border: 1px solid var(--n-700); color: inherit; width: 44px; height: 44px; place-items: center; cursor: pointer; }
+  .navi { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .navi ul { list-style: none; margin: var(--raum-4) 0 0; padding: 0 var(--raum-3); display: grid; gap: 2px; }
+  .navi a {
+    display: flex; align-items: center; gap: var(--raum-3); padding: 0.7rem var(--raum-3);
+    color: var(--n-300); text-decoration: none; font-weight: 500; font-size: var(--text-sm);
+    border-left: 3px solid transparent;
+  }
+  .navi a:hover { color: var(--farbe-papier); background: var(--n-800); }
+  .navi a[aria-current='page'] { color: var(--farbe-papier); background: var(--n-800); border-left-color: var(--farbe-akzent); }
+  .navi a[aria-current='page'] :global(svg) { color: var(--farbe-akzent); }
+  .seite-fuss { margin-top: auto; padding: var(--raum-4) var(--raum-6) var(--raum-6); display: grid; gap: var(--raum-4); border-top: 1px solid var(--n-700); }
+  .eigene-seite { display: inline-flex; align-items: center; gap: var(--raum-2); color: var(--farbe-akzent); font-size: var(--text-sm); font-weight: 600; text-decoration: none; }
+  .eigene-seite:hover { text-decoration: underline; }
+  .ich { display: flex; gap: var(--raum-3); align-items: center; min-width: 0; }
+  .ich-text { display: grid; min-width: 0; line-height: 1.3; }
+  .ich-name { font-weight: 600; font-size: var(--text-sm); }
+  .ich-mail { font-size: var(--text-sm); color: var(--n-400); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .abmelden {
+    display: inline-flex; align-items: center; gap: var(--raum-2); background: none; border: 0; padding: var(--raum-2) 0;
+    color: var(--n-400); font: inherit; font-size: var(--text-sm); cursor: pointer;
+  }
+  .abmelden:hover { color: var(--farbe-papier); }
+  .inhalt { padding: var(--raum-8) clamp(1rem, 4vw, 3rem) var(--raum-16); max-width: 1180px; width: 100%; }
+  .seitenkopf { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--raum-4); flex-wrap: wrap; margin-bottom: var(--raum-8); }
+  .titelgruppe { display: grid; gap: var(--raum-2); }
+  .aktionen { display: flex; gap: var(--raum-2); flex-wrap: wrap; }
+  .meldung { margin-bottom: var(--raum-6); }
+
+  @media (max-width: 960px) {
+    .rahmen { grid-template-columns: minmax(0, 1fr); }
+    .seite { position: sticky; height: auto; z-index: 20; }
+    .seite-kopf { padding: var(--raum-3) var(--raum-4); }
+    .marke { grid-auto-flow: column; align-items: center; gap: var(--raum-3); }
+    .menue-knopf { display: grid; }
+    .navi { display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--n-900); max-height: calc(100vh - 70px); overflow-y: auto; box-shadow: var(--schatten-3); }
+    .navi.offen { display: flex; }
+    .inhalt { padding-top: var(--raum-6); }
+  }
+  @media (max-width: 420px) {
+    .app-name { display: none; }
+  }
+</style>

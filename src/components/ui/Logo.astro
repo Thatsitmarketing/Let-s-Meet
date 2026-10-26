@@ -1,0 +1,20 @@
+---
+interface Props {
+  variante?: 'schwarz' | 'weiss';
+  hoehe?: number;
+  href?: string | null;
+}
+const { variante = 'schwarz', hoehe = 32, href = null } = Astro.props;
+const breite = Math.round((hoehe * 594) / 180);
+---
+{href ? (
+  <a href={href} class="logo" aria-label="That's it. Marketing, zur Startseite">
+    <img src={`/images/brand/logo-${variante}.webp`} alt="" width={breite} height={hoehe} />
+  </a>
+) : (
+  <img class="logo" src={`/images/brand/logo-${variante}.webp`} alt="That's it. Marketing" width={breite} height={hoehe} />
+)}
+<style>
+  .logo { display: inline-block; line-height: 0; }
+  img { height: auto; }
+</style>

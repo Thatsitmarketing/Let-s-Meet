@@ -1,0 +1,336 @@
+---
+import Icon from './ui/Icon.astro';
+import { FARBEN, ORT_LABEL, type OrtTyp } from '../lib/typen';
+import type { TerminartWerte } from '../lib/terminart-formular';
+
+interface Props {
+  werte: TerminartWerte;
+  fehler: Record<string, string>;
+  nutzerSlug: string;
+  neu: boolean;
+}
+const { werte: w, fehler, nutzerSlug, neu } = Astro.props;
+const host = Astro.url.host;
+const dauern = [15, 30, 45, 60, 90, 120];
+const ortTypen = Object.keys(ORT_LABEL) as OrtTyp[];
+const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, 'aria-describedby': `fehler-${name}` } : {});
+---
+<form method="post" class="ta-form" id="ta-form" novalidate>
+  {Object.keys(fehler).length > 0 && (
+    <p class="hinweis hinweis--fehler" role="alert"><Icon name="warnung" />Bitte prüf die markierten Felder.</p>
+  )}
+
+  <section class="block karte" aria-labelledby="b-grund">
+    <h2 id="b-grund">Was wird gebucht?</h2>
+    <div class="feld">
+      <label for="titel">Titel<span class="pflicht" aria-hidden="true">*</span></label>
+      <input id="titel" name="titel" class="eingabe" required maxlength="120" value={w.titel} placeholder="z. B. Erstgespräch" {...f('titel')} />
+      {fehler.titel && <p class="fehlertext" id="fehler-titel">{fehler.titel}</p>}
+    </div>
+    <div class="feld">
+      <label for="slug">Link</label>
+      <div class="praefix-feld">
+        <span class="praefix">{host}/{nutzerSlug}/</span>
+        <input id="slug" name="slug" class="eingabe" maxlength="60" value={w.slug} placeholder="erstgespraech" data-auto={neu ? 'true' : 'false'} {...f('slug')} />
+      </div>
+      {fehler.slug && <p class="fehlertext" id="fehler-slug">{fehler.slug}</p>}
+    </div>
+    <div class="feld">
+      <label for="beschreibung">Beschreibung<span class="leise"> (optional)</span></label>
+      <textarea id="beschreibung" name="beschreibung" class="textfeld" maxlength="3000" placeholder="Was passiert im Termin, was soll der Gast vorbereiten?">{w.beschreibung}</textarea>
+    </div>
+    <fieldset class="feld">
+      <legend class="feld-label">Dauer</legend>
+      <div class="chips">
+        {dauern.map((d) => (
+          <label class="chip"><input type="radio" name="dauer_wahl" value={d} checked={w.dauer_min === d} /><span>{d} Min</span></label>
+        ))}
+        <label class="chip"><input type="radio" name="dauer_wahl" value="eigen" checked={!dauern.includes(w.dauer_min)} /><span>Eigene</span></label>
+        <input type="number" class="eingabe dauer-eigen" name="dauer_min" id="dauer_min" min="5" max="480" step="5" value={w.dauer_min} aria-label="Dauer in Minuten" />
+      </div>
+    </fieldset>
+    <fieldset class="feld">
+      <legend class="feld-label">Farbe im Backoffice</legend>
+      <div class="farben">
+        {FARBEN.map((fa) => (
+          <label class="farbe" title={fa.name}>
+            <input type="radio" name="farbe" value={fa.wert} checked={w.farbe === fa.wert} />
+            <span style={`background:${fa.wert}`}></span>
+            <span class="sr-only">{fa.name}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  </section>
+
+  <section class="block karte" aria-labelledby="b-ort">
+    <h2 id="b-ort">Wo findet es statt?</h2>
+    <div class="ort-wahl" role="radiogroup" aria-label="Ort">
+      {ortTypen.map((o) => (
+        <label class="ort-option">
+          <input type="radio" name="ort_typ" value={o} checked={w.ort_typ === o} />
+          <span>{ORT_LABEL[o]}</span>
+        </label>
+      ))}
+    </div>
+    <div class="feld" id="ort-wert-feld">
+      <label for="ort_wert" id="ort-wert-label">Details</label>
+      <input id="ort_wert" name="ort_wert" class="eingabe" maxlength="300" value={w.ort_wert ?? ''} {...f('ort_wert')} />
+      <p class="hilfe" id="ort-hilfe"></p>
+      {fehler.ort_wert && <p class="fehlertext" id="fehler-ort_wert">{fehler.ort_wert}</p>}
+    </div>
+  </section>
+
+  <section class="block karte" aria-labelledby="b-planung">
+    <h2 id="b-planung">Planung</h2>
+    <div class="zwei">
+      <div class="feld">
+        <label for="raster_min">Startzeiten im Abstand von</label>
+        <select id="raster_min" name="raster_min" class="auswahl">
+          {[10, 15, 20, 30, 45, 60, 90, 120].map((r) => <option value={r} selected={w.raster_min === r}>{r} Minuten</option>)}
+        </select>
+      </div>
+      <div class="feld">
+        <label for="vorlauf_std">Mindestvorlauf</label>
+        <select id="vorlauf_std" name="vorlauf_std" class="auswahl">
+          {[0, 1, 2, 4, 8, 12, 24, 48, 72].map((s) => <option value={s} selected={w.vorlauf_min === s * 60}>{s === 0 ? 'Kein Vorlauf' : `${s} Stunden`}</option>)}
+        </select>
+      </div>
+      <div class="feld">
+        <label for="max_tage_voraus">Buchbar bis</label>
+        <select id="max_tage_voraus" name="max_tage_voraus" class="auswahl">
+          {[7, 14, 30, 60, 90, 180].map((t) => <option value={t} selected={w.max_tage_voraus === t}>{t} Tage im Voraus</option>)}
+        </select>
+      </div>
+      <div class="feld">
+        <label for="max_pro_tag">Höchstens pro Tag</label>
+        <select id="max_pro_tag" name="max_pro_tag" class="auswahl">
+          <option value="" selected={!w.max_pro_tag}>Unbegrenzt</option>
+          {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => <option value={n} selected={w.max_pro_tag === n}>{n} {n === 1 ? 'Termin' : 'Termine'}</option>)}
+        </select>
+      </div>
+      <div class="feld">
+        <label for="puffer_vor_min">Puffer davor</label>
+        <select id="puffer_vor_min" name="puffer_vor_min" class="auswahl">
+          {[0, 5, 10, 15, 30, 45, 60].map((p) => <option value={p} selected={w.puffer_vor_min === p}>{p === 0 ? 'Kein Puffer' : `${p} Minuten`}</option>)}
+        </select>
+      </div>
+      <div class="feld">
+        <label for="puffer_nach_min">Puffer danach</label>
+        <select id="puffer_nach_min" name="puffer_nach_min" class="auswahl">
+          {[0, 5, 10, 15, 30, 45, 60].map((p) => <option value={p} selected={w.puffer_nach_min === p}>{p === 0 ? 'Kein Puffer' : `${p} Minuten`}</option>)}
+        </select>
+      </div>
+    </div>
+    <p class="hilfe">Freie Zeiten richten sich nach deiner <a href="/app/verfuegbarkeit">Verfügbarkeit</a> und, falls verbunden, nach deinem Google Kalender.</p>
+  </section>
+
+  <section class="block karte" aria-labelledby="b-fragen">
+    <h2 id="b-fragen">Buchungsformular</h2>
+    <p class="hilfe">Name und E Mail fragen wir immer ab. Bei „Telefon, wir rufen an“ zusätzlich die Telefonnummer. Jede weitere Frage kostet Buchungen, also nur, was du wirklich brauchst.</p>
+    <input type="hidden" name="fragen" id="fragen-json" value={w.fragen} />
+    <ul class="fragen" id="fragen-liste" role="list"></ul>
+    <button type="button" class="knopf knopf--rahmen knopf--klein" id="frage-plus"><Icon name="plus" />Frage hinzufügen</button>
+    {fehler.fragen && <p class="fehlertext">{fehler.fragen}</p>}
+  </section>
+
+  <section class="block karte" aria-labelledby="b-danach">
+    <h2 id="b-danach">Nach der Buchung</h2>
+    <div class="feld">
+      <label for="bestaetigung_text">Zusatztext in der Bestätigungsmail<span class="leise"> (optional)</span></label>
+      <textarea id="bestaetigung_text" name="bestaetigung_text" class="textfeld" maxlength="2000" placeholder="z. B. was der Gast vorbereiten soll">{w.bestaetigung_text}</textarea>
+    </div>
+    <div class="zwei">
+      <div class="feld">
+        <label for="erinnerung_std">Erinnerungsmail an den Gast</label>
+        <select id="erinnerung_std" name="erinnerung_std" class="auswahl">
+          {[0, 1, 2, 4, 24, 48].map((s) => <option value={s} selected={w.erinnerung_std === s}>{s === 0 ? 'Keine Erinnerung' : `${s} ${s === 1 ? 'Stunde' : 'Stunden'} vorher`}</option>)}
+        </select>
+      </div>
+      <div class="feld">
+        <label for="weiterleitung_url">Weiterleitung nach Buchung<span class="leise"> (optional)</span></label>
+        <input id="weiterleitung_url" name="weiterleitung_url" type="url" class="eingabe" maxlength="500" placeholder="https://thatsit.marketing/danke" value={w.weiterleitung_url ?? ''} {...f('weiterleitung_url')} />
+        {fehler.weiterleitung_url && <p class="fehlertext" id="fehler-weiterleitung_url">{fehler.weiterleitung_url}</p>}
+      </div>
+    </div>
+  </section>
+
+  <section class="block karte" aria-labelledby="b-sicht">
+    <h2 id="b-sicht">Sichtbarkeit</h2>
+    <label class="schalter"><input type="checkbox" name="aktiv" checked={Boolean(w.aktiv)} />Buchbar</label>
+    <label class="schalter"><input type="checkbox" name="geheim" checked={Boolean(w.geheim)} />Geheim, nur über den direkten Link erreichbar</label>
+  </section>
+
+  <div class="leiste">
+    <a class="knopf knopf--leise" href="/app/terminarten">Abbrechen</a>
+    <button type="submit" class="knopf knopf--orange">{neu ? 'Terminart anlegen' : 'Speichern'}</button>
+  </div>
+</form>
+
+<template id="frage-vorlage">
+  <li class="frage">
+    <div class="feld">
+      <label class="feld-label">Frage</label>
+      <input class="eingabe frage-label" maxlength="200" placeholder="z. B. Website deines Unternehmens" />
+    </div>
+    <div class="feld frage-typ-feld">
+      <label class="feld-label">Antwortfeld</label>
+      <select class="auswahl frage-typ">
+        <option value="text">Eine Zeile</option>
+        <option value="textarea">Mehrere Zeilen</option>
+        <option value="telefon">Telefonnummer</option>
+      </select>
+    </div>
+    <label class="haken frage-pflicht"><input type="checkbox" />Pflicht</label>
+    <button type="button" class="symbol frage-weg" aria-label="Frage entfernen"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+  </li>
+</template>
+
+<script>
+  const form = document.getElementById('ta-form') as HTMLFormElement;
+  // Link aus dem Titel ableiten, solange er nicht von Hand geändert wurde
+  const titel = document.getElementById('titel') as HTMLInputElement;
+  const slug = document.getElementById('slug') as HTMLInputElement;
+  const slugify = (t: string) =>
+    t.toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+      .normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+  titel.addEventListener('input', () => { if (slug.dataset.auto === 'true') slug.value = slugify(titel.value); });
+  slug.addEventListener('input', () => (slug.dataset.auto = 'false'));
+
+  // Dauer: Chips steuern das Zahlenfeld
+  const dauer = document.getElementById('dauer_min') as HTMLInputElement;
+  const dauerWahl = () => {
+    const gewaehlt = form.querySelector<HTMLInputElement>('input[name="dauer_wahl"]:checked');
+    if (!gewaehlt) return;
+    const eigen = gewaehlt.value === 'eigen';
+    dauer.hidden = !eigen;
+    if (!eigen) dauer.value = gewaehlt.value;
+  };
+  form.querySelectorAll('input[name="dauer_wahl"]').forEach((r) => r.addEventListener('change', () => { dauerWahl(); if (!dauer.hidden) dauer.focus(); }));
+  dauerWahl();
+
+  // Ortsdetails je nach Typ
+  const ortFeld = document.getElementById('ort-wert-feld')!;
+  const ortLabel = document.getElementById('ort-wert-label')!;
+  const ortHilfe = document.getElementById('ort-hilfe')!;
+  const ortWert = document.getElementById('ort_wert') as HTMLInputElement;
+  const ORT = {
+    google_meet: null,
+    telefon_wir: null,
+    telefon_gast: { label: 'Unter welcher Nummer erreicht man euch?', platz: '0209 36660644', hilfe: 'Der Gast ruft zum Termin diese Nummer an.' },
+    vor_ort: { label: 'Adresse', platz: 'Straße, PLZ Ort', hilfe: 'Erscheint in Bestätigung und Kalendereintrag.' },
+    link: { label: 'Link zum Videocall', platz: 'https://', hilfe: 'Zum Beispiel ein fester Zoom oder Teams Raum.' },
+  } as Record<string, { label: string; platz: string; hilfe: string } | null>;
+  const ortHinweise: Record<string, string> = {
+    google_meet: 'Der Meet Link wird automatisch erzeugt, sobald dein Google Kalender verbunden ist.',
+    telefon_wir: 'Der Gast gibt beim Buchen seine Telefonnummer an.',
+  };
+  const ortAnzeigen = () => {
+    const typ = form.querySelector<HTMLInputElement>('input[name="ort_typ"]:checked')?.value ?? 'google_meet';
+    const d = ORT[typ];
+    if (d) {
+      ortLabel.textContent = d.label;
+      ortWert.placeholder = d.platz;
+      ortHilfe.textContent = d.hilfe;
+      ortWert.disabled = false;
+      ortFeld.querySelector('.eingabe')!.removeAttribute('hidden');
+      ortLabel.hidden = false;
+    } else {
+      ortLabel.hidden = true;
+      ortWert.hidden = true;
+      ortWert.disabled = true;
+      ortHilfe.textContent = ortHinweise[typ] ?? '';
+    }
+  };
+  form.querySelectorAll('input[name="ort_typ"]').forEach((r) => r.addEventListener('change', ortAnzeigen));
+  ortAnzeigen();
+
+  // Fragen als Liste bearbeiten, gespeichert als JSON
+  const liste = document.getElementById('fragen-liste')!;
+  const vorlage = document.getElementById('frage-vorlage') as HTMLTemplateElement;
+  const json = document.getElementById('fragen-json') as HTMLInputElement;
+  let zaehler = 0;
+  type Frage = { id?: string; label: string; typ: string; pflicht: boolean };
+  const frageAnlegen = (fr?: Frage) => {
+    const knoten = vorlage.content.firstElementChild!.cloneNode(true) as HTMLLIElement;
+    const nr = ++zaehler;
+    const label = knoten.querySelector<HTMLInputElement>('.frage-label')!;
+    const typ = knoten.querySelector<HTMLSelectElement>('.frage-typ')!;
+    label.id = `frage-label-${nr}`;
+    typ.id = `frage-typ-${nr}`;
+    knoten.querySelectorAll('label.feld-label')[0].setAttribute('for', label.id);
+    knoten.querySelectorAll('label.feld-label')[1].setAttribute('for', typ.id);
+    knoten.dataset.id = fr?.id ?? '';
+    label.value = fr?.label ?? '';
+    typ.value = fr?.typ ?? 'text';
+    knoten.querySelector<HTMLInputElement>('.frage-pflicht input')!.checked = Boolean(fr?.pflicht);
+    knoten.querySelector('.frage-weg')!.addEventListener('click', () => knoten.remove());
+    liste.appendChild(knoten);
+    return label;
+  };
+  try {
+    (JSON.parse(json.value || '[]') as Frage[]).forEach((fr) => frageAnlegen(fr));
+  } catch { /* leer lassen */ }
+  document.getElementById('frage-plus')!.addEventListener('click', () => frageAnlegen().focus());
+  form.addEventListener('submit', () => {
+    const fragen = [...liste.querySelectorAll<HTMLLIElement>('.frage')].map((li, i) => ({
+      id: li.dataset.id || `frage${i + 1}${Date.now().toString(36).slice(-3)}`,
+      label: li.querySelector<HTMLInputElement>('.frage-label')!.value,
+      typ: li.querySelector<HTMLSelectElement>('.frage-typ')!.value,
+      pflicht: li.querySelector<HTMLInputElement>('.frage-pflicht input')!.checked,
+    }));
+    json.value = JSON.stringify(fragen);
+  });
+</script>
+
+<style>
+  .ta-form { display: grid; gap: var(--raum-6); max-width: 760px; }
+  .block { padding: var(--raum-8); display: grid; gap: var(--raum-6); border: 0; margin: 0; }
+  .block h2 { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-h4); letter-spacing: 0; }
+  fieldset.feld { border: 0; padding: 0; margin: 0; min-width: 0; }
+  legend.feld-label { padding: 0; margin-bottom: var(--raum-2); }
+  .praefix-feld { display: flex; align-items: stretch; }
+  .praefix {
+    display: flex; align-items: center; padding: 0 var(--raum-3); background: var(--n-100); border: 1px solid var(--farbe-rahmen-stark);
+    border-right: 0; color: var(--farbe-text-leise); font-size: var(--text-sm); white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: var(--raum-2); align-items: center; }
+  .chip input, .ort-option input, .farbe input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .chip span {
+    display: inline-flex; align-items: center; min-height: 40px; padding: 0 var(--raum-4); border: 1px solid var(--farbe-rahmen-stark);
+    cursor: pointer; font-weight: 500; font-size: var(--text-sm); border-radius: var(--radius-s);
+  }
+  .chip input:checked + span { background: var(--n-900); border-color: var(--n-900); color: var(--farbe-papier); }
+  .chip input:focus-visible + span, .ort-option input:focus-visible + span, .farbe input:focus-visible + span { outline: 2px solid var(--n-900); outline-offset: 2px; }
+  .dauer-eigen { width: 110px; }
+  .farben { display: flex; gap: var(--raum-2); }
+  .farbe span:first-of-type { display: block; width: 36px; height: 36px; cursor: pointer; border: 3px solid var(--farbe-papier); box-shadow: 0 0 0 1px var(--farbe-rahmen-stark); }
+  .farbe input:checked + span { box-shadow: 0 0 0 2px var(--n-900); }
+  .ort-wahl { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--raum-2); }
+  .ort-option span {
+    display: flex; align-items: center; min-height: 48px; padding: var(--raum-3) var(--raum-4); border: 1px solid var(--farbe-rahmen-stark);
+    cursor: pointer; font-weight: 500; font-size: var(--text-sm); height: 100%; border-radius: var(--radius-s);
+  }
+  .ort-option input:checked + span { border-color: var(--n-900); box-shadow: inset 0 0 0 1px var(--n-900); background: var(--n-050); }
+  .zwei { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--raum-4) var(--raum-6); }
+  .fragen { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-3); }
+  .fragen:empty { display: none; }
+  .fragen :global(.frage) {
+    display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto auto; gap: var(--raum-3); align-items: end;
+    padding: var(--raum-4); background: var(--n-050); border: 1px solid var(--farbe-rahmen);
+  }
+  .fragen :global(.frage-pflicht) { min-height: 44px; align-items: center; }
+  .fragen :global(.symbol) {
+    display: grid; place-items: center; width: 44px; height: 44px; background: none; border: 1px solid transparent; cursor: pointer; color: var(--n-700);
+  }
+  .fragen :global(.symbol:hover) { border-color: var(--farbe-fehler); color: var(--farbe-fehler); }
+  .leiste {
+    position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: var(--raum-2);
+    padding: var(--raum-4) 0; background: var(--farbe-flaeche-alt); border-top: 1px solid var(--farbe-rahmen);
+  }
+  @media (max-width: 640px) {
+    .block { padding: var(--raum-6) var(--raum-4); }
+    .fragen :global(.frage) { grid-template-columns: 1fr auto; }
+    .fragen :global(.frage .feld:first-child) { grid-column: 1 / -1; }
+  }
+</style>

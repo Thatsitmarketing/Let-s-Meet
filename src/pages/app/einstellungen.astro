@@ -1,0 +1,123 @@
+---
+import App from '../../layouts/App.astro';
+import Avatar from '../../components/Avatar.astro';
+import { passwortHash, passwortPruefen } from '../../lib/auth';
+import { ausfuehren, eins, jetztIso } from '../../lib/db';
+import { emailGueltig, trimmen, urlGueltig } from '../../lib/eingabe';
+import { slugPruefen } from '../../lib/konten';
+import { meldungAusUrl } from '../../lib/meldungen';
+
+const nutzer = Astro.locals.nutzer!;
+const fehler: Record<string, string> = {};
+const w = { name: nutzer.name, email: nutzer.email, slug: nutzer.slug, position: nutzer.position ?? '', begruessung: nutzer.begruessung ?? '', avatar_url: nutzer.avatar_url ?? '' };
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const aktion = String(form.get('aktion') ?? '');
+  if (aktion === 'profil') {
+    w.name = trimmen(form.get('name'), 120);
+    w.email = trimmen(form.get('email'), 180).toLowerCase();
+    w.position = trimmen(form.get('position'), 120);
+    w.begruessung = trimmen(form.get('begruessung'), 1000);
+    w.avatar_url = trimmen(form.get('avatar_url'), 500);
+    const s = await slugPruefen(trimmen(form.get('slug'), 60), nutzer.id);
+    w.slug = s.slug;
+    if (w.name.length < 2) fehler.name = 'Bitte gib deinen Namen an.';
+    if (!emailGueltig(w.email)) fehler.email = 'Bitte prüf die E Mail Adresse.';
+    else {
+      const andere = await eins<{ id: string }>('SELECT id FROM nutzer WHERE email = ? AND id != ?', w.email, nutzer.id);
+      if (andere) fehler.email = 'Diese E Mail nutzt schon ein anderes Konto.';
+    }
+    if (s.fehler) fehler.slug = s.fehler;
+    if (w.avatar_url && (!urlGueltig(w.avatar_url) || !w.avatar_url.startsWith('https://'))) fehler.avatar_url = 'Bitte einen https Link zu einem Bild angeben.';
+    if (!Object.keys(fehler).length) {
+      await ausfuehren(
+        'UPDATE nutzer SET name = ?, email = ?, slug = ?, position = ?, begruessung = ?, avatar_url = ?, aktualisiert_am = ? WHERE id = ?',
+        w.name, w.email, w.slug, w.position || null, w.begruessung || null, w.avatar_url || null, jetztIso(), nutzer.id,
+      );
+      return Astro.redirect('/app/einstellungen?ok=gespeichert');
+    }
+  }
+  if (aktion === 'passwort') {
+    const alt = String(form.get('alt') ?? '');
+    const neu = String(form.get('neu') ?? '');
+    if (!(await passwortPruefen(alt, nutzer.passwort_hash))) fehler.alt = 'Das aktuelle Passwort stimmt nicht.';
+    if (neu.length < 10) fehler.neu = 'Mindestens 10 Zeichen.';
+    if (!Object.keys(fehler).length) {
+      await ausfuehren('UPDATE nutzer SET passwort_hash = ?, aktualisiert_am = ? WHERE id = ?', await passwortHash(neu), jetztIso(), nutzer.id);
+      return Astro.redirect('/app/einstellungen?ok=passwort');
+    }
+  }
+}
+const ff = (n: string) => (fehler[n] ? { 'aria-invalid': 'true' as const, 'aria-describedby': `fehler-${n}` } : {});
+---
+<App titel="Einstellungen" eyebrow="Dein Profil" meldung={Object.keys(fehler).length ? { art: 'fehler', text: 'Bitte prüf die markierten Felder.' } : meldungAusUrl(Astro.url)}>
+  <div class="liste">
+    <form method="post" class="karte block" novalidate>
+      <input type="hidden" name="aktion" value="profil" />
+      <h2>Profil</h2>
+      <div class="profil-kopf">
+        <Avatar name={w.name} url={w.avatar_url || null} groesse={64} />
+        <p class="leise klein">So erscheinst du auf deiner Buchungsseite. Ohne Bild zeigen wir deine Initialen.</p>
+      </div>
+      <div class="zwei">
+        <div class="feld">
+          <label for="name">Name</label>
+          <input id="name" name="name" class="eingabe" value={w.name} required {...ff('name')} />
+          {fehler.name && <p class="fehlertext" id="fehler-name">{fehler.name}</p>}
+        </div>
+        <div class="feld">
+          <label for="position">Position<span class="leise"> (optional)</span></label>
+          <input id="position" name="position" class="eingabe" value={w.position} placeholder="z. B. Geschäftsführung" />
+        </div>
+        <div class="feld">
+          <label for="email">E Mail für Benachrichtigungen und Anmeldung</label>
+          <input id="email" name="email" type="email" class="eingabe" value={w.email} required {...ff('email')} />
+          {fehler.email && <p class="fehlertext" id="fehler-email">{fehler.email}</p>}
+        </div>
+        <div class="feld">
+          <label for="slug">Adresse deiner Buchungsseite</label>
+          <input id="slug" name="slug" class="eingabe" value={w.slug} required {...ff('slug')} aria-describedby="slug-hilfe" />
+          <p class="hilfe" id="slug-hilfe">{Astro.url.host}/{w.slug}. Achtung: Alte Links funktionieren nach einer Änderung nicht mehr.</p>
+          {fehler.slug && <p class="fehlertext" id="fehler-slug">{fehler.slug}</p>}
+        </div>
+      </div>
+      <div class="feld">
+        <label for="avatar_url">Profilbild als Link<span class="leise"> (optional)</span></label>
+        <input id="avatar_url" name="avatar_url" type="url" class="eingabe" value={w.avatar_url} placeholder="https://thatsit.marketing/team/name.jpg" {...ff('avatar_url')} />
+        {fehler.avatar_url && <p class="fehlertext" id="fehler-avatar_url">{fehler.avatar_url}</p>}
+      </div>
+      <div class="feld">
+        <label for="begruessung">Begrüßung auf deiner Profilseite<span class="leise"> (optional)</span></label>
+        <textarea id="begruessung" name="begruessung" class="textfeld" maxlength="1000">{w.begruessung}</textarea>
+      </div>
+      <div><button type="submit" class="knopf knopf--orange">Profil speichern</button></div>
+    </form>
+
+    <form method="post" class="karte block" novalidate>
+      <input type="hidden" name="aktion" value="passwort" />
+      <h2>Passwort ändern</h2>
+      <input type="text" name="benutzer" autocomplete="username" value={nutzer.email} hidden />
+      <div class="zwei">
+        <div class="feld">
+          <label for="alt">Aktuelles Passwort</label>
+          <input id="alt" name="alt" type="password" class="eingabe" autocomplete="current-password" required {...ff('alt')} />
+          {fehler.alt && <p class="fehlertext" id="fehler-alt">{fehler.alt}</p>}
+        </div>
+        <div class="feld">
+          <label for="neu">Neues Passwort</label>
+          <input id="neu" name="neu" type="password" class="eingabe" autocomplete="new-password" minlength="10" required {...ff('neu')} />
+          {fehler.neu && <p class="fehlertext" id="fehler-neu">{fehler.neu}</p>}
+        </div>
+      </div>
+      <div><button type="submit" class="knopf">Passwort ändern</button></div>
+    </form>
+  </div>
+</App>
+<style>
+  .liste { display: grid; gap: var(--raum-6); max-width: 820px; }
+  .block { padding: var(--raum-6); display: grid; gap: var(--raum-6); }
+  .block h2 { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-h4); letter-spacing: 0; }
+  .profil-kopf { display: flex; gap: var(--raum-4); align-items: center; }
+  .zwei { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: var(--raum-4) var(--raum-6); }
+</style>

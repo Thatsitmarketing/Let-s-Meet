@@ -1,0 +1,43 @@
+---
+import { initialen } from '../lib/abfragen';
+
+interface Props {
+  name: string;
+  url?: string | null;
+  groesse?: number;
+}
+const { name, url, groesse = 64 } = Astro.props;
+---
+<span class="avatar" style={`--g:${groesse}px`}>
+  {url ? <img src={url} alt="" width={groesse} height={groesse} loading="lazy" /> : <span class="kuerzel" aria-hidden="true">{initialen(name)}</span>}
+  <span class="punkt-ecke" aria-hidden="true"></span>
+</span>
+<style>
+  .avatar {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: var(--g);
+    height: var(--g);
+    background: var(--n-900);
+    color: var(--farbe-papier);
+    flex: none;
+  }
+  img { width: 100%; height: 100%; object-fit: cover; }
+  .kuerzel {
+    font-family: var(--schrift-display);
+    font-weight: 900;
+    font-size: calc(var(--g) * 0.38);
+    letter-spacing: -0.02em;
+    line-height: 1;
+    padding-top: 0.12em;
+  }
+  .punkt-ecke {
+    position: absolute;
+    right: calc(var(--g) * -0.06);
+    bottom: calc(var(--g) * -0.06);
+    width: calc(var(--g) * 0.2);
+    height: calc(var(--g) * 0.2);
+    background: var(--farbe-akzent);
+  }
+</style>

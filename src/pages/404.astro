@@ -1,0 +1,15 @@
+---
+import Oeffentlich from '../layouts/Oeffentlich.astro';
+Astro.response.status = 404;
+---
+<Oeffentlich titel="Seite nicht gefunden">
+  <section class="leer">
+    <p class="eyebrow">Fehler 404</p>
+    <h1>Hier ist nichts<span class="punkt">.</span></h1>
+    <p class="leise">Der Link ist falsch oder die Terminart gibt es nicht mehr.</p>
+    <a class="knopf knopf--orange" href="/">Zur Terminübersicht</a>
+  </section>
+</Oeffentlich>
+<style>
+  .leer { display: grid; gap: var(--raum-4); justify-items: start; max-width: 36rem; padding: var(--raum-12) 0; }
+</style>

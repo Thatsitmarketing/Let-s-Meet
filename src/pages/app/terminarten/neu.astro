@@ -1,0 +1,22 @@
+---
+import App from '../../../layouts/App.astro';
+import TerminartFormular from '../../../components/TerminartFormular.astro';
+import { STANDARD, terminartAusFormular, terminartSpeichern, type TerminartWerte } from '../../../lib/terminart-formular';
+
+const nutzer = Astro.locals.nutzer!;
+let werte: TerminartWerte = { ...STANDARD };
+let fehler: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const ergebnis = await terminartAusFormular(await Astro.request.formData(), nutzer.id);
+  werte = ergebnis.werte;
+  fehler = ergebnis.fehler;
+  if (!Object.keys(fehler).length) {
+    await terminartSpeichern(werte, nutzer.id);
+    return Astro.redirect('/app/terminarten?ok=angelegt');
+  }
+}
+---
+<App titel="Neue Terminart" eyebrow="Terminarten">
+  <TerminartFormular werte={werte} fehler={fehler} nutzerSlug={nutzer.slug} neu />
+</App>
