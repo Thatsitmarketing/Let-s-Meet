@@ -20,6 +20,8 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
     <p class="hinweis hinweis--fehler" role="alert"><Icon name="warnung" />Bitte prüf die markierten Felder.</p>
   )}
 
+  <div class="spalten">
+  <div class="spalte">
   <section class="block karte" aria-labelledby="b-grund">
     <h2 id="b-grund">Was wird gebucht?</h2>
     <div class="feld">
@@ -81,6 +83,8 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
     </div>
   </section>
 
+  </div>
+  <div class="spalte">
   <section class="block karte" aria-labelledby="b-planung">
     <h2 id="b-planung">Planung</h2>
     <div class="zwei">
@@ -160,6 +164,8 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
     <label class="schalter"><input type="checkbox" name="aktiv" checked={Boolean(w.aktiv)} />Buchbar</label>
     <label class="schalter"><input type="checkbox" name="geheim" checked={Boolean(w.geheim)} />Geheim, nur über den direkten Link erreichbar</label>
   </section>
+  </div>
+  </div>
 
   <div class="leiste">
     <a class="knopf knopf--leise" href="/app/terminarten">Abbrechen</a>
@@ -284,7 +290,9 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
 </script>
 
 <style>
-  .ta-form { display: grid; gap: var(--raum-6); max-width: 760px; }
+  .ta-form { display: grid; gap: var(--raum-6); }
+  .spalten, .spalte { display: grid; gap: var(--raum-6); align-content: start; min-width: 0; }
+  @media (min-width: 1400px) { .spalten { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
   .block { padding: var(--raum-8); display: grid; gap: var(--raum-6); border: 0; margin: 0; }
   .block h2 { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-h4); letter-spacing: 0; }
   fieldset.feld { border: 0; padding: 0; margin: 0; min-width: 0; }

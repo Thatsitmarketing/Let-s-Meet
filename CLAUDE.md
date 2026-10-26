@@ -85,9 +85,9 @@ Backoffice (`/app`, geschützt durch Middleware, `noindex`, `X-Frame-Options: DE
 | `/app/login`, `/app/setup`, `/app/abmelden` | Anmeldung, Ersteinrichtung, Abmelden |
 | `/app/terminarten` | Übersicht als Karten, aktiv schalten, Link kopieren, duplizieren, löschen |
 | `/app/terminarten/neu`, `/app/terminarten/{id}` | Editor: Titel, Link, Dauer, Farbe, Ort, Planung, Fragen, Mails, Sichtbarkeit |
-| `/app/termine` | Anstehend, Vergangen, Abgesagt, Suche, Zeitraum, Team Ansicht für Admins, CSV Export |
+| `/app/termine` | Standard Tab Kalender (Woche oder Monat, daneben „Als Nächstes“), dazu Listen Anstehend, Vergangen, Abgesagt mit Suche und Zeitraum, Team Ansicht für Admins, CSV Export. Parameter: `ansicht`, `kal=woche\|monat`, `datum`, `wer=team` |
 | `/app/termine/{id}` | Details, interne Notiz, nicht erschienen, Absagen, Umbuchungslink |
-| `/app/verfuegbarkeit` | Wochenzeiten mit mehreren Zeiträumen pro Tag, Zeitzone, Ausnahmen für Tage oder Zeiträume |
+| `/app/verfuegbarkeit` | Wochenzeiten mit mehreren Zeiträumen pro Tag, Zeitzone, Kalender mit Live Vorschau ungespeicherter Wochenzeiten, Ausnahmen für Tage oder Zeiträume (Klick auf einen Tag im Kalender trägt das Datum ein, `?ausnahme=`) |
 | `/app/einbetten` | Codegenerator mit Live Vorschau |
 | `/app/integrationen` | Google Kalender, Webhook mit HMAC Signatur |
 | `/app/einstellungen` | Profil, Buchungslink, Passwort |
@@ -103,6 +103,7 @@ Alle Werte in `src/styles/tokens.css`, abgeleitet aus dem Branding Guide.
 * Typoskala: Display bis 64px, H1 32 bis 48px, H2 26 bis 36px, H3 22px, H4 18px, Body 16px, Labels 14px mit 0.4em Sperrung
 * Form: eckig, Radius 2px für UI, 0px für Markenflächen, Pillen nur für Status
 * Icons: Lucide, Strichstärke 1.75, in `src/components/ui/Icon.astro`
+* Backoffice Breite: Inhalt bis 1840px, Formularseiten (Einstellungen, Integrationen) ab 560px pro Karte nebeneinander. Verfügbarkeit: ab 1800px Wochenzeiten links und Kalender rechts, ab 1380px Kalender oben und Wochenzeiten neben Ausnahmen, darunter einspaltig
 * Logos: `public/images/brand/logo-schwarz.*` und `logo-weiss.*` (aus dem Branding Guide extrahiert)
 
 ## Komponenten und wo sie liegen
@@ -114,12 +115,13 @@ Alle Werte in `src/styles/tokens.css`, abgeleitet aus dem Branding Guide.
 | `src/layouts/Oeffentlich.astro` | Kopf und Fuß der öffentlichen Seiten, Embed Modus mit Höhenmeldung an das Widget |
 | `src/layouts/App.astro` | Backoffice mit schwarzer Seitenleiste, mobilem Menü, Kopierknöpfen, Rückfragen |
 | `src/layouts/Zugang.astro` | Login und Einrichtung |
-| `src/components/TerminartFormular.astro` | Editor der Terminarten inklusive Fragenliste |
+| `src/components/TerminartFormular.astro` | Editor der Terminarten inklusive Fragenliste, ab 1400px zweispaltig |
+| `src/components/Kalender.astro` | Backoffice Kalender, Woche und Monat: Verfügbarkeit weiß, nicht buchbar schraffiert, Termine als Blöcke in Terminartfarbe, Google Belegtzeiten gestrichelt, orangene Jetzt Linie. Navigation über URL (`kal`, `datum`), Anker `#kalender` |
 | `src/components/Avatar.astro`, `OrtIcon.astro`, `ui/Logo.astro`, `ui/Icon.astro` | Kleinteile |
 | `src/scripts/buchung.ts` | Kalender, Zeitzonen, Slotwahl und Formularversand im Browser |
 | `public/embed.js` | Widget ohne Abhängigkeiten, API `LetsMeet.initInlineWidget`, `initBadgeWidget`, `showPopupWidget`, `closePopupWidget`, Ereignis `letsmeet:gebucht` |
 
-Logik in `src/lib/`: `slots.ts` (freie Zeiten), `zeit.ts` (Zeitzonen ohne Bibliothek), `buchungen.ts` (anlegen, absagen, umbuchen, Mails, Webhook, Cron), `google.ts`, `mail.ts` (Vorlagen), `ics.ts`, `auth.ts`, `konten.ts`, `terminart-formular.ts`, `termin-filter.ts`.
+Logik in `src/lib/`: `slots.ts` (freie Zeiten), `kalender.ts` (Kalenderdaten je Tag: Verfügbarkeit, Termine mit Spaltenverteilung bei Überschneidung, Google freeBusy ohne die eigenen Buchungen), `zeit.ts` (Zeitzonen ohne Bibliothek), `buchungen.ts` (anlegen, absagen, umbuchen, Mails, Webhook, Cron), `google.ts`, `mail.ts` (Vorlagen), `ics.ts`, `auth.ts`, `konten.ts`, `terminart-formular.ts`, `termin-filter.ts`.
 
 ## Formulare und Datenfluss
 
@@ -177,4 +179,5 @@ Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `termina
 * 2026-10-26: D1 Datenbank `terminethatsitmarketing` verknüpft, Workername `let-s-meet`, Deploybefehl inklusive Migrationen, Anleitung für Workers Builds
 * 2026-10-26: Hinweis ergänzt, dass die Google Weiterleitungs URI zur aufgerufenen Domain passen muss (Ursache für `redirect_uri_mismatch`)
 * 2026-10-26: Domain festgelegt auf `letsmeet.thatsit.marketing` (vorher Vorschlag `termine.thatsit.marketing`), angepasst in `astro.config.mjs`, `wrangler.jsonc`, `public/embed.js` und Anleitung. Google Weiterleitungs URI: `https://letsmeet.thatsit.marketing/api/google/rueckruf`
+* 2026-10-26: Backoffice überarbeitet: volle Breite statt 1180px, neuer Kalender (Woche und Monat) mit Terminen, Verfügbarkeit, Ausnahmen und Google Belegtzeiten auf Termine (Standard Tab) und Verfügbarkeit, Live Vorschau der Wochenzeiten, Tagesklick legt Ausnahme an, Terminart Editor sowie Einstellungen und Integrationen zweispaltig, Feldausrichtung in Formularrastern korrigiert. Lokal mit Testdaten in 390, 1024, 1440 und 2000px geprüft
 * 2026-10-26: Google Verbindung repariert: nach der Freigabe landete man auf der Loginmaske und die Verbindung wurde nicht gespeichert, ohne sichtbaren Grund. Rückruf leitet jetzt per meta refresh weiter (Sitzung bleibt erhalten), zeigt den genauen Fehlergrund von Google an und trimmt Client ID und Secret

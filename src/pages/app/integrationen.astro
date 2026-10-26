@@ -141,7 +141,7 @@ const meldung = fehler ? { art: 'fehler' as const, text: fehler } : googleFehler
 </App>
 
 <style>
-  .liste { display: grid; gap: var(--raum-6); max-width: 820px; }
+  .liste { display: grid; gap: var(--raum-6); grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); align-items: start; }
   .block { padding: var(--raum-6); display: grid; gap: var(--raum-4); }
   .kopf { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--raum-4); align-items: start; }
   .kopf h2 { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-h4); letter-spacing: 0; }
