@@ -19,7 +19,7 @@
   // Erinnerungsmails und Löschfristen laufen alle 10 Minuten
   "triggers": { "crons": ["*/10 * * * *"] },
   "vars": {
-    "SITE_URL": "https://termine.thatsit.marketing",
+    "SITE_URL": "https://letsmeet.thatsit.marketing",
     "MAIL_FROM": "That's it. Marketing <termine@thatsit.marketing>",
     "MAIL_REPLY_TO": "info@thatsit.marketing"
   }
