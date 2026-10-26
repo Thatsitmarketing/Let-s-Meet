@@ -1,11 +1,13 @@
 ---
 import App from '../../../layouts/App.astro';
 import Icon from '../../../components/ui/Icon.astro';
+import Kalender from '../../../components/Kalender.astro';
 import { alle, eins } from '../../../lib/db';
+import { kalenderLaden, kalenderParameter } from '../../../lib/kalender';
 import { meldungAusUrl } from '../../../lib/meldungen';
 import { terminFilter } from '../../../lib/termin-filter';
 import type { Buchung } from '../../../lib/typen';
-import { datumInZone, formatDatumLang, formatZeit } from '../../../lib/zeit';
+import { datumInZone, formatDatumKurz, formatDatumLang, formatZeit } from '../../../lib/zeit';
 
 const nutzer = Astro.locals.nutzer!;
 const tz = nutzer.zeitzone;
@@ -13,15 +15,31 @@ const f = terminFilter(Astro.url, nutzer);
 const PRO_SEITE = 50;
 const seite = Math.max(1, Number(Astro.url.searchParams.get('seite') ?? 1) || 1);
 
+// Ohne ausdrückliche Listenansicht startet die Seite im Kalender
+const kalModus = !['bevorstehend', 'vergangen', 'storniert'].includes(Astro.url.searchParams.get('ansicht') ?? '');
+
 type Zeile = Buchung & { titel: string; farbe: string; gastgeber: string };
-const [zeilen, gesamt] = await Promise.all([
-  alle<Zeile>(
-    `SELECT b.*, t.titel, t.farbe, n.name AS gastgeber FROM buchungen b
-     JOIN terminarten t ON t.id = b.terminart_id JOIN nutzer n ON n.id = b.nutzer_id
-     WHERE ${f.where} ORDER BY b.start_utc ${f.reihenfolge} LIMIT ? OFFSET ?`,
-    ...f.werte, PRO_SEITE, (seite - 1) * PRO_SEITE,
-  ),
-  eins<{ n: number }>(`SELECT COUNT(*) AS n FROM buchungen b JOIN terminarten t ON t.id = b.terminart_id WHERE ${f.where}`, ...f.werte),
+const { ansicht: kalAnsicht, anker } = kalenderParameter(Astro.url, tz);
+const [zeilen, gesamt, kalender, naechste] = await Promise.all([
+  kalModus
+    ? Promise.resolve([] as Zeile[])
+    : alle<Zeile>(
+        `SELECT b.*, t.titel, t.farbe, n.name AS gastgeber FROM buchungen b
+         JOIN terminarten t ON t.id = b.terminart_id JOIN nutzer n ON n.id = b.nutzer_id
+         WHERE ${f.where} ORDER BY b.start_utc ${f.reihenfolge} LIMIT ? OFFSET ?`,
+        ...f.werte, PRO_SEITE, (seite - 1) * PRO_SEITE,
+      ),
+  kalModus ? Promise.resolve(null) : eins<{ n: number }>(`SELECT COUNT(*) AS n FROM buchungen b JOIN terminarten t ON t.id = b.terminart_id WHERE ${f.where}`, ...f.werte),
+  kalModus ? kalenderLaden({ nutzer, ansicht: kalAnsicht, anker, team: f.team }) : Promise.resolve(null),
+  kalModus
+    ? alle<Zeile>(
+        `SELECT b.*, t.titel, t.farbe, n.name AS gastgeber FROM buchungen b
+         JOIN terminarten t ON t.id = b.terminart_id JOIN nutzer n ON n.id = b.nutzer_id
+         WHERE b.status = 'bestaetigt' AND b.ende_utc >= ? ${f.team ? '' : 'AND b.nutzer_id = ?'}
+         ORDER BY b.start_utc ASC LIMIT 8`,
+        ...(f.team ? [new Date().toISOString()] : [new Date().toISOString(), nutzer.id]),
+      )
+    : Promise.resolve([] as Zeile[]),
 ]);
 
 const gruppen = new Map<string, Zeile[]>();
@@ -42,7 +60,9 @@ const link = (aenderung: Record<string, string | null>) => {
 };
 const exportParams = new URLSearchParams(Astro.url.searchParams);
 exportParams.delete('seite');
+const tagLink = (datum: string) => link({ ansicht: datum < heute ? 'vergangen' : 'bevorstehend', von: datum, bis: datum, kal: null, datum: null });
 const tabs = [
+  { wert: 'kalender', text: 'Kalender' },
   { wert: 'bevorstehend', text: 'Anstehend' },
   { wert: 'vergangen', text: 'Vergangen' },
   { wert: 'storniert', text: 'Abgesagt' },
@@ -56,7 +76,7 @@ const tabs = [
   <div class="kopfleiste">
     <nav class="tabs" aria-label="Ansicht">
       {tabs.map((t) => (
-        <a href={link({ ansicht: t.wert })} aria-current={f.ansicht === t.wert ? 'page' : undefined}>{t.text}</a>
+        <a href={link(t.wert === 'kalender' ? { ansicht: null, suche: null, von: null, bis: null } : { ansicht: t.wert })} aria-current={(kalModus ? 'kalender' : f.ansicht) === t.wert ? 'page' : undefined}>{t.text}</a>
       ))}
     </nav>
     {nutzer.rolle === 'admin' && (
@@ -67,6 +87,35 @@ const tabs = [
     )}
   </div>
 
+  {kalModus && kalender && (
+    <div class="kal-raster">
+      <Kalender daten={kalender} tagLink={tagLink} tagLinkLabel="Termine an diesem Tag als Liste" />
+      <aside class="karte naechste" aria-labelledby="n-titel">
+        <h2 id="n-titel">Als Nächstes</h2>
+        {naechste.length === 0 ? (
+          <p class="leise klein">Keine anstehenden Termine. Teil deinen Link, dann füllt sich der Kalender.</p>
+        ) : (
+          <ol class="naechste-liste" role="list">
+            {naechste.map((b) => (
+              <li>
+                <a href={`/app/termine/${b.id}`} style={`--farbe:${b.farbe}`}>
+                  <span class="n-wann">
+                    {datumInZone(new Date(b.start_utc), tz) === heute ? <span class="badge badge--orange">Heute</span> : <span>{formatDatumKurz(b.start_utc, tz)}</span>}
+                    <span>{formatZeit(b.start_utc, tz)} bis {formatZeit(b.ende_utc, tz)}</span>
+                  </span>
+                  <strong>{b.gast_name}</strong>
+                  <span class="leise klein">{b.titel}{f.team && ` · ${b.gastgeber}`}</span>
+                </a>
+              </li>
+            ))}
+          </ol>
+        )}
+        <a class="knopf knopf--rahmen knopf--klein" href={link({ ansicht: 'bevorstehend', kal: null, datum: null })}>Alle anstehenden<Icon name="rechts" /></a>
+      </aside>
+    </div>
+  )}
+
+  {!kalModus && (<>
   <form class="filter karte" method="get">
     <input type="hidden" name="ansicht" value={f.ansicht} />
     {f.team && <input type="hidden" name="wer" value="team" />}
@@ -135,6 +184,7 @@ const tabs = [
       {seite < seiten && <a class="knopf knopf--rahmen knopf--klein" href={`${link({})}${link({}).includes('?') ? '&' : '?'}seite=${seite + 1}`}>Weiter<Icon name="rechts" /></a>}
     </nav>
   )}
+  </>)}
 </App>
 
 <style>
@@ -168,6 +218,19 @@ const tabs = [
   .farbpunkt { width: 10px; height: 10px; flex: none; }
   .wer-text, .was { display: grid; min-width: 0; }
   .wer-text > *, .was > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kal-raster { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--raum-6); align-items: start; }
+  @media (min-width: 1500px) { .kal-raster { grid-template-columns: minmax(0, 1fr) 340px; } .naechste { position: sticky; top: var(--raum-6); } }
+  .naechste { padding: var(--raum-6); display: grid; gap: var(--raum-4); justify-items: start; }
+  .naechste h2 { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-h4); letter-spacing: 0; }
+  .naechste-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-2); width: 100%; }
+  .naechste-liste a {
+    display: grid; gap: 2px; padding: var(--raum-3) var(--raum-3) var(--raum-3) var(--raum-4); border: 1px solid var(--farbe-rahmen); border-left: 4px solid var(--farbe);
+    text-decoration: none; min-width: 0;
+  }
+  .naechste-liste a:hover { border-color: var(--n-900); border-left-color: var(--farbe); background: var(--n-050); }
+  .naechste-liste a > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .n-wann { display: flex; gap: var(--raum-2); align-items: center; font-size: var(--text-sm); font-weight: 600; color: var(--farbe-text-2); }
+  .n-wann .badge { padding: 1px 8px; font-size: 0.75rem; }
   .seiten { display: flex; justify-content: center; align-items: center; gap: var(--raum-4); margin-top: var(--raum-6); }
   @media (max-width: 900px) {
     .filter { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: var(--raum-4); }

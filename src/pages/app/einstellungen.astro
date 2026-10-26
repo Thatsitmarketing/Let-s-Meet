@@ -115,7 +115,7 @@ const ff = (n: string) => (fehler[n] ? { 'aria-invalid': 'true' as const, 'aria-
   </div>
 </App>
 <style>
-  .liste { display: grid; gap: var(--raum-6); max-width: 820px; }
+  .liste { display: grid; gap: var(--raum-6); grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); align-items: start; }
   .block { padding: var(--raum-6); display: grid; gap: var(--raum-6); }
   .block h2 { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-h4); letter-spacing: 0; }
   .profil-kopf { display: flex; gap: var(--raum-4); align-items: center; }
