@@ -14,7 +14,8 @@
     "check": "astro check",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "deploy": "astro build && wrangler deploy"
+    "deploy": "astro build && wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "deploy:cloudflare": "wrangler d1 migrations apply DB --remote && wrangler deploy"
   },
   "dependencies": {
     "@astrojs/cloudflare": "14.4.2",
