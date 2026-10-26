@@ -47,8 +47,21 @@ if (Astro.request.method === 'POST') {
   }
 }
 
+const GOOGLE_FEHLER: Record<string, string> = {
+  abgelehnt: 'Du hast den Zugriff bei Google nicht erlaubt. Ohne Freigabe kann Let\'s Meet deinen Kalender nicht nutzen.',
+  state: 'Die Anfrage an Google ist abgelaufen oder ungültig. Bitte starte die Verbindung noch einmal.',
+  kein_refresh: 'Google hat keinen dauerhaften Zugang geliefert. Entferne Let\'s Meet unter myaccount.google.com/permissions und verbinde dich neu.',
+  invalid_client: 'Google kennt die Zugangsdaten nicht: GOOGLE_CLIENT_ID und GOOGLE_CLIENT_SECRET in Cloudflare gehören nicht zum selben OAuth Client oder enthalten Tippfehler.',
+  unauthorized_client: 'Der OAuth Client darf diesen Ablauf nicht nutzen. Er muss vom Typ Webanwendung sein.',
+  invalid_grant: 'Google hat den Bestätigungscode abgelehnt (abgelaufen oder schon benutzt). Bitte noch einmal verbinden.',
+  redirect_uri_mismatch: 'Die Weiterleitungs URI passt nicht. Sie muss beim OAuth Client exakt so eingetragen sein: ' + Astro.url.origin + '/api/google/rueckruf',
+  speichern: 'Die Verbindung konnte nicht gespeichert werden. Bitte noch einmal versuchen.',
+};
 const googleFehler = Astro.url.searchParams.get('google_fehler');
-const meldung = fehler ? { art: 'fehler' as const, text: fehler } : googleFehler ? { art: 'fehler' as const, text: 'Google hat die Verbindung nicht bestätigt. Bitte versuch es noch einmal.' } : meldungAusUrl(Astro.url);
+const googleFehlerText = googleFehler
+  ? GOOGLE_FEHLER[googleFehler] ?? `Google hat die Verbindung nicht bestätigt (Code ${googleFehler.replace(/[^a-z_]/g, '').slice(0, 40)}). Bitte versuch es noch einmal.`
+  : '';
+const meldung = fehler ? { art: 'fehler' as const, text: fehler } : googleFehlerText ? { art: 'fehler' as const, text: googleFehlerText } : meldungAusUrl(Astro.url);
 ---
 <App titel="Integrationen" eyebrow="Verbindungen" meldung={meldung}>
   <div class="liste">

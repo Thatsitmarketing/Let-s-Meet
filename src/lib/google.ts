@@ -13,13 +13,24 @@ const SCOPES = [
   'https://www.googleapis.com/auth/calendar.freebusy',
 ].join(' ');
 
+// Beim Einfügen in Cloudflare rutschen leicht Leerzeichen oder Zeilenumbrüche mit
+const clientId = () => (env.GOOGLE_CLIENT_ID ?? '').trim();
+const clientSecret = () => (env.GOOGLE_CLIENT_SECRET ?? '').trim();
+
 export function googleAktiv() {
-  return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+  return Boolean(clientId() && clientSecret());
+}
+
+/** Fehler beim Tausch des Codes, code ist der Fehlercode von Google (etwa invalid_client) */
+export class GoogleTokenFehler extends Error {
+  constructor(public code: string, nachricht: string) {
+    super(nachricht);
+  }
 }
 
 export function googleAuthUrl(redirectUri: string, state: string) {
   const p = new URLSearchParams({
-    client_id: env.GOOGLE_CLIENT_ID ?? '',
+    client_id: clientId(),
     redirect_uri: redirectUri,
     response_type: 'code',
     scope: SCOPES,
@@ -37,13 +48,22 @@ export async function googleCodeTauschen(code: string, redirectUri: string) {
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       code,
-      client_id: env.GOOGLE_CLIENT_ID ?? '',
-      client_secret: env.GOOGLE_CLIENT_SECRET ?? '',
+      client_id: clientId(),
+      client_secret: clientSecret(),
       redirect_uri: redirectUri,
       grant_type: 'authorization_code',
     }),
   });
-  if (!res.ok) throw new Error(`Google Token ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    const text = await res.text();
+    let code = 'token';
+    try {
+      code = String((JSON.parse(text) as { error?: string }).error ?? 'token').replace(/[^a-z_]/g, '') || 'token';
+    } catch {
+      code = 'token';
+    }
+    throw new GoogleTokenFehler(code, `Google Token ${res.status}: ${text}`);
+  }
   const daten = (await res.json()) as { access_token: string; refresh_token?: string; expires_in: number; id_token?: string };
   let email: string | null = null;
   if (daten.id_token) {
@@ -66,8 +86,8 @@ async function zugriffstoken(nutzer: Nutzer): Promise<string | null> {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: env.GOOGLE_CLIENT_ID ?? '',
-      client_secret: env.GOOGLE_CLIENT_SECRET ?? '',
+      client_id: clientId(),
+      client_secret: clientSecret(),
       refresh_token: nutzer.google_refresh_token,
       grant_type: 'refresh_token',
     }),
