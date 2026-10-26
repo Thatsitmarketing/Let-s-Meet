@@ -1,0 +1,61 @@
+---
+import Zugang from '../../layouts/Zugang.astro';
+import Icon from '../../components/ui/Icon.astro';
+import { passwortPruefen, sitzungStarten } from '../../lib/auth';
+import { ausfuehren, eins } from '../../lib/db';
+import { trimmen } from '../../lib/eingabe';
+import type { Nutzer } from '../../lib/typen';
+
+if (Astro.locals.nutzer) return Astro.redirect('/app');
+const anzahl = await eins<{ n: number }>('SELECT COUNT(*) AS n FROM nutzer');
+if (!anzahl?.n) return Astro.redirect('/app/setup');
+
+const weiterRoh = Astro.url.searchParams.get('weiter') ?? '/app';
+const weiter = weiterRoh.startsWith('/app') && !weiterRoh.startsWith('//') ? weiterRoh : '/app';
+let fehler = '';
+let email = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  email = trimmen(form.get('email'), 180).toLowerCase();
+  const passwort = String(form.get('passwort') ?? '');
+  const nutzer = await eins<Nutzer>('SELECT * FROM nutzer WHERE email = ?', email);
+  const gesperrt = nutzer?.gesperrt_bis && Date.parse(nutzer.gesperrt_bis) > Date.now();
+  if (gesperrt) {
+    fehler = 'Zu viele Fehlversuche. Bitte warte 15 Minuten und versuch es dann erneut.';
+  } else if (nutzer && nutzer.aktiv && (await passwortPruefen(passwort, nutzer.passwort_hash))) {
+    await ausfuehren('UPDATE nutzer SET fehlversuche = 0, gesperrt_bis = NULL WHERE id = ?', nutzer.id);
+    await sitzungStarten(Astro.cookies, nutzer.id, Astro.url.protocol === 'https:');
+    return Astro.redirect(weiter);
+  } else {
+    if (nutzer) {
+      const versuche = nutzer.fehlversuche + 1;
+      const sperre = versuche >= 5 ? new Date(Date.now() + 15 * 60_000).toISOString() : null;
+      await ausfuehren('UPDATE nutzer SET fehlversuche = ?, gesperrt_bis = ? WHERE id = ?', sperre ? 0 : versuche, sperre, nutzer.id);
+    }
+    fehler = 'E Mail oder Passwort stimmen nicht.';
+  }
+}
+---
+<Zugang titel="Anmelden">
+  <div>
+    <p class="eyebrow">Backoffice</p>
+    <h1>Anmelden<span class="punkt">.</span></h1>
+  </div>
+  {fehler && <p class="hinweis hinweis--fehler" role="alert"><Icon name="warnung" />{fehler}</p>}
+  <form method="post" class="formular">
+    <div class="feld">
+      <label for="email">E Mail</label>
+      <input id="email" name="email" type="email" class="eingabe" autocomplete="username" required value={email} />
+    </div>
+    <div class="feld">
+      <label for="passwort">Passwort</label>
+      <input id="passwort" name="passwort" type="password" class="eingabe" autocomplete="current-password" required />
+    </div>
+    <button type="submit" class="knopf knopf--breit">Anmelden</button>
+  </form>
+  <p class="leise klein">Passwort vergessen? Ein Admin aus deinem Team kann es unter Team neu setzen.</p>
+</Zugang>
+<style>
+  .formular { display: grid; gap: var(--raum-4); }
+</style>

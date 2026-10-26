@@ -1,0 +1,35 @@
+---
+import Basis from './Basis.astro';
+import Logo from '../components/ui/Logo.astro';
+interface Props { titel: string }
+const { titel } = Astro.props;
+---
+<Basis titel={`${titel} | Let's Meet`} klasse="zugang">
+  <div class="zugang-rahmen">
+    <section class="buehne dunkel" aria-hidden="true">
+      <Logo variante="weiss" hoehe={36} />
+      <p class="gross">Let's<br />Meet<span class="punkt">.</span></p>
+      <p class="eyebrow">Terminbuchung von That's it. Marketing</p>
+    </section>
+    <main class="formularseite" id="inhalt">
+      <div class="formularbox">
+        <slot />
+      </div>
+    </main>
+  </div>
+</Basis>
+<style>
+  .zugang-rahmen { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 100vh; }
+  .buehne {
+    background: var(--n-900); color: var(--farbe-papier); padding: clamp(2rem, 5vw, 4rem);
+    display: flex; flex-direction: column; justify-content: space-between; gap: var(--raum-12);
+  }
+  .gross { font-family: var(--schrift-display); font-weight: 900; font-size: clamp(3.5rem, 8vw, 8rem); line-height: 0.92; letter-spacing: -0.03em; }
+  .formularseite { display: grid; place-items: center; padding: clamp(1.5rem, 5vw, 4rem); background: var(--farbe-papier); }
+  .formularbox { width: 100%; max-width: 420px; display: grid; gap: var(--raum-6); }
+  @media (max-width: 820px) {
+    .zugang-rahmen { grid-template-columns: 1fr; min-height: auto; }
+    .buehne { gap: var(--raum-6); }
+    .gross { font-size: 3.5rem; }
+  }
+</style>

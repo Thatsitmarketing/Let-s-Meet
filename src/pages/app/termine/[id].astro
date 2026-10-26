@@ -1,0 +1,153 @@
+---
+import App from '../../../layouts/App.astro';
+import Icon from '../../../components/ui/Icon.astro';
+import { buchungNachId, nutzerNachId, terminartNachId } from '../../../lib/abfragen';
+import { basisUrl, buchungAbsagen } from '../../../lib/buchungen';
+import { ausfuehren, jetztIso } from '../../../lib/db';
+import { trimmen } from '../../../lib/eingabe';
+import { meldungAusUrl } from '../../../lib/meldungen';
+import { formatDatumKurz, formatDatumLang, formatSpanne, formatZeit, zonenName } from '../../../lib/zeit';
+
+const nutzer = Astro.locals.nutzer!;
+const buchung = await buchungNachId(Astro.params.id ?? '');
+if (!buchung || (buchung.nutzer_id !== nutzer.id && nutzer.rolle !== 'admin')) return Astro.redirect('/app/termine');
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const aktion = String(form.get('aktion') ?? '');
+  if (aktion === 'notiz') {
+    await ausfuehren('UPDATE buchungen SET interne_notiz = ?, aktualisiert_am = ? WHERE id = ?', trimmen(form.get('notiz'), 5000) || null, jetztIso(), buchung.id);
+    return Astro.redirect(`/app/termine/${buchung.id}?ok=gespeichert`);
+  }
+  if (aktion === 'erschienen') {
+    await ausfuehren('UPDATE buchungen SET nicht_erschienen = ?, aktualisiert_am = ? WHERE id = ?', buchung.nicht_erschienen ? 0 : 1, jetztIso(), buchung.id);
+    return Astro.redirect(`/app/termine/${buchung.id}?ok=gespeichert`);
+  }
+  if (aktion === 'absagen' && buchung.status === 'bestaetigt') {
+    await buchungAbsagen({
+      buchung,
+      grund: trimmen(form.get('grund'), 1000) || null,
+      von: 'gastgeber',
+      basis: basisUrl(Astro.url),
+      imHintergrund: (p) => Astro.locals.cfContext.waitUntil(p),
+    });
+    return Astro.redirect(`/app/termine/${buchung.id}?ok=abgesagt`);
+  }
+}
+
+const [ta, gastgeber] = await Promise.all([terminartNachId(buchung.terminart_id), nutzerNachId(buchung.nutzer_id)]);
+const tz = nutzer.zeitzone;
+const vorbei = Date.parse(buchung.ende_utc) < Date.now();
+let antworten: { label: string; wert: string }[] = [];
+try {
+  antworten = JSON.parse(buchung.antworten);
+} catch {
+  antworten = [];
+}
+const umbuchenLink = gastgeber && ta ? `${Astro.url.origin}/${gastgeber.slug}/${ta.slug}?umbuchen=${buchung.id}` : '';
+---
+<App titel={buchung.gast_name} eyebrow={ta?.titel ?? 'Termin'} meldung={meldungAusUrl(Astro.url)}>
+  <Fragment slot="aktionen">
+    <a class="knopf knopf--leise" href="/app/termine"><Icon name="zurueck" />Alle Termine</a>
+  </Fragment>
+
+  <div class="raster">
+    <div class="haupt">
+      <section class="karte block" aria-labelledby="t-wann">
+        <div class="status-zeile">
+          {buchung.status === 'storniert'
+            ? <span class="pille pille--fehler">{buchung.storno_grund === 'Umgebucht' ? 'Umgebucht' : `Abgesagt von ${buchung.storniert_von === 'gast' ? 'Gast' : 'euch'}`}</span>
+            : buchung.nicht_erschienen ? <span class="pille pille--fehler">Nicht erschienen</span>
+            : <span class="pille pille--erfolg">Bestätigt</span>}
+          {vorbei && buchung.status === 'bestaetigt' && <span class="pille">Vorbei</span>}
+        </div>
+        <h2 id="t-wann">{formatDatumLang(buchung.start_utc, tz)}</h2>
+        <p class="gross">{formatSpanne(buchung.start_utc, buchung.ende_utc, tz)}</p>
+        <dl class="liste">
+          <div><dt>Terminart</dt><dd>{ta?.titel} &middot; {ta?.dauer_min} Min</dd></div>
+          {nutzer.rolle === 'admin' && gastgeber && <div><dt>Gastgeber</dt><dd>{gastgeber.name}</dd></div>}
+          <div><dt>Ort</dt><dd>{buchung.meeting_url ? <a href={buchung.meeting_url} target="_blank" rel="noopener">{buchung.meeting_url}</a> : buchung.ort_text}</dd></div>
+          <div><dt>Zeit beim Gast</dt><dd>{formatZeit(buchung.start_utc, buchung.gast_zeitzone)} Uhr, {zonenName(buchung.gast_zeitzone)}</dd></div>
+          <div><dt>Gebucht am</dt><dd>{formatDatumKurz(buchung.erstellt_am, tz)}, {formatZeit(buchung.erstellt_am, tz)} Uhr</dd></div>
+          {buchung.quelle && <div><dt>Eingebettet auf</dt><dd class="umbruch">{buchung.quelle}</dd></div>}
+          {buchung.umgebucht_von && <div><dt>Umgebucht von</dt><dd><a href={`/app/termine/${buchung.umgebucht_von}`}>vorheriger Termin</a></dd></div>}
+          {buchung.umgebucht_zu && <div><dt>Neuer Termin</dt><dd><a href={`/app/termine/${buchung.umgebucht_zu}`}>zum neuen Termin</a></dd></div>}
+          {buchung.status === 'storniert' && buchung.storno_grund && buchung.storno_grund !== 'Umgebucht' && <div><dt>Absagegrund</dt><dd>{buchung.storno_grund}</dd></div>}
+        </dl>
+      </section>
+
+      <section class="karte block" aria-labelledby="t-gast">
+        <h2 id="t-gast" class="klein-titel">Gast</h2>
+        <dl class="liste">
+          <div><dt>Name</dt><dd>{buchung.gast_name}</dd></div>
+          <div><dt>E Mail</dt><dd><a href={`mailto:${buchung.gast_email}`}>{buchung.gast_email}</a></dd></div>
+          {buchung.gast_telefon && <div><dt>Telefon</dt><dd><a href={`tel:${buchung.gast_telefon.replace(/\s/g, '')}`}>{buchung.gast_telefon}</a></dd></div>}
+          {antworten.map((a) => <div><dt>{a.label}</dt><dd class="vor">{a.wert}</dd></div>)}
+          {buchung.nachricht && <div><dt>Nachricht</dt><dd class="vor">{buchung.nachricht}</dd></div>}
+        </dl>
+      </section>
+
+      <section class="karte block" aria-labelledby="t-notiz">
+        <h2 id="t-notiz" class="klein-titel">Interne Notiz</h2>
+        <form method="post" class="notiz">
+          <input type="hidden" name="aktion" value="notiz" />
+          <label for="notiz" class="sr-only">Notiz</label>
+          <textarea id="notiz" name="notiz" class="textfeld" maxlength="5000" placeholder="Nur für euch sichtbar">{buchung.interne_notiz}</textarea>
+          <button class="knopf knopf--klein" type="submit">Notiz speichern</button>
+        </form>
+      </section>
+    </div>
+
+    <aside class="seite">
+      {buchung.status === 'bestaetigt' && (
+        <section class="karte block" aria-labelledby="t-aktionen">
+          <h2 id="t-aktionen" class="klein-titel">Aktionen</h2>
+          {buchung.meeting_url && !vorbei && <a class="knopf knopf--orange knopf--breit" href={buchung.meeting_url} target="_blank" rel="noopener"><Icon name="video" />Meeting starten</a>}
+          {!vorbei && <button type="button" class="knopf knopf--rahmen knopf--breit" data-kopieren={umbuchenLink}><Icon name="umbuchen" />Umbuchungslink kopieren</button>}
+          <a class="knopf knopf--rahmen knopf--breit" href={`/termin/${buchung.id}/kalender.ics`}><Icon name="download" />Kalenderdatei</a>
+          {vorbei && (
+            <form method="post">
+              <input type="hidden" name="aktion" value="erschienen" />
+              <button class="knopf knopf--rahmen knopf--breit" type="submit">{buchung.nicht_erschienen ? 'Doch erschienen' : 'Als nicht erschienen markieren'}</button>
+            </form>
+          )}
+        </section>
+      )}
+      {buchung.status === 'bestaetigt' && !vorbei && (
+        <section class="karte block absagen" aria-labelledby="t-absagen">
+          <h2 id="t-absagen" class="klein-titel">Termin absagen</h2>
+          <form method="post" data-rueckfrage="Termin wirklich absagen? Der Gast bekommt sofort eine Mail.">
+            <input type="hidden" name="aktion" value="absagen" />
+            <div class="feld">
+              <label for="grund">Nachricht an den Gast<span class="leise"> (optional)</span></label>
+              <textarea id="grund" name="grund" class="textfeld" maxlength="1000" placeholder="z. B. kurzfristig verhindert, bitte buch einen neuen Termin"></textarea>
+            </div>
+            <button class="knopf knopf--gefahr knopf--breit" type="submit"><Icon name="x" />Absagen</button>
+          </form>
+        </section>
+      )}
+    </aside>
+  </div>
+</App>
+
+<style>
+  .raster { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--raum-6); align-items: start; }
+  .haupt, .seite { display: grid; gap: var(--raum-6); }
+  .block { padding: var(--raum-6); display: grid; gap: var(--raum-4); }
+  .status-zeile { display: flex; gap: var(--raum-2); flex-wrap: wrap; }
+  .block h2 { font-size: var(--text-h3); }
+  .gross { font-size: var(--text-lg); font-weight: 600; margin-top: calc(var(--raum-2) * -1); }
+  .klein-titel { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-h4) !important; letter-spacing: 0; }
+  .liste { margin: 0; display: grid; border-top: 1px solid var(--farbe-rahmen); }
+  .liste div { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: var(--raum-4); padding: var(--raum-3) 0; border-bottom: 1px solid var(--farbe-rahmen); }
+  .liste dt { color: var(--farbe-text-leise); font-size: var(--text-sm); }
+  .liste dd { margin: 0; overflow-wrap: anywhere; }
+  .vor { white-space: pre-wrap; }
+  .umbruch { word-break: break-all; }
+  .notiz { display: grid; gap: var(--raum-3); justify-items: start; }
+  .absagen form { display: grid; gap: var(--raum-4); }
+  @media (max-width: 960px) {
+    .raster { grid-template-columns: 1fr; }
+    .liste div { grid-template-columns: 1fr; gap: 2px; }
+  }
+</style>

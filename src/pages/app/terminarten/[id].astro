@@ -1,0 +1,34 @@
+---
+import App from '../../../layouts/App.astro';
+import Icon from '../../../components/ui/Icon.astro';
+import TerminartFormular from '../../../components/TerminartFormular.astro';
+import { eins } from '../../../lib/db';
+import { meldungAusUrl } from '../../../lib/meldungen';
+import { terminartAusFormular, terminartSpeichern, type TerminartWerte } from '../../../lib/terminart-formular';
+import type { Terminart } from '../../../lib/typen';
+
+const nutzer = Astro.locals.nutzer!;
+const ta = await eins<Terminart>('SELECT * FROM terminarten WHERE id = ? AND nutzer_id = ?', Astro.params.id ?? '', nutzer.id);
+if (!ta) return Astro.redirect('/app/terminarten');
+
+let werte: TerminartWerte = ta;
+let fehler: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const ergebnis = await terminartAusFormular(await Astro.request.formData(), nutzer.id, ta.id);
+  werte = ergebnis.werte;
+  fehler = ergebnis.fehler;
+  if (!Object.keys(fehler).length) {
+    await terminartSpeichern(werte, nutzer.id, ta.id);
+    return Astro.redirect(`/app/terminarten/${ta.id}?ok=gespeichert`);
+  }
+}
+const link = `${Astro.url.origin}/${nutzer.slug}/${ta.slug}`;
+---
+<App titel={ta.titel} eyebrow="Terminart bearbeiten" meldung={meldungAusUrl(Astro.url)}>
+  <Fragment slot="aktionen">
+    <button type="button" class="knopf knopf--rahmen" data-kopieren={link}><Icon name="kopieren" />Link kopieren</button>
+    <a class="knopf knopf--rahmen" href={link} target="_blank" rel="noopener"><Icon name="auge" />Ansehen</a>
+  </Fragment>
+  <TerminartFormular werte={werte} fehler={fehler} nutzerSlug={nutzer.slug} neu={false} />
+</App>

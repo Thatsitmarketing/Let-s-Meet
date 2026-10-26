@@ -1,0 +1,94 @@
+---
+import Oeffentlich from '../../layouts/Oeffentlich.astro';
+import Avatar from '../../components/Avatar.astro';
+import Icon from '../../components/ui/Icon.astro';
+import OrtIcon from '../../components/OrtIcon.astro';
+import { nutzerNachSlug, terminartenVon } from '../../lib/abfragen';
+import { ORT_LABEL } from '../../lib/typen';
+
+const nutzer = await nutzerNachSlug(Astro.params.nutzer ?? '');
+if (!nutzer) return Astro.rewrite('/404');
+const arten = await terminartenVon(nutzer.id, true);
+const embed = Astro.url.searchParams.get('embed') === '1';
+const suffix = embed ? '?embed=1' : '';
+---
+<Oeffentlich titel={`Termin mit ${nutzer.name} buchen`} beschreibung={`Buche online einen Termin mit ${nutzer.name} von That's it. Marketing.`} indexieren>
+  <section class="profil karte">
+    <header class="profil-kopf">
+      <Avatar name={nutzer.name} url={nutzer.avatar_url} groesse={72} />
+      <div class="profil-text">
+        <p class="eyebrow">That's it. Marketing</p>
+        <h1>{nutzer.name}<span class="punkt">.</span></h1>
+        {nutzer.position && <p class="leise">{nutzer.position}</p>}
+      </div>
+    </header>
+    <p class="begruessung">{nutzer.begruessung || 'Willkommen. Such dir unten die passende Terminart aus und wähl einen freien Slot.'}</p>
+
+    {arten.length === 0 ? (
+      <p class="hinweis"><Icon name="info" />Gerade sind keine Termine buchbar.</p>
+    ) : (
+      <ul class="arten" role="list">
+        {arten.map((ta) => (
+          <li>
+            <a class="art" href={`/${nutzer.slug}/${ta.slug}${suffix}`} style={`--farbe:${ta.farbe}`}>
+              <span class="streifen" aria-hidden="true"></span>
+              <span class="art-text">
+                <span class="art-titel">{ta.titel}</span>
+                <span class="art-meta">
+                  <span><Icon name="uhr" groesse={16} />{ta.dauer_min} Min</span>
+                  <span><OrtIcon typ={ta.ort_typ} groesse={16} />{ORT_LABEL[ta.ort_typ]}</span>
+                </span>
+                {ta.beschreibung && <span class="art-beschreibung">{ta.beschreibung.split('\n')[0]}</span>}
+              </span>
+              <Icon name="rechts" class="icon pfeil" />
+            </a>
+          </li>
+        ))}
+      </ul>
+    )}
+  </section>
+</Oeffentlich>
+
+<style>
+  .profil { padding: clamp(1.5rem, 4vw, 3rem); }
+  .profil-kopf { display: flex; gap: var(--raum-6); align-items: center; }
+  .profil-text { display: grid; gap: var(--raum-2); }
+  .begruessung {
+    margin: var(--raum-8) 0;
+    padding-bottom: var(--raum-8);
+    border-bottom: 1px solid var(--farbe-rahmen);
+    max-width: var(--breite-text);
+    color: var(--farbe-text-2);
+    white-space: pre-line;
+  }
+  .arten {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+    gap: var(--raum-4);
+  }
+  .art {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--raum-4);
+    height: 100%;
+    padding: var(--raum-6) var(--raum-6) var(--raum-6) calc(var(--raum-6) + 4px);
+    border: 1px solid var(--farbe-rahmen);
+    background: var(--farbe-papier);
+    text-decoration: none;
+    transition: border-color var(--dauer-normal) var(--kurve), box-shadow var(--dauer-normal) var(--kurve);
+  }
+  .art:hover { border-color: var(--n-900); box-shadow: var(--schatten-2); }
+  .streifen { position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--farbe); }
+  .art-text { display: grid; gap: var(--raum-2); flex: 1; min-width: 0; }
+  .art-titel { font-family: var(--schrift-display); font-weight: 900; font-size: var(--text-h3); line-height: 1.05; }
+  .art-meta { display: flex; flex-wrap: wrap; gap: var(--raum-2) var(--raum-4); font-size: var(--text-sm); color: var(--farbe-text-2); }
+  .art-meta span { display: inline-flex; align-items: center; gap: 6px; }
+  .art-beschreibung { font-size: var(--text-sm); color: var(--farbe-text-leise); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  @media (max-width: 560px) {
+    .profil-kopf { flex-direction: column; align-items: flex-start; }
+  }
+</style>

@@ -1,0 +1,183 @@
+---
+import App from '../../../layouts/App.astro';
+import Icon from '../../../components/ui/Icon.astro';
+import { alle, eins } from '../../../lib/db';
+import { meldungAusUrl } from '../../../lib/meldungen';
+import { terminFilter } from '../../../lib/termin-filter';
+import type { Buchung } from '../../../lib/typen';
+import { datumInZone, formatDatumLang, formatZeit } from '../../../lib/zeit';
+
+const nutzer = Astro.locals.nutzer!;
+const tz = nutzer.zeitzone;
+const f = terminFilter(Astro.url, nutzer);
+const PRO_SEITE = 50;
+const seite = Math.max(1, Number(Astro.url.searchParams.get('seite') ?? 1) || 1);
+
+type Zeile = Buchung & { titel: string; farbe: string; gastgeber: string };
+const [zeilen, gesamt] = await Promise.all([
+  alle<Zeile>(
+    `SELECT b.*, t.titel, t.farbe, n.name AS gastgeber FROM buchungen b
+     JOIN terminarten t ON t.id = b.terminart_id JOIN nutzer n ON n.id = b.nutzer_id
+     WHERE ${f.where} ORDER BY b.start_utc ${f.reihenfolge} LIMIT ? OFFSET ?`,
+    ...f.werte, PRO_SEITE, (seite - 1) * PRO_SEITE,
+  ),
+  eins<{ n: number }>(`SELECT COUNT(*) AS n FROM buchungen b JOIN terminarten t ON t.id = b.terminart_id WHERE ${f.where}`, ...f.werte),
+]);
+
+const gruppen = new Map<string, Zeile[]>();
+for (const z of zeilen) {
+  const tag = datumInZone(new Date(z.start_utc), tz);
+  gruppen.set(tag, [...(gruppen.get(tag) ?? []), z]);
+}
+const heute = datumInZone(new Date(), tz);
+const seiten = Math.max(1, Math.ceil((gesamt?.n ?? 0) / PRO_SEITE));
+
+const link = (aenderung: Record<string, string | null>) => {
+  const p = new URLSearchParams(Astro.url.searchParams);
+  p.delete('ok');
+  p.delete('seite');
+  for (const [k, v] of Object.entries(aenderung)) v === null ? p.delete(k) : p.set(k, v);
+  const s = p.toString();
+  return `/app/termine${s ? `?${s}` : ''}`;
+};
+const exportParams = new URLSearchParams(Astro.url.searchParams);
+exportParams.delete('seite');
+const tabs = [
+  { wert: 'bevorstehend', text: 'Anstehend' },
+  { wert: 'vergangen', text: 'Vergangen' },
+  { wert: 'storniert', text: 'Abgesagt' },
+];
+---
+<App titel="Termine" eyebrow={f.team ? 'Ganzes Team' : 'Deine Termine'} meldung={meldungAusUrl(Astro.url)}>
+  <Fragment slot="aktionen">
+    <a class="knopf knopf--rahmen" href={`/api/app/termine.csv?${exportParams}`}><Icon name="download" />CSV Export</a>
+  </Fragment>
+
+  <div class="kopfleiste">
+    <nav class="tabs" aria-label="Ansicht">
+      {tabs.map((t) => (
+        <a href={link({ ansicht: t.wert })} aria-current={f.ansicht === t.wert ? 'page' : undefined}>{t.text}</a>
+      ))}
+    </nav>
+    {nutzer.rolle === 'admin' && (
+      <nav class="wer" aria-label="Wessen Termine">
+        <a href={link({ wer: null })} aria-current={!f.team ? 'page' : undefined}>Meine</a>
+        <a href={link({ wer: 'team' })} aria-current={f.team ? 'page' : undefined}>Team</a>
+      </nav>
+    )}
+  </div>
+
+  <form class="filter karte" method="get">
+    <input type="hidden" name="ansicht" value={f.ansicht} />
+    {f.team && <input type="hidden" name="wer" value="team" />}
+    <div class="feld suche">
+      <label for="suche">Suche</label>
+      <input id="suche" name="suche" type="search" class="eingabe" placeholder="Name, E Mail oder Terminart" value={f.suche} />
+    </div>
+    <div class="feld">
+      <label for="von">Von</label>
+      <input id="von" name="von" type="date" class="eingabe" value={f.von} />
+    </div>
+    <div class="feld">
+      <label for="bis">Bis</label>
+      <input id="bis" name="bis" type="date" class="eingabe" value={f.bis} />
+    </div>
+    <div class="filter-knoepfe">
+      <button class="knopf" type="submit"><Icon name="suche" />Filtern</button>
+      {(f.suche || f.von || f.bis) && <a class="knopf knopf--leise" href={link({ suche: null, von: null, bis: null })}>Zurücksetzen</a>}
+    </div>
+  </form>
+
+  <p class="anzahl leise klein" role="status">{gesamt?.n ?? 0} {gesamt?.n === 1 ? 'Termin' : 'Termine'}</p>
+
+  {zeilen.length === 0 ? (
+    <div class="leer karte">
+      <Icon name="kalender" groesse={28} />
+      <p>{f.ansicht === 'bevorstehend' ? 'Keine anstehenden Termine. Teil deinen Link, dann füllt sich der Kalender.' : 'Hier ist nichts.'}</p>
+    </div>
+  ) : (
+    <div class="liste">
+      {[...gruppen.entries()].map(([tag, liste]) => (
+        <section class="tag karte" aria-label={formatDatumLang(liste[0].start_utc, tz)}>
+          <h2 class="tag-kopf">{formatDatumLang(liste[0].start_utc, tz)}{tag === heute && <span class="badge badge--orange">Heute</span>}</h2>
+          <ul role="list">
+            {liste.map((b) => (
+              <li>
+                <a class="zeile" href={`/app/termine/${b.id}`}>
+                  <span class="zeit"><span class="farbpunkt" style={`background:${b.farbe}`} aria-hidden="true"></span>{formatZeit(b.start_utc, tz)} bis {formatZeit(b.ende_utc, tz)}</span>
+                  <span class="wer-text">
+                    <strong>{b.gast_name}</strong>
+                    <span class="leise klein">{b.gast_email}</span>
+                  </span>
+                  <span class="was">
+                    <span>{b.titel}</span>
+                    {f.team && <span class="leise klein">bei {b.gastgeber}</span>}
+                  </span>
+                  <span class="status">
+                    {b.status === 'storniert' ? <span class="pille pille--fehler">{b.storno_grund === 'Umgebucht' ? 'Umgebucht' : 'Abgesagt'}</span>
+                      : b.nicht_erschienen ? <span class="pille pille--fehler">Nicht erschienen</span>
+                      : <span class="pille pille--erfolg">Bestätigt</span>}
+                  </span>
+                  <Icon name="rechts" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  )}
+
+  {seiten > 1 && (
+    <nav class="seiten" aria-label="Seiten">
+      {seite > 1 && <a class="knopf knopf--rahmen knopf--klein" href={`${link({})}${link({}).includes('?') ? '&' : '?'}seite=${seite - 1}`}><Icon name="links" />Zurück</a>}
+      <span class="leise klein">Seite {seite} von {seiten}</span>
+      {seite < seiten && <a class="knopf knopf--rahmen knopf--klein" href={`${link({})}${link({}).includes('?') ? '&' : '?'}seite=${seite + 1}`}>Weiter<Icon name="rechts" /></a>}
+    </nav>
+  )}
+</App>
+
+<style>
+  .kopfleiste { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: var(--raum-4); border-bottom: 1px solid var(--farbe-rahmen); margin-bottom: var(--raum-6); }
+  .tabs, .wer { display: flex; gap: var(--raum-1); max-width: 100%; }
+  .tabs { overflow-x: auto; min-width: 0; }
+  .tabs a, .wer a {
+    display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--raum-4); text-decoration: none; font-weight: 600; font-size: var(--text-sm);
+    color: var(--farbe-text-2); border-bottom: 3px solid transparent; margin-bottom: -1px;
+  }
+  .tabs a[aria-current='page'] { color: var(--n-900); border-bottom-color: var(--farbe-akzent); }
+  .wer a { border: 1px solid var(--farbe-rahmen); margin-bottom: var(--raum-2); min-height: 36px; }
+  .wer a[aria-current='page'] { background: var(--n-900); color: var(--farbe-papier); border-color: var(--n-900); }
+  .filter { display: grid; grid-template-columns: minmax(200px, 2fr) repeat(2, minmax(140px, 1fr)) auto; gap: var(--raum-4); align-items: end; padding: var(--raum-4) var(--raum-6); }
+  .filter-knoepfe { display: flex; gap: var(--raum-2); }
+  .anzahl { margin: var(--raum-4) 0; }
+  .leer { padding: var(--raum-12); display: grid; justify-items: center; gap: var(--raum-3); text-align: center; color: var(--farbe-text-2); }
+  .liste { display: grid; gap: var(--raum-4); }
+  .tag-kopf {
+    display: flex; align-items: center; gap: var(--raum-3); padding: var(--raum-3) var(--raum-6); background: var(--n-050); border-bottom: 1px solid var(--farbe-rahmen);
+    font-family: var(--schrift-text); font-size: var(--text-sm); font-weight: 600; letter-spacing: 0;
+  }
+  .tag ul { list-style: none; margin: 0; padding: 0; }
+  .tag li + li { border-top: 1px solid var(--farbe-rahmen); }
+  .zeile {
+    display: grid; grid-template-columns: 170px minmax(0, 1.4fr) minmax(0, 1fr) auto 20px; gap: var(--raum-4); align-items: center;
+    padding: var(--raum-4) var(--raum-6); text-decoration: none;
+  }
+  .zeile:hover { background: var(--n-050); }
+  .zeit { display: inline-flex; align-items: center; gap: var(--raum-3); font-weight: 600; font-size: var(--text-sm); white-space: nowrap; }
+  .farbpunkt { width: 10px; height: 10px; flex: none; }
+  .wer-text, .was { display: grid; min-width: 0; }
+  .wer-text > *, .was > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .seiten { display: flex; justify-content: center; align-items: center; gap: var(--raum-4); margin-top: var(--raum-6); }
+  @media (max-width: 900px) {
+    .filter { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: var(--raum-4); }
+    .tabs a { padding: 0 var(--raum-3); }
+    .suche, .filter-knoepfe { grid-column: 1 / -1; }
+    .zeile { grid-template-columns: 1fr auto; gap: var(--raum-2) var(--raum-4); padding: var(--raum-4); }
+    .zeit { grid-column: 1; }
+    .status { grid-column: 2; grid-row: 1; }
+    .wer-text, .was { grid-column: 1 / -1; }
+    .zeile > :global(svg) { display: none; }
+    .tag-kopf { padding: var(--raum-3) var(--raum-4); }
+  }
+</style>

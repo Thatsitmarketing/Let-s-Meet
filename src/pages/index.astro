@@ -1,0 +1,75 @@
+---
+import Oeffentlich from '../layouts/Oeffentlich.astro';
+import Avatar from '../components/Avatar.astro';
+import Icon from '../components/ui/Icon.astro';
+import { aktiveNutzer } from '../lib/abfragen';
+import { alle } from '../lib/db';
+
+const team = await aktiveNutzer();
+const anzahl = await alle<{ nutzer_id: string; n: number }>(
+  'SELECT nutzer_id, COUNT(*) AS n FROM terminarten WHERE aktiv = 1 AND geheim = 0 GROUP BY nutzer_id',
+);
+const proNutzer = new Map(anzahl.map((a) => [a.nutzer_id, a.n]));
+const sichtbar = team.filter((n) => (proNutzer.get(n.id) ?? 0) > 0);
+
+if (team.length === 0) return Astro.redirect('/app/setup');
+if (sichtbar.length === 1) return Astro.redirect(`/${sichtbar[0].slug}${Astro.url.search}`);
+---
+<Oeffentlich titel="Termin buchen | Let's Meet" indexieren breit>
+  <section class="held">
+    <p class="eyebrow">Let's Meet</p>
+    <h1>Lass uns reden<span class="punkt">.</span></h1>
+    <p class="unterzeile">Such dir aus, mit wem du sprechen willst, und buch deinen Termin direkt im Kalender. Online statt Mailpingpong.</p>
+  </section>
+
+  {sichtbar.length === 0 ? (
+    <p class="hinweis"><Icon name="info" />Gerade sind keine Termine buchbar. Schreib uns an <a href="mailto:info@thatsit.marketing">info@thatsit.marketing</a>.</p>
+  ) : (
+    <ul class="team" role="list">
+      {sichtbar.map((n) => (
+        <li>
+          <a class="person karte" href={`/${n.slug}`}>
+            <Avatar name={n.name} url={n.avatar_url} groesse={56} />
+            <span class="person-text">
+              <span class="person-name">{n.name}</span>
+              {n.position && <span class="leise klein">{n.position}</span>}
+              <span class="leise klein">{proNutzer.get(n.id)} {proNutzer.get(n.id) === 1 ? 'Terminart' : 'Terminarten'}</span>
+            </span>
+            <Icon name="rechts" class="icon pfeil" />
+          </a>
+        </li>
+      ))}
+    </ul>
+  )}
+</Oeffentlich>
+
+<style>
+  .held {
+    display: grid;
+    gap: var(--raum-4);
+    margin-bottom: var(--raum-12);
+    max-width: 44rem;
+  }
+  .held h1 { font-size: var(--text-display); }
+  .unterzeile { font-size: var(--text-lg); color: var(--farbe-text-2); max-width: var(--breite-text); }
+  .team {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+    gap: var(--raum-4);
+  }
+  .person {
+    display: flex;
+    align-items: center;
+    gap: var(--raum-4);
+    padding: var(--raum-6);
+    text-decoration: none;
+    transition: box-shadow var(--dauer-normal) var(--kurve), border-color var(--dauer-normal) var(--kurve);
+  }
+  .person:hover { box-shadow: var(--schatten-2); border-color: var(--n-900); }
+  .person-text { display: grid; gap: 2px; flex: 1; min-width: 0; }
+  .person-name { font-weight: 600; font-size: var(--text-lg); }
+  .pfeil { margin-left: auto; }
+</style>

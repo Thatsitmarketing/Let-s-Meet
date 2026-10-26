@@ -1,0 +1,112 @@
+---
+import Basis from './Basis.astro';
+import Logo from '../components/ui/Logo.astro';
+
+interface Props {
+  titel: string;
+  beschreibung?: string;
+  indexieren?: boolean;
+  breit?: boolean;
+}
+const { titel, beschreibung, indexieren = false, breit = false } = Astro.props;
+const embed = Astro.url.searchParams.get('embed') === '1';
+---
+<Basis titel={titel} beschreibung={beschreibung} indexieren={indexieren} klasse={embed ? 'embed' : 'oeffentlich'}>
+  <slot name="head" slot="head" />
+  {!embed && (
+    <header class="kopf">
+      <div class="kopf-innen">
+        <Logo hoehe={30} href="/" />
+        <span class="marke-app">Let's Meet<span class="punkt">.</span></span>
+      </div>
+    </header>
+  )}
+  <main id="inhalt" class:list={['haupt', { breit, embed }]}>
+    <slot />
+  </main>
+  {!embed && (
+    <footer class="fuss">
+      <div class="fuss-innen">
+        <span>That's it. Marketing &middot; Gelsenkirchen</span>
+        <nav aria-label="Rechtliches">
+          <a href="https://thatsit.marketing/impressum" rel="noopener">Impressum</a>
+          <a href="https://thatsit.marketing/datenschutz" rel="noopener">Datenschutz</a>
+        </nav>
+      </div>
+    </footer>
+  )}
+  {embed && (
+    <script>
+      // Höhe an die einbettende Seite melden, damit das Widget ohne Scrollbalken wächst
+      const melden = () =>
+        window.parent?.postMessage({ typ: 'letsmeet:hoehe', hoehe: document.documentElement.scrollHeight }, '*');
+      new ResizeObserver(melden).observe(document.body);
+      window.addEventListener('load', melden);
+      melden();
+    </script>
+  )}
+</Basis>
+
+<style>
+  :global(body.oeffentlich) {
+    background: var(--farbe-flaeche-alt);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  :global(body.embed) {
+    background: transparent;
+  }
+  .kopf {
+    background: var(--farbe-papier);
+    border-bottom: 1px solid var(--farbe-rahmen);
+  }
+  .kopf-innen,
+  .fuss-innen {
+    max-width: var(--breite-inhalt);
+    margin: 0 auto;
+    padding: var(--raum-4) var(--rand-seite);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--raum-4);
+  }
+  .marke-app {
+    font-family: var(--schrift-display);
+    font-weight: 900;
+    font-size: var(--text-lg);
+    letter-spacing: -0.01em;
+  }
+  .haupt {
+    flex: 1;
+    width: 100%;
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: var(--raum-12) var(--rand-seite) var(--raum-16);
+  }
+  .haupt.breit {
+    max-width: var(--breite-inhalt);
+  }
+  .haupt.embed {
+    padding: var(--raum-2);
+    max-width: none;
+  }
+  .fuss {
+    border-top: 1px solid var(--farbe-rahmen);
+    font-size: var(--text-sm);
+    color: var(--farbe-text-2);
+    background: var(--farbe-papier);
+  }
+  .fuss nav {
+    display: flex;
+    gap: var(--raum-4);
+  }
+  .fuss a {
+    display: inline-block;
+    padding: var(--raum-2) 0;
+  }
+  @media (max-width: 560px) {
+    .fuss-innen { flex-direction: column; align-items: flex-start; gap: 0; }
+    .haupt { padding-top: var(--raum-6); }
+  }
+</style>

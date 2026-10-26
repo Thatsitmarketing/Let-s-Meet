@@ -1,0 +1,53 @@
+---
+import Oeffentlich from '../../../layouts/Oeffentlich.astro';
+import Icon from '../../../components/ui/Icon.astro';
+import { buchungNachId, nutzerNachId, terminartNachId } from '../../../lib/abfragen';
+import { basisUrl, buchungAbsagen } from '../../../lib/buchungen';
+import { trimmen } from '../../../lib/eingabe';
+import { formatDatumLang, formatSpanne } from '../../../lib/zeit';
+
+const buchung = await buchungNachId(Astro.params.id ?? '');
+if (!buchung) return Astro.rewrite('/404');
+const embed = Astro.url.searchParams.get('embed') === '1';
+const zurueck = `/termin/${buchung.id}${embed ? '?embed=1' : ''}`;
+if (buchung.status !== 'bestaetigt' || Date.parse(buchung.start_utc) < Date.now()) return Astro.redirect(zurueck);
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  await buchungAbsagen({
+    buchung,
+    grund: trimmen(form.get('grund'), 1000) || null,
+    von: 'gast',
+    basis: basisUrl(Astro.url),
+    imHintergrund: (p) => Astro.locals.cfContext.waitUntil(p),
+  });
+  return Astro.redirect(`/termin/${buchung.id}?abgesagt=1${embed ? '&embed=1' : ''}`);
+}
+
+const [terminart, nutzer] = await Promise.all([terminartNachId(buchung.terminart_id), nutzerNachId(buchung.nutzer_id)]);
+const tz = buchung.gast_zeitzone;
+---
+<Oeffentlich titel="Termin absagen">
+  <article class="absagen karte">
+    <p class="eyebrow">Absagen</p>
+    <h1>Termin absagen<span class="punkt">?</span></h1>
+    <p><strong>{terminart?.titel}</strong> mit {nutzer?.name}<br />{formatDatumLang(buchung.start_utc, tz)}, {formatSpanne(buchung.start_utc, buchung.ende_utc, tz)}</p>
+    <p class="hinweis"><Icon name="info" /><span>Lieber verschieben statt absagen? <a href={`/${nutzer?.slug}/${terminart?.slug}?umbuchen=${buchung.id}${embed ? '&embed=1' : ''}`}>Hier umbuchen</a>.</span></p>
+    <form method="post" class="formular">
+      <div class="feld">
+        <label for="grund">Grund<span class="leise"> (optional)</span></label>
+        <textarea id="grund" name="grund" class="textfeld" maxlength="1000" placeholder="Hilft uns bei der Planung"></textarea>
+      </div>
+      <div class="reihe">
+        <button type="submit" class="knopf knopf--gefahr">Verbindlich absagen</button>
+        <a class="knopf knopf--leise" href={zurueck}>Zurück</a>
+      </div>
+    </form>
+  </article>
+</Oeffentlich>
+
+<style>
+  .absagen { max-width: 600px; margin: 0 auto; padding: clamp(1.5rem, 5vw, 3rem); display: grid; gap: var(--raum-6); }
+  .formular { display: grid; gap: var(--raum-6); }
+  .reihe { display: flex; flex-wrap: wrap; gap: var(--raum-2); }
+</style>

@@ -1,0 +1,35 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  titel: string;
+  beschreibung?: string;
+  indexieren?: boolean;
+  klasse?: string;
+}
+
+const { titel, beschreibung = "Termin mit That's it. Marketing buchen. Direkt online, ohne Hin und Her per Mail.", indexieren = false, klasse } = Astro.props;
+const voll = titel.includes("Let's Meet") ? titel : `${titel} | Let's Meet`;
+---
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{voll}</title>
+    <meta name="description" content={beschreibung} />
+    <meta name="robots" content={indexieren ? 'index, follow' : 'noindex, nofollow'} />
+    <meta name="theme-color" content="#0E0E0E" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="/fonts/league-spartan-var.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/montserrat-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <meta property="og:title" content={voll} />
+    <meta property="og:description" content={beschreibung} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Let's Meet by That's it. Marketing" />
+    <slot name="head" />
+  </head>
+  <body class={klasse}>
+    <slot />
+  </body>
+</html>

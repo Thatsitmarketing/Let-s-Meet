@@ -1,0 +1,147 @@
+---
+import App from '../../layouts/App.astro';
+import Avatar from '../../components/Avatar.astro';
+import Icon from '../../components/ui/Icon.astro';
+import { passwortHash } from '../../lib/auth';
+import { alle, ausfuehren, eins, jetztIso } from '../../lib/db';
+import { emailGueltig, trimmen } from '../../lib/eingabe';
+import { kontoAnlegen, slugPruefen } from '../../lib/konten';
+import { meldungAusUrl } from '../../lib/meldungen';
+import type { Nutzer } from '../../lib/typen';
+
+const ich = Astro.locals.nutzer!;
+if (ich.rolle !== 'admin') return Astro.redirect('/app');
+
+const fehler: Record<string, string> = {};
+const w = { name: '', email: '', slug: '', rolle: 'mitglied' };
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const aktion = String(form.get('aktion') ?? '');
+  const zielId = String(form.get('id') ?? '');
+  if (aktion === 'neu') {
+    w.name = trimmen(form.get('name'), 120);
+    w.email = trimmen(form.get('email'), 180).toLowerCase();
+    w.rolle = form.get('rolle') === 'admin' ? 'admin' : 'mitglied';
+    const passwort = String(form.get('passwort') ?? '');
+    const s = await slugPruefen(trimmen(form.get('slug'), 60) || w.name);
+    w.slug = s.slug;
+    if (w.name.length < 2) fehler.name = 'Bitte gib einen Namen an.';
+    if (!emailGueltig(w.email)) fehler.email = 'Bitte prüf die E Mail Adresse.';
+    else if (await eins('SELECT id FROM nutzer WHERE email = ?', w.email)) fehler.email = 'Diese E Mail hat schon ein Konto.';
+    if (s.fehler) fehler.slug = s.fehler;
+    if (passwort.length < 10) fehler.passwort = 'Mindestens 10 Zeichen.';
+    if (!Object.keys(fehler).length) {
+      await kontoAnlegen({ name: w.name, email: w.email, slug: w.slug, passwort, rolle: w.rolle as 'admin' | 'mitglied', zeitzone: ich.zeitzone });
+      return Astro.redirect('/app/team?ok=angelegt');
+    }
+  } else if (zielId && zielId !== ich.id) {
+    if (aktion === 'aktiv') {
+      await ausfuehren('UPDATE nutzer SET aktiv = 1 - aktiv, aktualisiert_am = ? WHERE id = ?', jetztIso(), zielId);
+      return Astro.redirect('/app/team?ok=gespeichert');
+    }
+    if (aktion === 'rolle') {
+      await ausfuehren("UPDATE nutzer SET rolle = CASE rolle WHEN 'admin' THEN 'mitglied' ELSE 'admin' END, aktualisiert_am = ? WHERE id = ?", jetztIso(), zielId);
+      return Astro.redirect('/app/team?ok=gespeichert');
+    }
+    if (aktion === 'passwort') {
+      const neu = String(form.get('neu') ?? '');
+      if (neu.length < 10) return Astro.redirect(`/app/team?fehler=${encodeURIComponent('Das neue Passwort braucht mindestens 10 Zeichen.')}`);
+      await ausfuehren('UPDATE nutzer SET passwort_hash = ?, fehlversuche = 0, gesperrt_bis = NULL, aktualisiert_am = ? WHERE id = ?', await passwortHash(neu), jetztIso(), zielId);
+      return Astro.redirect('/app/team?ok=passwort');
+    }
+  }
+}
+
+const team = await alle<Nutzer>('SELECT * FROM nutzer ORDER BY aktiv DESC, name');
+const ff = (n: string) => (fehler[n] ? { 'aria-invalid': 'true' as const, 'aria-describedby': `fehler-${n}` } : {});
+---
+<App titel="Team" eyebrow="Wer bei euch Termine anbietet" meldung={Object.keys(fehler).length ? { art: 'fehler', text: 'Bitte prüf die markierten Felder.' } : meldungAusUrl(Astro.url)}>
+  <div class="raster">
+    <section class="karte" aria-labelledby="t-liste">
+      <h2 id="t-liste" class="sr-only">Mitglieder</h2>
+      <ul class="team" role="list">
+        {team.map((n) => (
+          <li class:list={{ inaktiv: !n.aktiv }}>
+            <Avatar name={n.name} url={n.avatar_url} groesse={44} />
+            <div class="person">
+              <strong>{n.name}{n.id === ich.id && <span class="leise"> (du)</span>}</strong>
+              <span class="leise klein">{n.email} &middot; /{n.slug}</span>
+              <span class="marken">
+                <span class:list={['badge', { 'badge--hell': n.rolle !== 'admin' }]}>{n.rolle === 'admin' ? 'Admin' : 'Mitglied'}</span>
+                {!n.aktiv && <span class="pille pille--fehler">Deaktiviert</span>}
+                {n.google_refresh_token && <span class="pille pille--erfolg">Google</span>}
+              </span>
+            </div>
+            {n.id !== ich.id && (
+              <details class="mehr">
+                <summary class="knopf knopf--leise knopf--klein">Verwalten<Icon name="runter" groesse={16} /></summary>
+                <div class="mehr-inhalt karte">
+                  <form method="post"><input type="hidden" name="id" value={n.id} /><input type="hidden" name="aktion" value="rolle" />
+                    <button class="knopf knopf--rahmen knopf--klein knopf--breit" type="submit">{n.rolle === 'admin' ? 'Zum Mitglied machen' : 'Zum Admin machen'}</button></form>
+                  <form method="post" data-rueckfrage={n.aktiv ? `${n.name} deaktivieren? Die Buchungsseite ist dann nicht mehr erreichbar.` : ''}><input type="hidden" name="id" value={n.id} /><input type="hidden" name="aktion" value="aktiv" />
+                    <button class="knopf knopf--rahmen knopf--klein knopf--breit" type="submit">{n.aktiv ? 'Deaktivieren' : 'Aktivieren'}</button></form>
+                  <form method="post" class="pw"><input type="hidden" name="id" value={n.id} /><input type="hidden" name="aktion" value="passwort" />
+                    <label class="feld-label" for={`pw-${n.id}`}>Neues Passwort setzen</label>
+                    <input id={`pw-${n.id}`} name="neu" type="password" class="eingabe" minlength="10" autocomplete="new-password" />
+                    <button class="knopf knopf--klein" type="submit">Setzen</button></form>
+                </div>
+              </details>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <form method="post" class="karte block" novalidate>
+      <input type="hidden" name="aktion" value="neu" />
+      <h2>Mitglied hinzufügen</h2>
+      <div class="feld">
+        <label for="name">Name</label>
+        <input id="name" name="name" class="eingabe" value={w.name} required {...ff('name')} />
+        {fehler.name && <p class="fehlertext" id="fehler-name">{fehler.name}</p>}
+      </div>
+      <div class="feld">
+        <label for="email">E Mail</label>
+        <input id="email" name="email" type="email" class="eingabe" value={w.email} required {...ff('email')} />
+        {fehler.email && <p class="fehlertext" id="fehler-email">{fehler.email}</p>}
+      </div>
+      <div class="feld">
+        <label for="slug">Adresse der Buchungsseite</label>
+        <input id="slug" name="slug" class="eingabe" value={w.slug} placeholder="vorname" {...ff('slug')} />
+        {fehler.slug && <p class="fehlertext" id="fehler-slug">{fehler.slug}</p>}
+      </div>
+      <div class="feld">
+        <label for="passwort">Startpasswort</label>
+        <input id="passwort" name="passwort" type="password" class="eingabe" autocomplete="new-password" minlength="10" required {...ff('passwort')} aria-describedby="pw-hilfe" />
+        <p class="hilfe" id="pw-hilfe">Gib es persönlich weiter. Das Mitglied kann es unter Einstellungen ändern.</p>
+        {fehler.passwort && <p class="fehlertext" id="fehler-passwort">{fehler.passwort}</p>}
+      </div>
+      <label class="haken"><input type="checkbox" name="rolle" value="admin" checked={w.rolle === 'admin'} />Admin Rechte (Team verwalten, alle Termine sehen)</label>
+      <div><button type="submit" class="knopf knopf--orange"><Icon name="plus" />Hinzufügen</button></div>
+    </form>
+  </div>
+</App>
+<style>
+  .raster { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--raum-6); align-items: start; }
+  .block { padding: var(--raum-6); display: grid; gap: var(--raum-4); }
+  .block h2 { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-h4); letter-spacing: 0; }
+  .team { list-style: none; margin: 0; padding: 0; }
+  .team li { display: flex; gap: var(--raum-4); align-items: center; padding: var(--raum-4) var(--raum-6); }
+  .team li + li { border-top: 1px solid var(--farbe-rahmen); }
+  .team li.inaktiv { opacity: 0.6; }
+  .person { display: grid; gap: 2px; flex: 1; min-width: 0; }
+  .person > span { overflow-wrap: anywhere; }
+  .marken { display: flex; gap: var(--raum-2); flex-wrap: wrap; margin-top: 4px; }
+  .mehr { position: relative; }
+  .mehr summary { list-style: none; }
+  .mehr summary::-webkit-details-marker { display: none; }
+  .mehr-inhalt { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; width: 260px; padding: var(--raum-4); display: grid; gap: var(--raum-2); box-shadow: var(--schatten-2); }
+  .pw { display: grid; gap: var(--raum-2); padding-top: var(--raum-2); border-top: 1px solid var(--farbe-rahmen); }
+  @media (max-width: 1000px) { .raster { grid-template-columns: 1fr; } }
+  @media (max-width: 560px) {
+    .team li { flex-wrap: wrap; padding: var(--raum-4); }
+    .mehr { width: 100%; }
+    .mehr-inhalt { position: static; width: 100%; margin-top: var(--raum-2); box-shadow: none; }
+  }
+</style>

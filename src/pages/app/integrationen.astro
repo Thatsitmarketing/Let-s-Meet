@@ -1,0 +1,144 @@
+---
+import App from '../../layouts/App.astro';
+import Icon from '../../components/ui/Icon.astro';
+import { webhookSenden } from '../../lib/buchungen';
+import { ausfuehren, jetztIso, neueId } from '../../lib/db';
+import { trimmen, urlGueltig } from '../../lib/eingabe';
+import { googleAktiv } from '../../lib/google';
+import { meldungAusUrl } from '../../lib/meldungen';
+
+const nutzer = Astro.locals.nutzer!;
+let fehler = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const aktion = String(form.get('aktion') ?? '');
+  if (aktion === 'google_trennen') {
+    if (nutzer.google_refresh_token) {
+      await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(nutzer.google_refresh_token)}`, { method: 'POST' }).catch(() => null);
+    }
+    await ausfuehren(
+      'UPDATE nutzer SET google_email = NULL, google_refresh_token = NULL, google_access_token = NULL, google_token_ablauf = NULL, aktualisiert_am = ? WHERE id = ?',
+      jetztIso(), nutzer.id,
+    );
+    return Astro.redirect('/app/integrationen?ok=getrennt');
+  }
+  if (aktion === 'google_kalender') {
+    const kal = trimmen(form.get('kalender'), 200) || 'primary';
+    await ausfuehren('UPDATE nutzer SET google_kalender_id = ?, aktualisiert_am = ? WHERE id = ?', kal, jetztIso(), nutzer.id);
+    return Astro.redirect('/app/integrationen?ok=gespeichert');
+  }
+  if (aktion === 'webhook') {
+    const url = trimmen(form.get('webhook_url'), 500);
+    if (url && (!urlGueltig(url) || !url.startsWith('https://'))) fehler = 'Der Webhook braucht eine vollständige https Adresse.';
+    else {
+      const secret = url ? nutzer.webhook_secret || neueId(24) : null;
+      await ausfuehren('UPDATE nutzer SET webhook_url = ?, webhook_secret = ?, aktualisiert_am = ? WHERE id = ?', url || null, secret, jetztIso(), nutzer.id);
+      return Astro.redirect('/app/integrationen?ok=gespeichert#webhook');
+    }
+  }
+  if (aktion === 'webhook_test' && nutzer.webhook_url) {
+    await webhookSenden(nutzer, 'test', { nachricht: "Testereignis von Let's Meet", gastgeber: { name: nutzer.name, email: nutzer.email } });
+    return Astro.redirect('/app/integrationen?ok=gespeichert#webhook');
+  }
+  if (aktion === 'webhook_neu' && nutzer.webhook_url) {
+    await ausfuehren('UPDATE nutzer SET webhook_secret = ?, aktualisiert_am = ? WHERE id = ?', neueId(24), jetztIso(), nutzer.id);
+    return Astro.redirect('/app/integrationen?ok=gespeichert#webhook');
+  }
+}
+
+const googleFehler = Astro.url.searchParams.get('google_fehler');
+const meldung = fehler ? { art: 'fehler' as const, text: fehler } : googleFehler ? { art: 'fehler' as const, text: 'Google hat die Verbindung nicht bestätigt. Bitte versuch es noch einmal.' } : meldungAusUrl(Astro.url);
+---
+<App titel="Integrationen" eyebrow="Verbindungen" meldung={meldung}>
+  <div class="liste">
+    <section class="karte block" aria-labelledby="g-titel">
+      <div class="kopf">
+        <span class="logo-kachel" aria-hidden="true"><Icon name="kalender" groesse={24} /></span>
+        <div>
+          <h2 id="g-titel">Google Kalender</h2>
+          <p class="leise klein">Belegte Zeiten blocken Slots automatisch. Neue Buchungen landen in deinem Kalender, bei Google Meet inklusive Meetinglink.</p>
+        </div>
+        {nutzer.google_refresh_token ? <span class="pille pille--erfolg">Verbunden</span> : <span class="pille">Nicht verbunden</span>}
+      </div>
+      {!googleAktiv() ? (
+        <p class="hinweis"><Icon name="info" /><span>Die Google Verbindung ist noch nicht eingerichtet. Ein Admin muss <code>GOOGLE_CLIENT_ID</code> und <code>GOOGLE_CLIENT_SECRET</code> als Secret in Cloudflare hinterlegen. Die Anleitung steht in der CLAUDE.md im Repository.</span></p>
+      ) : nutzer.google_refresh_token ? (
+        <>
+          <p>Verbunden mit <strong>{nutzer.google_email ?? 'Google Konto'}</strong>.</p>
+          <form method="post" class="reihe">
+            <input type="hidden" name="aktion" value="google_kalender" />
+            <div class="feld wachsen">
+              <label for="kalender">Kalender ID</label>
+              <input id="kalender" name="kalender" class="eingabe" value={nutzer.google_kalender_id} aria-describedby="kal-hilfe" />
+              <p class="hilfe" id="kal-hilfe">„primary“ ist dein Hauptkalender. Für einen anderen Kalender die ID aus den Google Kalender Einstellungen eintragen.</p>
+            </div>
+            <button type="submit" class="knopf knopf--rahmen">Speichern</button>
+          </form>
+          <form method="post" data-rueckfrage="Verbindung zu Google wirklich trennen?">
+            <input type="hidden" name="aktion" value="google_trennen" />
+            <button type="submit" class="knopf knopf--gefahr knopf--klein">Verbindung trennen</button>
+          </form>
+        </>
+      ) : (
+        <a class="knopf knopf--orange" href="/api/app/google/verbinden"><Icon name="stecker" />Mit Google verbinden</a>
+      )}
+    </section>
+
+    <section class="karte block" id="webhook" aria-labelledby="w-titel">
+      <div class="kopf">
+        <span class="logo-kachel" aria-hidden="true"><Icon name="blitz" groesse={24} /></span>
+        <div>
+          <h2 id="w-titel">Webhook</h2>
+          <p class="leise klein">Schickt jede Buchung, Umbuchung und Absage als JSON an eine Adresse, zum Beispiel an ein Make Szenario oder euer CRM.</p>
+        </div>
+        {nutzer.webhook_url ? <span class="pille pille--erfolg">Aktiv</span> : <span class="pille">Aus</span>}
+      </div>
+      <form method="post" class="reihe">
+        <input type="hidden" name="aktion" value="webhook" />
+        <div class="feld wachsen">
+          <label for="webhook_url">Adresse</label>
+          <input id="webhook_url" name="webhook_url" type="url" class="eingabe" placeholder="https://hook.eu1.make.com/..." value={nutzer.webhook_url ?? ''} />
+        </div>
+        <button type="submit" class="knopf knopf--rahmen">Speichern</button>
+      </form>
+      {nutzer.webhook_url && (
+        <>
+          <div class="feld">
+            <label for="secret">Signaturschlüssel</label>
+            <div class="reihe">
+              <input id="secret" class="eingabe wachsen code" readonly value={nutzer.webhook_secret ?? ''} />
+              <button type="button" class="knopf knopf--rahmen" data-kopieren="#secret"><Icon name="kopieren" />Kopieren</button>
+            </div>
+            <p class="hilfe">Jede Anfrage trägt den Header <code>x-letsmeet-signatur</code> mit einem HMAC SHA256 des Rohkörpers. So prüft der Empfänger, dass die Daten von Let's Meet kommen.</p>
+          </div>
+          <div class="reihe">
+            <form method="post"><input type="hidden" name="aktion" value="webhook_test" /><button class="knopf knopf--klein" type="submit"><Icon name="blitz" />Testereignis senden</button></form>
+            <form method="post" data-rueckfrage="Neuen Schlüssel erzeugen? Der alte wird sofort ungültig."><input type="hidden" name="aktion" value="webhook_neu" /><button class="knopf knopf--leise knopf--klein" type="submit">Neuen Schlüssel erzeugen</button></form>
+          </div>
+          <details class="beispiel">
+            <summary>Beispiel für die gesendeten Daten</summary>
+            <pre><code>{JSON.stringify({ ereignis: 'buchung.erstellt', erstellt_am: '2026-10-26T09:12:00.000Z', daten: { buchung_id: 'abc123', status: 'bestaetigt', terminart: { titel: 'Erstgespräch', dauer_min: 30 }, gast: { name: 'Max Muster', email: 'max@example.com' }, start_utc: '2026-10-28T09:00:00.000Z', meeting_url: 'https://meet.google.com/...', verwalten_url: '.../termin/abc123' } }, null, 2)}</code></pre>
+            <p class="hilfe">Ereignisse: buchung.erstellt, buchung.umgebucht, buchung.storniert, test</p>
+          </details>
+        </>
+      )}
+    </section>
+  </div>
+</App>
+
+<style>
+  .liste { display: grid; gap: var(--raum-6); max-width: 820px; }
+  .block { padding: var(--raum-6); display: grid; gap: var(--raum-4); }
+  .kopf { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--raum-4); align-items: start; }
+  .kopf h2 { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-h4); letter-spacing: 0; }
+  .logo-kachel { display: grid; place-items: center; width: 48px; height: 48px; background: var(--n-900); color: var(--farbe-akzent); }
+  .reihe { display: flex; gap: var(--raum-3); align-items: flex-end; flex-wrap: wrap; }
+  .wachsen { flex: 1; min-width: 220px; }
+  .code { font-family: var(--schrift-mono); font-size: var(--text-sm); }
+  code { font-family: var(--schrift-mono); font-size: 0.875rem; background: var(--n-100); padding: 1px 4px; }
+  .beispiel summary { cursor: pointer; font-weight: 600; font-size: var(--text-sm); }
+  .beispiel pre { overflow-x: auto; background: var(--n-900); color: var(--n-100); padding: var(--raum-4); font-size: 0.8125rem; margin: var(--raum-3) 0; }
+  .beispiel pre code { background: none; padding: 0; }
+  @media (max-width: 560px) { .kopf { grid-template-columns: auto 1fr; } .kopf .pille { grid-column: 2; justify-self: start; } }
+</style>
