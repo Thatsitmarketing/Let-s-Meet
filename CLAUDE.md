@@ -15,7 +15,7 @@ Eigene Terminbuchung von That's it. Marketing nach dem Vorbild von Calendly: öf
 | --- | --- |
 | Framework | Astro 7, `output: 'server'` |
 | Hosting | Cloudflare Workers mit Static Assets (Adapter `@astrojs/cloudflare` 14 unterstützt nur noch Workers, nicht Pages) |
-| Datenbank | Cloudflare D1, Binding `DB` |
+| Datenbank | Cloudflare D1 `terminethatsitmarketing` (ID `26aa6845-79a5-419a-9f2d-8ee308d6f37e`), Binding `DB` |
 | Mail | Resend über die HTTP API |
 | Spamschutz | Cloudflare Turnstile, Honigtopf, Mindestzeit |
 | Kalender | Google Calendar API (OAuth, freeBusy, Termine mit Meet Link) |
@@ -30,18 +30,24 @@ pnpm build                 # baut nach dist/client und dist/server
 pnpm astro preview         # gebaute Version lokal in workerd
 pnpm check                 # Typprüfung (braucht TypeScript 6, nicht 7)
 pnpm db:migrate:remote     # Migrationen auf die echte D1 anwenden
-pnpm deploy                # build plus wrangler deploy
+pnpm deploy                # build, Migrationen remote, wrangler deploy
+pnpm deploy:cloudflare     # Deploybefehl für Cloudflare Workers Builds (nach pnpm build)
 ```
 
 Lokale Geheimnisse liegen in `.dev.vars` (nicht eingecheckt). Vorlage mit allen Namen: `.env.example`.
 
-### Erstes Deployment
+### Deployment als Cloudflare Worker (nicht Pages)
 
-1. `pnpm exec wrangler d1 create lets-meet` und die ausgegebene `database_id` in `wrangler.jsonc` eintragen
-2. `pnpm db:migrate:remote`
-3. Secrets setzen: `pnpm exec wrangler secret put SESSION_SECRET` (und alle weiteren aus `.env.example`)
-4. `pnpm deploy`, danach Custom Domain `termine.thatsit.marketing` im Worker hinterlegen und `SITE_URL` in `wrangler.jsonc` prüfen
-5. `/app/setup` aufrufen, mit `SETUP_TOKEN` das erste Admin Konto anlegen. Danach ist die Seite gesperrt
+Ein Pages Projekt funktioniert mit diesem Setup nicht (liefert 404), weil der Astro Adapter einen Worker baut.
+
+1. D1 Datenbank ist angelegt und in `wrangler.jsonc` verknüpft (`terminethatsitmarketing`)
+2. Cloudflare Dashboard, Workers & Pages, Erstellen, Worker, Repository importieren: `Thatsitmarketing/Let-s-Meet`
+3. Workername exakt `let-s-meet` (muss zu `name` in `wrangler.jsonc` passen)
+4. Buildbefehl `pnpm build`, Deploybefehl `pnpm run deploy:cloudflare`, Produktionsbranch nach Wahl (aktuell liegt der Code auf `claude/affectionate-pasteur-q3ennq`)
+5. Unter Einstellungen, Variablen und Geheimnisse als Secret setzen: `SESSION_SECRET`, `SETUP_TOKEN`, später die übrigen aus `.env.example`
+6. Der Deploybefehl wendet die Migrationen auf die D1 an. Falls dem Build Token die D1 Rechte fehlen: einmal lokal `pnpm db:migrate:remote` ausführen
+7. Custom Domain `termine.thatsit.marketing` im Worker hinterlegen und `SITE_URL` in `wrangler.jsonc` prüfen
+8. `/app/setup` aufrufen, mit `SETUP_TOKEN` das erste Admin Konto anlegen. Danach ist die Seite gesperrt
 
 ### Google Kalender einrichten
 
@@ -158,7 +164,7 @@ Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `termina
 
 ## Offene Punkte
 
-* `database_id` der D1 Datenbank nach `wrangler d1 create` eintragen
+* Pages Projekt `let-s-meet` löschen und stattdessen den Worker anlegen (siehe Deployment)
 * Secrets in Cloudflare setzen, Resend Domain verifizieren, Turnstile Widget anlegen
 * Google OAuth Client anlegen (Anleitung oben). Google Verbindung, freeBusy und Meet Links sind mangels Zugang in der Entwicklung nicht live getestet
 * Domain: Vorschlag `termine.thatsit.marketing`, in `astro.config.mjs` (`site`) und `wrangler.jsonc` (`SITE_URL`) hinterlegt, noch zu bestätigen
@@ -169,3 +175,4 @@ Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `termina
 ## Änderungsverlauf mit Datum
 
 * 2026-10-26: Erstversion. Buchungsseiten, Widget, Backoffice (Terminarten, Termine, Verfügbarkeit, Einbetten, Integrationen, Einstellungen, Team), Google Kalender, Resend Mails mit ICS, Webhooks, Cron für Erinnerungen und Löschfristen. Build, Typprüfung, Klickstrecke und Responsive Check in fünf Breiten lokal geprüft
+* 2026-10-26: D1 Datenbank `terminethatsitmarketing` verknüpft, Workername `let-s-meet`, Deploybefehl inklusive Migrationen, Anleitung für Workers Builds

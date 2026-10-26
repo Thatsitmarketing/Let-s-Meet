@@ -3,7 +3,7 @@
   // Schlüssel und Passwörter gehören NICHT hierher, sondern als Secret in Cloudflare
   // (wrangler secret put NAME). Lokal liegen sie in .dev.vars (nicht eingecheckt).
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "lets-meet",
+  "name": "let-s-meet",
   "main": "./src/worker.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -11,7 +11,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "lets-meet",
+      "database_name": "terminethatsitmarketing",
+      "database_id": "26aa6845-79a5-419a-9f2d-8ee308d6f37e",
       "migrations_dir": "migrations"
     }
   ],
