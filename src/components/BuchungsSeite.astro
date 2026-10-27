@@ -171,7 +171,7 @@ const absaetze = (terminart.beschreibung ?? '')
     <aside class="info" aria-label="Details zum Termin">
       <div class="info-block">
         <div class="info-kopf">
-          <p class="eyebrow">Dein Termin</p>
+          <p class="eyebrow info-label">Dein Termin</p>
           <img class="info-logo" src="/images/brand/logo-schwarz.webp" alt="Logo That's it. Marketing" title="That's it. Marketing, Gelsenkirchen" width="594" height="180" />
         </div>
         <h2 class="info-titel">{terminart.titel}<span class="punkt">.</span></h2>
@@ -228,7 +228,7 @@ const absaetze = (terminart.beschreibung ?? '')
     max-width: 1240px;
     margin-inline: auto;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 460px);
+    grid-template-columns: minmax(300px, 460px) minmax(0, 1fr);
     box-shadow: var(--schatten-3);
     border: 0;
   }
@@ -311,7 +311,8 @@ const absaetze = (terminart.beschreibung ?? '')
   /* Rechte Spalte */
   .info {
     background: var(--n-050);
-    border-left: 1px solid var(--farbe-rahmen);
+    border-right: 1px solid var(--farbe-rahmen);
+    order: -1;
     padding: var(--raum-6) var(--raum-8);
     display: grid;
     gap: var(--raum-6);
@@ -319,6 +320,7 @@ const absaetze = (terminart.beschreibung ?? '')
   }
   .info-block { display: grid; gap: var(--raum-3); }
   .info-block + .info-block { border-top: 1px solid var(--farbe-rahmen); padding-top: var(--raum-6); }
+  .info-label { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-sm); letter-spacing: 0; text-transform: none; color: var(--n-700); }
   .info-kopf { display: flex; align-items: center; justify-content: space-between; gap: var(--raum-4); }
   .info-logo { width: 104px; height: auto; display: block; }
   .info-titel { font-size: var(--text-h2); }
@@ -337,7 +339,7 @@ const absaetze = (terminart.beschreibung ?? '')
 
   @media (max-width: 1180px) {
     .buchung { grid-template-columns: 1fr; }
-    .info { border-left: 0; border-top: 1px solid var(--farbe-rahmen); }
+    .info { order: 0; border-right: 0; border-top: 1px solid var(--farbe-rahmen); }
   }
   @media (max-width: 860px) {
     .bereich, .info { padding: var(--raum-6); }

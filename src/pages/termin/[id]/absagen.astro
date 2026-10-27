@@ -30,7 +30,7 @@ const tz = buchung.gast_zeitzone;
 <Oeffentlich titel="Termin absagen">
   <article class="absagen karte">
     <p class="eyebrow">Absagen</p>
-    <h1>Termin absagen<span class="punkt">?</span></h1>
+    <h1>Termin absagen<span class="punkt">.</span></h1>
     <p><strong>{terminart?.titel}</strong> mit {nutzer?.name}<br />{formatDatumLang(buchung.start_utc, tz)}, {formatSpanne(buchung.start_utc, buchung.ende_utc, tz)}</p>
     <p class="hinweis"><Icon name="info" /><span>Lieber verschieben statt absagen? <a href={`/${terminart?.slug}?umbuchen=${buchung.id}${embed ? '&embed=1' : ''}`}>Hier umbuchen</a>.</span></p>
     <form method="post" class="formular">

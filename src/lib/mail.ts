@@ -80,7 +80,7 @@ function eyebrow(text: string) {
 }
 
 function titel(text: string) {
-  return `<h1 style="margin:0 0 20px;font-family:${DISPLAY};font-weight:900;font-size:30px;line-height:1.05;letter-spacing:-0.5px;color:${MARKE.schwarz};">${m(text)}<span style="color:${MARKE.orange};">.</span></h1>`;
+  return `<h1 style="margin:0 0 20px;font-family:${DISPLAY};font-weight:900;font-size:30px;line-height:1.05;letter-spacing:-0.5px;color:${MARKE.schwarz};">${m(text)}<span style="display:inline-block;width:5px;height:5px;margin-left:2px;background:${MARKE.orange};font-size:0;line-height:0;">&nbsp;</span></h1>`;
 }
 
 function absatz(html: string) {

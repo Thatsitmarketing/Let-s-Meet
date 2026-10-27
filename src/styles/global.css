@@ -107,9 +107,16 @@ a:hover {
   border: 0;
 }
 
-/* Der orangene Punkt: Signatur der Marke, signiert Überschriften */
+/* Der orangene Punkt ist ein Quadrat wie im Logo: Signatur der Marke, signiert Überschriften */
 .punkt {
-  color: var(--farbe-akzent);
+  display: inline-block;
+  width: 0.17em;
+  height: 0.17em;
+  margin-left: 0.08em;
+  background: var(--farbe-akzent);
+  overflow: hidden;
+  text-indent: -999em;
+  white-space: nowrap;
 }
 
 .quadrat {
