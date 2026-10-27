@@ -1,22 +1,25 @@
 ---
 /*
  * /{terminart}: Buchung einer Terminart des Büros.
+ * Jede Terminart hat ihre eigene Seite ohne Auswahl der anderen, damit der Link aus der Homepage beim passenden Gespräch bleibt.
  * Alte Profillinks einzelner Teammitglieder (/{nutzer}) leiten auf die zentrale Seite weiter.
  */
 import Oeffentlich from '../layouts/Oeffentlich.astro';
 import BuchungsSeite from '../components/BuchungsSeite.astro';
-import { buero, nutzerNachSlug, terminartNachSlug, terminartenVon } from '../lib/abfragen';
+import { buero, nutzerNachSlug, terminartNachSlug } from '../lib/abfragen';
 
 const slug = (Astro.params.slug ?? '').toLowerCase();
 const gastgeber = await buero();
 if (!gastgeber) return Astro.rewrite('/404');
+
+// Alter Link aus der Zeit mit einem einzigen Erstgespräch
+if (slug === 'erstgespraech') return Astro.redirect(`/strategiegespraech${Astro.url.search}`, 301);
 
 const terminart = await terminartNachSlug(gastgeber.id, slug);
 if (!terminart || !terminart.aktiv) {
   if (await nutzerNachSlug(slug)) return Astro.redirect(`/${Astro.url.search}`, 301);
   return Astro.rewrite('/404');
 }
-const arten = await terminartenVon(gastgeber.id, true);
 ---
 <Oeffentlich
   titel={`${terminart.titel} | That's it. Marketing`}
@@ -24,5 +27,5 @@ const arten = await terminartenVon(gastgeber.id, true);
   indexieren={!terminart.geheim}
   bild
 >
-  <BuchungsSeite gastgeber={gastgeber} terminart={terminart} arten={terminart.geheim ? [] : arten} />
+  <BuchungsSeite gastgeber={gastgeber} terminart={terminart} arten={[]} />
 </Oeffentlich>
