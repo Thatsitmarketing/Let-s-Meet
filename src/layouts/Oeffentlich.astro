@@ -135,8 +135,13 @@ const embed = Astro.url.searchParams.get('embed') === '1';
     display: inline-block;
     padding: var(--raum-2) 0;
   }
+  @media (max-width: 1000px) {
+    .haupt.bild { padding-top: var(--raum-8); padding-bottom: var(--raum-8); }
+  }
   @media (max-width: 560px) {
     .fuss-innen { flex-direction: column; align-items: flex-start; gap: 0; }
     .haupt { padding-top: var(--raum-6); }
+    .haupt.bild { padding-top: var(--raum-4); padding-bottom: var(--raum-6); }
+    .kopf-logo img { height: 44px; }
   }
 </style>
