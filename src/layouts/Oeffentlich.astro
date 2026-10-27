@@ -7,11 +7,13 @@ interface Props {
   beschreibung?: string;
   indexieren?: boolean;
   breit?: boolean;
+  /** Bürofoto als Seitenhintergrund (zentrale Buchungsseite) */
+  bild?: boolean;
 }
-const { titel, beschreibung, indexieren = false, breit = false } = Astro.props;
+const { titel, beschreibung, indexieren = false, breit = false, bild = false } = Astro.props;
 const embed = Astro.url.searchParams.get('embed') === '1';
 ---
-<Basis titel={titel} beschreibung={beschreibung} indexieren={indexieren} klasse={embed ? 'embed' : 'oeffentlich'}>
+<Basis titel={titel} beschreibung={beschreibung} indexieren={indexieren} klasse={embed ? 'embed' : bild ? 'oeffentlich mit-bild' : 'oeffentlich'}>
   <slot name="head" slot="head" />
   {!embed && (
     <header class="kopf">
@@ -20,7 +22,7 @@ const embed = Astro.url.searchParams.get('embed') === '1';
       </div>
     </header>
   )}
-  <main id="inhalt" class:list={['haupt', { breit, embed }]}>
+  <main id="inhalt" class:list={['haupt', { breit, embed, bild: bild && !embed }]}>
     <slot />
   </main>
   {!embed && (
@@ -53,6 +55,24 @@ const embed = Astro.url.searchParams.get('embed') === '1';
     display: flex;
     flex-direction: column;
   }
+  /* Besprechungsraum aus dem Büro in Gelsenkirchen, abgedunkelt für weiße Schrift */
+  :global(body.mit-bild) {
+    background-color: var(--n-900);
+    background-image: linear-gradient(180deg, rgba(14, 14, 14, 0.78) 0%, rgba(14, 14, 14, 0.62) 45%, rgba(14, 14, 14, 0.82) 100%),
+      url('/images/buero/besprechungsraum-1200.webp');
+    background-size: cover;
+    background-position: center 35%;
+  }
+  @media (min-width: 1000px) {
+    :global(body.mit-bild) {
+      background-image: linear-gradient(180deg, rgba(14, 14, 14, 0.78) 0%, rgba(14, 14, 14, 0.62) 45%, rgba(14, 14, 14, 0.82) 100%),
+        url('/images/buero/besprechungsraum-2400.webp');
+    }
+  }
+  @media (min-width: 1000px) and (hover: hover) {
+    :global(body.mit-bild) { background-attachment: fixed; }
+  }
+  .haupt.bild { max-width: 1240px; }
   :global(body.embed) {
     background: transparent;
   }

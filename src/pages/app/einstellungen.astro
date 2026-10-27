@@ -6,8 +6,12 @@ import { ausfuehren, eins, jetztIso } from '../../lib/db';
 import { emailGueltig, trimmen, urlGueltig } from '../../lib/eingabe';
 import { slugPruefen } from '../../lib/konten';
 import { meldungAusUrl } from '../../lib/meldungen';
+import { STANDARD_BEGRUESSUNG } from '../../lib/marke';
 
 const nutzer = Astro.locals.nutzer!;
+const gastgeber = Astro.locals.gastgeber!;
+const istAdmin = nutzer.rolle === 'admin';
+const b = { name: gastgeber.name, begruessung: gastgeber.begruessung ?? '' };
 const fehler: Record<string, string> = {};
 const w = { name: nutzer.name, email: nutzer.email, slug: nutzer.slug, position: nutzer.position ?? '', begruessung: nutzer.begruessung ?? '', avatar_url: nutzer.avatar_url ?? '' };
 
@@ -38,6 +42,15 @@ if (Astro.request.method === 'POST') {
       return Astro.redirect('/app/einstellungen?ok=gespeichert');
     }
   }
+  if (aktion === 'buero' && istAdmin) {
+    b.name = trimmen(form.get('buero_name'), 120);
+    b.begruessung = trimmen(form.get('buero_begruessung'), 1000);
+    if (b.name.length < 2) fehler.buero_name = 'Bitte gib einen Namen an.';
+    if (!Object.keys(fehler).length) {
+      await ausfuehren('UPDATE nutzer SET name = ?, begruessung = ?, aktualisiert_am = ? WHERE id = ?', b.name, b.begruessung || null, jetztIso(), gastgeber.id);
+      return Astro.redirect('/app/einstellungen?ok=gespeichert');
+    }
+  }
   if (aktion === 'passwort') {
     const alt = String(form.get('alt') ?? '');
     const neu = String(form.get('neu') ?? '');
@@ -53,12 +66,29 @@ const ff = (n: string) => (fehler[n] ? { 'aria-invalid': 'true' as const, 'aria-
 ---
 <App titel="Einstellungen" eyebrow="Dein Profil" meldung={Object.keys(fehler).length ? { art: 'fehler', text: 'Bitte prüf die markierten Felder.' } : meldungAusUrl(Astro.url)}>
   <div class="liste">
+    {istAdmin && (
+      <form method="post" class="karte block" novalidate>
+        <input type="hidden" name="aktion" value="buero" />
+        <h2>Zentrale Buchungsseite</h2>
+        <p class="leise klein">Alle Termine laufen über das Büro <strong>{gastgeber.email}</strong>: Benachrichtigungen, Google Kalender und Meet Links. Die Seite liegt unter <a href="/" target="_blank" rel="noopener">{Astro.url.host}</a>.</p>
+        <div class="feld">
+          <label for="buero_name">Name als Gastgeber in Mails und Kalender</label>
+          <input id="buero_name" name="buero_name" class="eingabe" value={b.name} required maxlength="120" {...ff('buero_name')} />
+          {fehler.buero_name && <p class="fehlertext" id="fehler-buero_name">{fehler.buero_name}</p>}
+        </div>
+        <div class="feld">
+          <label for="buero_begruessung">Text unter „Lass uns reden.“<span class="leise"> (optional)</span></label>
+          <textarea id="buero_begruessung" name="buero_begruessung" class="textfeld" maxlength="1000" placeholder={STANDARD_BEGRUESSUNG}>{b.begruessung}</textarea>
+        </div>
+        <div><button type="submit" class="knopf knopf--orange">Buchungsseite speichern</button></div>
+      </form>
+    )}
     <form method="post" class="karte block" novalidate>
       <input type="hidden" name="aktion" value="profil" />
       <h2>Profil</h2>
       <div class="profil-kopf">
         <Avatar name={w.name} url={w.avatar_url || null} groesse={64} />
-        <p class="leise klein">So erscheinst du auf deiner Buchungsseite. Ohne Bild zeigen wir deine Initialen.</p>
+        <p class="leise klein">So erscheinst du im Backoffice. Gebucht wird zentral über das Büro, nicht über dein Profil.</p>
       </div>
       <div class="zwei">
         <div class="feld">
@@ -71,15 +101,9 @@ const ff = (n: string) => (fehler[n] ? { 'aria-invalid': 'true' as const, 'aria-
           <input id="position" name="position" class="eingabe" value={w.position} placeholder="z. B. Geschäftsführung" />
         </div>
         <div class="feld">
-          <label for="email">E Mail für Benachrichtigungen und Anmeldung</label>
+          <label for="email">E Mail für die Anmeldung</label>
           <input id="email" name="email" type="email" class="eingabe" value={w.email} required {...ff('email')} />
           {fehler.email && <p class="fehlertext" id="fehler-email">{fehler.email}</p>}
-        </div>
-        <div class="feld">
-          <label for="slug">Adresse deiner Buchungsseite</label>
-          <input id="slug" name="slug" class="eingabe" value={w.slug} required {...ff('slug')} aria-describedby="slug-hilfe" />
-          <p class="hilfe" id="slug-hilfe">{Astro.url.host}/{w.slug}. Achtung: Alte Links funktionieren nach einer Änderung nicht mehr.</p>
-          {fehler.slug && <p class="fehlertext" id="fehler-slug">{fehler.slug}</p>}
         </div>
       </div>
       <div class="feld">
@@ -87,10 +111,9 @@ const ff = (n: string) => (fehler[n] ? { 'aria-invalid': 'true' as const, 'aria-
         <input id="avatar_url" name="avatar_url" type="url" class="eingabe" value={w.avatar_url} placeholder="https://thatsit.marketing/team/name.jpg" {...ff('avatar_url')} />
         {fehler.avatar_url && <p class="fehlertext" id="fehler-avatar_url">{fehler.avatar_url}</p>}
       </div>
-      <div class="feld">
-        <label for="begruessung">Begrüßung auf deiner Profilseite<span class="leise"> (optional)</span></label>
-        <textarea id="begruessung" name="begruessung" class="textfeld" maxlength="1000">{w.begruessung}</textarea>
-      </div>
+      <input type="hidden" name="slug" value={w.slug} />
+      <input type="hidden" name="begruessung" value={w.begruessung} />
+      {fehler.slug && <p class="fehlertext" id="fehler-slug">{fehler.slug}</p>}
       <div><button type="submit" class="knopf knopf--orange">Profil speichern</button></div>
     </form>
 

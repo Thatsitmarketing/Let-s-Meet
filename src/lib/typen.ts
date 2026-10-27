@@ -19,6 +19,7 @@ export interface Nutzer {
   google_kalender_id: string;
   webhook_url: string | null;
   webhook_secret: string | null;
+  ist_buero: number;
   erstellt_am: string;
   aktualisiert_am: string;
 }
@@ -30,6 +31,14 @@ export interface Frage {
   label: string;
   typ: 'text' | 'textarea' | 'telefon';
   pflicht: boolean;
+}
+
+/** Unterlage zur Vorbereitung, rechts neben dem Kalender verlinkt. */
+export interface Unterlage {
+  titel: string;
+  url: string;
+  info: string;
+  bild: string;
 }
 
 export interface Terminart {
@@ -49,6 +58,7 @@ export interface Terminart {
   raster_min: number;
   max_pro_tag: number | null;
   fragen: string;
+  unterlagen: string;
   erinnerung_std: number;
   bestaetigung_text: string | null;
   weiterleitung_url: string | null;

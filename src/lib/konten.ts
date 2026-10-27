@@ -1,8 +1,11 @@
 import { passwortHash } from './auth';
-import { ausfuehren, db, eins, jetztIso, neueId } from './db';
+import { ausfuehren, eins, jetztIso, neueId } from './db';
 import { RESERVIERTE_SLUGS, slugify } from './eingabe';
 
-/** Legt ein Teammitglied mit Standardverfügbarkeit (Mo bis Fr, 9 bis 17 Uhr) und einem Erstgespräch an. */
+/**
+ * Legt ein Konto für das Backoffice an. Terminarten und Verfügbarkeit gehören dem Büro
+ * (siehe migrations/0002_zentrales_buero.sql), darum bekommt ein neues Konto keine eigenen.
+ */
 export async function kontoAnlegen(d: { name: string; email: string; slug: string; passwort: string; rolle: 'admin' | 'mitglied'; zeitzone?: string }) {
   const id = neueId();
   const jetzt = jetztIso();
@@ -11,18 +14,6 @@ export async function kontoAnlegen(d: { name: string; email: string; slug: strin
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id, d.email.toLowerCase(), d.name, d.slug, await passwortHash(d.passwort), d.rolle, d.zeitzone || 'Europe/Berlin', jetzt, jetzt,
   );
-  const regeln = [1, 2, 3, 4, 5].map((tag) =>
-    db().prepare('INSERT INTO verfuegbarkeit (nutzer_id, wochentag, start_min, ende_min) VALUES (?, ?, ?, ?)').bind(id, tag, 9 * 60, 17 * 60),
-  );
-  await db().batch([
-    ...regeln,
-    db()
-      .prepare(
-        `INSERT INTO terminarten (id, nutzer_id, slug, titel, dauer_min, farbe, ort_typ, raster_min, erstellt_am, aktualisiert_am)
-         VALUES (?, ?, 'erstgespraech', 'Erstgespräch', 30, '#DC9832', 'google_meet', 30, ?, ?)`,
-      )
-      .bind(neueId(), id, jetzt, jetzt),
-  ]);
   return id;
 }
 

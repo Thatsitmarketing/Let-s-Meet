@@ -9,9 +9,10 @@ import { terminFilter } from '../../../lib/termin-filter';
 import type { Buchung } from '../../../lib/typen';
 import { datumInZone, formatDatumKurz, formatDatumLang, formatZeit } from '../../../lib/zeit';
 
-const nutzer = Astro.locals.nutzer!;
+const ich = Astro.locals.nutzer!;
+const nutzer = Astro.locals.gastgeber!;
 const tz = nutzer.zeitzone;
-const f = terminFilter(Astro.url, nutzer);
+const f = terminFilter(Astro.url, nutzer, ich.rolle === 'admin');
 const PRO_SEITE = 50;
 const seite = Math.max(1, Number(Astro.url.searchParams.get('seite') ?? 1) || 1);
 
@@ -68,7 +69,7 @@ const tabs = [
   { wert: 'storniert', text: 'Abgesagt' },
 ];
 ---
-<App titel="Termine" eyebrow={f.team ? 'Ganzes Team' : 'Deine Termine'} meldung={meldungAusUrl(Astro.url)}>
+<App titel="Termine" eyebrow={f.team ? 'Alle Konten' : `Büro ${nutzer.email}`} meldung={meldungAusUrl(Astro.url)}>
   <Fragment slot="aktionen">
     <a class="knopf knopf--rahmen" href={`/api/app/termine.csv?${exportParams}`}><Icon name="download" />CSV Export</a>
   </Fragment>
@@ -79,7 +80,7 @@ const tabs = [
         <a href={link(t.wert === 'kalender' ? { ansicht: null, suche: null, von: null, bis: null } : { ansicht: t.wert })} aria-current={(kalModus ? 'kalender' : f.ansicht) === t.wert ? 'page' : undefined}>{t.text}</a>
       ))}
     </nav>
-    {nutzer.rolle === 'admin' && (
+    {ich.rolle === 'admin' && (
       <nav class="wer" aria-label="Wessen Termine">
         <a href={link({ wer: null })} aria-current={!f.team ? 'page' : undefined}>Meine</a>
         <a href={link({ wer: 'team' })} aria-current={f.team ? 'page' : undefined}>Team</a>

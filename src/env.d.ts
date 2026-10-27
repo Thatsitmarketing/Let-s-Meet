@@ -22,5 +22,7 @@ declare namespace Cloudflare {
 declare namespace App {
   interface Locals {
     nutzer?: import('./lib/typen').Nutzer;
+    /** Zentrales Büro Konto, dem Terminarten, Verfügbarkeit, Google und Buchungen gehören */
+    gastgeber?: import('./lib/typen').Nutzer;
   }
 }

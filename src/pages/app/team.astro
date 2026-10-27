@@ -3,7 +3,7 @@ import App from '../../layouts/App.astro';
 import Avatar from '../../components/Avatar.astro';
 import Icon from '../../components/ui/Icon.astro';
 import { passwortHash } from '../../lib/auth';
-import { alle, ausfuehren, eins, jetztIso } from '../../lib/db';
+import { alle, ausfuehren, eins, jetztIso, neueId } from '../../lib/db';
 import { emailGueltig, trimmen } from '../../lib/eingabe';
 import { kontoAnlegen, slugPruefen } from '../../lib/konten';
 import { meldungAusUrl } from '../../lib/meldungen';
@@ -29,14 +29,15 @@ if (Astro.request.method === 'POST') {
     if (w.name.length < 2) fehler.name = 'Bitte gib einen Namen an.';
     if (!emailGueltig(w.email)) fehler.email = 'Bitte prüf die E Mail Adresse.';
     else if (await eins('SELECT id FROM nutzer WHERE email = ?', w.email)) fehler.email = 'Diese E Mail hat schon ein Konto.';
-    if (s.fehler) fehler.slug = s.fehler;
+    // Der Kurzname ist nur noch intern, bei Kollision wird er eindeutig gemacht
+    if (s.fehler) w.slug = `${s.slug.length >= 2 ? s.slug : 'konto'}-${neueId(4).toLowerCase()}`;
     if (passwort.length < 10) fehler.passwort = 'Mindestens 10 Zeichen.';
     if (!Object.keys(fehler).length) {
       await kontoAnlegen({ name: w.name, email: w.email, slug: w.slug, passwort, rolle: w.rolle as 'admin' | 'mitglied', zeitzone: ich.zeitzone });
       return Astro.redirect('/app/team?ok=angelegt');
     }
   } else if (zielId && zielId !== ich.id) {
-    if (aktion === 'aktiv') {
+    if (aktion === 'aktiv' && zielId !== Astro.locals.gastgeber?.id) {
       await ausfuehren('UPDATE nutzer SET aktiv = 1 - aktiv, aktualisiert_am = ? WHERE id = ?', jetztIso(), zielId);
       return Astro.redirect('/app/team?ok=gespeichert');
     }
@@ -53,10 +54,10 @@ if (Astro.request.method === 'POST') {
   }
 }
 
-const team = await alle<Nutzer>('SELECT * FROM nutzer ORDER BY aktiv DESC, name');
+const team = await alle<Nutzer>('SELECT * FROM nutzer ORDER BY ist_buero DESC, aktiv DESC, name');
 const ff = (n: string) => (fehler[n] ? { 'aria-invalid': 'true' as const, 'aria-describedby': `fehler-${n}` } : {});
 ---
-<App titel="Team" eyebrow="Wer bei euch Termine anbietet" meldung={Object.keys(fehler).length ? { art: 'fehler', text: 'Bitte prüf die markierten Felder.' } : meldungAusUrl(Astro.url)}>
+<App titel="Team" eyebrow="Wer das Backoffice nutzt" meldung={Object.keys(fehler).length ? { art: 'fehler', text: 'Bitte prüf die markierten Felder.' } : meldungAusUrl(Astro.url)}>
   <div class="raster">
     <section class="karte" aria-labelledby="t-liste">
       <h2 id="t-liste" class="sr-only">Mitglieder</h2>
@@ -66,9 +67,10 @@ const ff = (n: string) => (fehler[n] ? { 'aria-invalid': 'true' as const, 'aria-
             <Avatar name={n.name} url={n.avatar_url} groesse={44} />
             <div class="person">
               <strong>{n.name}{n.id === ich.id && <span class="leise"> (du)</span>}</strong>
-              <span class="leise klein">{n.email} &middot; /{n.slug}</span>
+              <span class="leise klein">{n.email}</span>
               <span class="marken">
-                <span class:list={['badge', { 'badge--hell': n.rolle !== 'admin' }]}>{n.rolle === 'admin' ? 'Admin' : 'Mitglied'}</span>
+                {n.ist_buero ? <span class="badge">Büro, zentrale Buchung</span> : <span class:list={['badge', { 'badge--hell': n.rolle !== 'admin' }]}>{n.rolle === 'admin' ? 'Admin' : 'Mitglied'}</span>}
+                {Boolean(n.ist_buero) && !n.passwort_hash.startsWith('pbkdf2$') && <span class="pille">Ohne Anmeldung</span>}
                 {!n.aktiv && <span class="pille pille--fehler">Deaktiviert</span>}
                 {n.google_refresh_token && <span class="pille pille--erfolg">Google</span>}
               </span>
@@ -77,10 +79,14 @@ const ff = (n: string) => (fehler[n] ? { 'aria-invalid': 'true' as const, 'aria-
               <details class="mehr">
                 <summary class="knopf knopf--leise knopf--klein">Verwalten<Icon name="runter" groesse={16} /></summary>
                 <div class="mehr-inhalt karte">
-                  <form method="post"><input type="hidden" name="id" value={n.id} /><input type="hidden" name="aktion" value="rolle" />
-                    <button class="knopf knopf--rahmen knopf--klein knopf--breit" type="submit">{n.rolle === 'admin' ? 'Zum Mitglied machen' : 'Zum Admin machen'}</button></form>
-                  <form method="post" data-rueckfrage={n.aktiv ? `${n.name} deaktivieren? Die Buchungsseite ist dann nicht mehr erreichbar.` : ''}><input type="hidden" name="id" value={n.id} /><input type="hidden" name="aktion" value="aktiv" />
-                    <button class="knopf knopf--rahmen knopf--klein knopf--breit" type="submit">{n.aktiv ? 'Deaktivieren' : 'Aktivieren'}</button></form>
+                  {!Boolean(n.ist_buero) && (
+                    <form method="post"><input type="hidden" name="id" value={n.id} /><input type="hidden" name="aktion" value="rolle" />
+                      <button class="knopf knopf--rahmen knopf--klein knopf--breit" type="submit">{n.rolle === 'admin' ? 'Zum Mitglied machen' : 'Zum Admin machen'}</button></form>
+                  )}
+                  {!Boolean(n.ist_buero) && (
+                    <form method="post" data-rueckfrage={n.aktiv ? `${n.name} deaktivieren? Die Anmeldung ist dann gesperrt.` : ''}><input type="hidden" name="id" value={n.id} /><input type="hidden" name="aktion" value="aktiv" />
+                      <button class="knopf knopf--rahmen knopf--klein knopf--breit" type="submit">{n.aktiv ? 'Deaktivieren' : 'Aktivieren'}</button></form>
+                  )}
                   <form method="post" class="pw"><input type="hidden" name="id" value={n.id} /><input type="hidden" name="aktion" value="passwort" />
                     <label class="feld-label" for={`pw-${n.id}`}>Neues Passwort setzen</label>
                     <input id={`pw-${n.id}`} name="neu" type="password" class="eingabe" minlength="10" autocomplete="new-password" />
@@ -105,11 +111,6 @@ const ff = (n: string) => (fehler[n] ? { 'aria-invalid': 'true' as const, 'aria-
         <label for="email">E Mail</label>
         <input id="email" name="email" type="email" class="eingabe" value={w.email} required {...ff('email')} />
         {fehler.email && <p class="fehlertext" id="fehler-email">{fehler.email}</p>}
-      </div>
-      <div class="feld">
-        <label for="slug">Adresse der Buchungsseite</label>
-        <input id="slug" name="slug" class="eingabe" value={w.slug} placeholder="vorname" {...ff('slug')} />
-        {fehler.slug && <p class="fehlertext" id="fehler-slug">{fehler.slug}</p>}
       </div>
       <div class="feld">
         <label for="passwort">Startpasswort</label>

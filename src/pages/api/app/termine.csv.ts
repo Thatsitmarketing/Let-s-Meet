@@ -12,8 +12,8 @@ const zelle = (wert: unknown) => {
 };
 
 export const GET: APIRoute = async ({ url, locals }) => {
-  const nutzer = locals.nutzer!;
-  const f = terminFilter(url, nutzer);
+  const nutzer = locals.gastgeber!;
+  const f = terminFilter(url, nutzer, locals.nutzer!.rolle === 'admin');
   const zeilen = await alle<Buchung & { titel: string; gastgeber: string }>(
     `SELECT b.*, t.titel, n.name AS gastgeber FROM buchungen b
      JOIN terminarten t ON t.id = b.terminart_id JOIN nutzer n ON n.id = b.nutzer_id

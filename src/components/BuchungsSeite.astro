@@ -1,0 +1,427 @@
+---
+/*
+ * Zentrale Buchung über das Büro: links Kalender, Zeiten und Formular, rechts Details zum Termin,
+ * Unterlagen zur Vorbereitung und das Team. Genutzt von / und /{terminart}.
+ * Außerhalb des Embed Modus liegt darüber ein Kopfbereich auf dem Bürofoto.
+ */
+import { env } from 'cloudflare:workers';
+import Icon from './ui/Icon.astro';
+import OrtIcon from './OrtIcon.astro';
+import { buchungNachId, fragenLesen, unterlagenLesen } from '../lib/abfragen';
+import { KONTAKT, STANDARD_BEGRUESSUNG, TEAM } from '../lib/marke';
+import { ORT_LABEL, type Nutzer, type Terminart } from '../lib/typen';
+import { formatDatumLang, formatSpanne } from '../lib/zeit';
+
+interface Props {
+  gastgeber: Nutzer;
+  terminart: Terminart;
+  /** Alle öffentlichen Terminarten für die Auswahl oben, leer oder eine bedeutet keine Auswahl */
+  arten: Terminart[];
+}
+const { gastgeber, terminart, arten } = Astro.props;
+
+const p = Astro.url.searchParams;
+const embed = p.get('embed') === '1';
+const detailsZeigen = p.get('details') !== '0';
+const suffix = embed ? '?embed=1' : '';
+
+// Umbuchen über den Verwaltungslink aus der Bestätigungsmail
+const umbuchenId = p.get('umbuchen');
+const umbuchen = umbuchenId ? await buchungNachId(umbuchenId) : null;
+const umbuchenGueltig = Boolean(umbuchen && umbuchen.status === 'bestaetigt' && umbuchen.terminart_id === terminart.id && Date.parse(umbuchen.start_utc) > Date.now());
+
+const fragen = fragenLesen(terminart);
+const unterlagen = unterlagenLesen(terminart);
+const konfig = {
+  terminart: terminart.id,
+  dauer: terminart.dauer_min,
+  zoneGastgeber: gastgeber.zeitzone,
+  maxTage: terminart.max_tage_voraus,
+  umbuchen: umbuchenGueltig ? umbuchen!.id : null,
+  turnstile: env.PUBLIC_TURNSTILE_SITE_KEY || null,
+  embed,
+  profilUrl: `/${suffix}`,
+  vorbelegt: {
+    name: umbuchenGueltig ? umbuchen!.gast_name : p.get('name') ?? '',
+    email: umbuchenGueltig ? umbuchen!.gast_email : p.get('email') ?? '',
+  },
+};
+const telefonPflicht = terminart.ort_typ === 'telefon_wir';
+const ortText = terminart.ort_typ === 'vor_ort' && terminart.ort_wert ? terminart.ort_wert : ORT_LABEL[terminart.ort_typ];
+const auswahl = arten.length > 1 && !umbuchenGueltig;
+const extern = (url: string) => /^https?:\/\//.test(url);
+
+// Beschreibung: Absätze durch Leerzeilen. Endet die erste Zeile eines Absatzes mit Doppelpunkt
+// und folgen weitere Zeilen, werden diese als Liste mit Haken gezeigt.
+const absaetze = (terminart.beschreibung ?? '')
+  .split(/\n\s*\n/)
+  .map((block) => block.split('\n').map((z) => z.trim()).filter(Boolean))
+  .filter((zeilen) => zeilen.length > 0)
+  .map((zeilen) =>
+    zeilen.length > 1 && zeilen[0]!.endsWith(':')
+      ? { titel: zeilen[0], liste: zeilen.slice(1), text: '' }
+      : { titel: '', liste: null, text: zeilen.join('\n') },
+  );
+---
+{!embed && (
+  <section class="held dunkel" aria-labelledby="held-titel">
+    <img class="held-logo" src="/images/brand/logo-weiss.webp" alt="That's it. Marketing" width="180" height="55" />
+    <p class="eyebrow">Let's Meet &middot; {gastgeber.name}</p>
+    <h1 id="held-titel">Lass uns reden<span class="punkt">.</span></h1>
+    <p class="unterzeile">{gastgeber.begruessung || STANDARD_BEGRUESSUNG}</p>
+  </section>
+)}
+
+<div class:list={['buchung', 'karte', { 'ohne-details': !detailsZeigen, embed }]} id="buchung" data-konfig={JSON.stringify(konfig)}>
+  <div class="bereich">
+    {auswahl && (
+      <nav class="arten" aria-label="Terminart wählen">
+        {arten.map((a) => (
+          <a href={`/${a.slug}${suffix}`} class="art-tab" aria-current={a.id === terminart.id ? 'page' : undefined}>
+            <span class="art-name">{a.titel}</span>
+            <span class="art-dauer">{a.dauer_min} Min</span>
+          </a>
+        ))}
+      </nav>
+    )}
+
+    {umbuchenGueltig && (
+      <p class="hinweis hinweis--akzent umbuchen-hinweis">
+        <Icon name="umbuchen" />
+        <span>Du buchst deinen Termin vom <strong>{formatDatumLang(umbuchen!.start_utc, umbuchen!.gast_zeitzone)}, {formatSpanne(umbuchen!.start_utc, umbuchen!.ende_utc, umbuchen!.gast_zeitzone)}</strong> um. Der alte Termin wird automatisch frei.</span>
+      </p>
+    )}
+
+    <section class="schritt" id="schritt-kalender" aria-labelledby="titel-kalender">
+      <h2 id="titel-kalender">Freie Termine{!detailsZeigen || embed ? ` für ${terminart.titel}` : ''}</h2>
+      <div class="kal-layout">
+        <div class="kalender">
+          <div class="kal-kopf">
+            <button type="button" class="kal-nav" id="monat-zurueck" aria-label="Vorheriger Monat"><Icon name="links" /></button>
+            <h3 id="monat-titel" aria-live="polite">&nbsp;</h3>
+            <button type="button" class="kal-nav" id="monat-vor" aria-label="Nächster Monat"><Icon name="rechts" /></button>
+          </div>
+          <div class="kal-wochentage" aria-hidden="true">
+            <span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span>
+          </div>
+          <div class="kal-tage" id="tage" role="group" aria-label="Tage im Monat" data-laedt="true"></div>
+          <p class="kal-status leise klein" id="kal-status" aria-live="polite"></p>
+          <div class="zone">
+            <label for="zone" class="feld-label"><Icon name="globus" groesse={16} />Zeitzone</label>
+            <select id="zone" class="auswahl"></select>
+          </div>
+        </div>
+
+        <div class="zeiten" id="zeiten" hidden>
+          <h3 id="tag-titel"></h3>
+          <ul class="zeiten-liste" id="zeiten-liste" role="list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="schritt" id="schritt-formular" aria-labelledby="titel-formular" hidden>
+      <button type="button" class="knopf knopf--leise knopf--klein zurueck" id="zurueck-kalender"><Icon name="zurueck" />Andere Zeit wählen</button>
+      <h2 id="titel-formular">Deine Angaben</h2>
+      <p class="gewaehlt" id="gewaehlt-text"></p>
+
+      <form id="formular" novalidate>
+        <div class="feld">
+          <label for="f-name">Name<span class="pflicht" aria-hidden="true">*</span></label>
+          <input id="f-name" name="name" class="eingabe" autocomplete="name" required maxlength="120" aria-describedby="fehler-name" />
+          <p class="fehlertext" id="fehler-name"></p>
+        </div>
+        <div class="feld">
+          <label for="f-email">E Mail<span class="pflicht" aria-hidden="true">*</span></label>
+          <input id="f-email" name="email" type="email" class="eingabe" autocomplete="email" required maxlength="180" aria-describedby="hilfe-email fehler-email" />
+          <p class="hilfe" id="hilfe-email">Hierhin schicken wir die Bestätigung mit Kalendereintrag.</p>
+          <p class="fehlertext" id="fehler-email"></p>
+        </div>
+        {telefonPflicht && (
+          <div class="feld">
+            <label for="f-telefon">Telefon<span class="pflicht" aria-hidden="true">*</span></label>
+            <input id="f-telefon" name="telefon" type="tel" class="eingabe" autocomplete="tel" maxlength="40" required aria-describedby="fehler-telefon" />
+            <p class="hilfe">Unter dieser Nummer rufen wir dich zum Termin an.</p>
+            <p class="fehlertext" id="fehler-telefon"></p>
+          </div>
+        )}
+        {fragen.map((f) => (
+          <div class="feld">
+            <label for={`f-frage-${f.id}`}>{f.label}{f.pflicht ? <span class="pflicht" aria-hidden="true">*</span> : <span class="leise"> (optional)</span>}</label>
+            {f.typ === 'textarea' ? (
+              <textarea id={`f-frage-${f.id}`} class="textfeld" data-frage={f.id} required={f.pflicht} maxlength="2000" aria-describedby={`fehler-frage_${f.id}`}></textarea>
+            ) : (
+              <input id={`f-frage-${f.id}`} class="eingabe" type={f.typ === 'telefon' ? 'tel' : 'text'} data-frage={f.id} required={f.pflicht} maxlength="500" aria-describedby={`fehler-frage_${f.id}`} />
+            )}
+            <p class="fehlertext" id={`fehler-frage_${f.id}`}></p>
+          </div>
+        ))}
+        <div class="feld">
+          <label for="f-nachricht">Was sollen wir vorab wissen?<span class="leise"> (optional)</span></label>
+          <textarea id="f-nachricht" name="nachricht" class="textfeld" maxlength="5000" placeholder="Kurz dein Anliegen und gern der Link zu deiner Website, damit wir vorbereitet sind."></textarea>
+        </div>
+
+        <div class="honig" aria-hidden="true">
+          <label for="f-website">Website</label>
+          <input id="f-website" name="website" tabindex="-1" autocomplete="off" />
+        </div>
+
+        <div class="feld">
+          <label class="haken">
+            <input type="checkbox" name="datenschutz" id="f-datenschutz" required aria-describedby="fehler-datenschutz" />
+            <span>Ich bin einverstanden, dass That's it. Marketing meine Angaben zur Planung und Durchführung dieses Termins speichert. Mehr in der <a href="https://thatsit.marketing/datenschutz" target="_blank" rel="noopener">Datenschutzerklärung</a>.</span>
+          </label>
+          <p class="fehlertext" id="fehler-datenschutz"></p>
+        </div>
+
+        {konfig.turnstile && <div id="turnstile" class="turnstile"></div>}
+
+        <p class="hinweis hinweis--fehler" id="formular-fehler" role="alert" hidden></p>
+
+        <button type="submit" class="knopf knopf--orange knopf--breit" id="absenden">{umbuchenGueltig ? 'Termin umbuchen' : 'Termin buchen'}</button>
+      </form>
+    </section>
+
+    {!embed && (
+      <section class="team-leiste" aria-labelledby="team-titel">
+        <img class="team-foto" src="/images/team/team-besprechung.webp" alt="Das Team von That's it. Marketing bei einer Besprechung im Büro in Gelsenkirchen" width="960" height="640" loading="lazy" decoding="async" />
+        <div class="team-text">
+          <h3 class="block-titel" id="team-titel">Dein Team in {KONTAKT.ort}</h3>
+          <ul class="team" role="list">
+            {TEAM.map((t) => (
+              <li title={`${t.name}, ${t.rolle}`}>
+                <img src={t.bild} alt={`${t.name}, ${t.rolle}`} width="44" height="44" loading="lazy" decoding="async" />
+              </li>
+            ))}
+          </ul>
+          <p class="kontakt">Du sprichst mit Menschen aus unserem Büro, nicht mit einem Callcenter. Fragen vorab: <a href={`mailto:${KONTAKT.email}`}>{KONTAKT.email}</a> oder <a href={KONTAKT.telefonLink}>{KONTAKT.telefon}</a></p>
+        </div>
+      </section>
+    )}
+  </div>
+
+  {detailsZeigen && (
+    <aside class="info" aria-label="Details zum Termin">
+      <div class="info-block">
+        <p class="eyebrow">Dein Termin</p>
+        <h2 class="info-titel">{terminart.titel}<span class="punkt">.</span></h2>
+        <ul class="meta" role="list">
+          <li><Icon name="uhr" />{terminart.dauer_min} Minuten</li>
+          <li><OrtIcon typ={terminart.ort_typ} />{ortText}</li>
+          <li><Icon name="team" />Mit unserem Team</li>
+          <li class="auswahl-zeile" id="auswahl-zeile" hidden><Icon name="kalender" /><span id="auswahl-text"></span></li>
+          <li class="auswahl-zeile" id="zone-zeile" hidden><Icon name="globus" /><span id="zone-text"></span></li>
+        </ul>
+        {absaetze.length > 0 && (
+          <div class="beschreibung">
+            {absaetze.map((a) => a.liste ? (
+              <>
+                {a.titel && <p class="liste-titel">{a.titel}</p>}
+                <ul role="list">{a.liste.map((z) => <li><Icon name="check" groesse={16} />{z}</li>)}</ul>
+              </>
+            ) : <p>{a.text}</p>)}
+          </div>
+        )}
+      </div>
+
+      {unterlagen.length > 0 && (
+        <div class="info-block">
+          <h3 class="block-titel">Unterlagen zur Vorbereitung</h3>
+          <ul class="unterlagen" role="list">
+            {unterlagen.map((u) => (
+              <li>
+                <a class="unterlage" href={u.url} {...(extern(u.url) ? { target: '_blank', rel: 'noopener' } : {})}>
+                  {u.bild ? (
+                    <img class="unterlage-bild" src={u.bild} alt="" width="56" height="56" loading="lazy" decoding="async" />
+                  ) : (
+                    <span class="unterlage-bild unterlage-icon" aria-hidden="true"><Icon name="dokument" /></span>
+                  )}
+                  <span class="unterlage-text">
+                    <span class="unterlage-titel">{u.titel}</span>
+                    {u.info && <span class="unterlage-info">{u.info}</span>}
+                  </span>
+                  <Icon name="extern" groesse={16} class="icon unterlage-pfeil" />
+                  {extern(u.url) && <span class="sr-only">(öffnet in neuem Tab)</span>}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+    </aside>
+  )}
+</div>
+
+<noscript>
+  <p class="hinweis">Für die Terminauswahl wird JavaScript benötigt. Alternativ erreichst du uns unter <a href={`mailto:${KONTAKT.email}`}>{KONTAKT.email}</a> oder {KONTAKT.telefon}.</p>
+</noscript>
+
+<script>
+  import { starteBuchung } from '../scripts/buchung';
+  starteBuchung();
+</script>
+
+<style>
+  /* Kopfbereich auf dem Bürofoto */
+  .held {
+    display: grid;
+    gap: var(--raum-4);
+    max-width: 46rem;
+    margin-bottom: var(--raum-8);
+    color: var(--farbe-papier);
+  }
+  .held-logo { width: 150px; height: auto; margin-bottom: var(--raum-4); }
+  .held h1 { font-size: var(--text-display); color: var(--farbe-papier); }
+  .unterzeile { font-size: var(--text-lg); color: rgba(255, 255, 255, 0.82); max-width: 40rem; }
+
+  .buchung {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    min-height: 560px;
+    box-shadow: var(--schatten-3);
+    border: 0;
+  }
+  .buchung.embed { box-shadow: none; border: 1px solid var(--farbe-rahmen); }
+  .buchung.ohne-details { grid-template-columns: 1fr; }
+
+  .bereich { padding: var(--raum-8); min-width: 0; }
+  .arten { display: flex; flex-wrap: wrap; gap: var(--raum-2); margin-bottom: var(--raum-6); }
+  .art-tab {
+    display: inline-flex; align-items: baseline; gap: var(--raum-2); min-height: 44px; padding: var(--raum-2) var(--raum-4);
+    border: 1px solid var(--farbe-rahmen-stark); border-radius: var(--radius-s); text-decoration: none; color: var(--n-900);
+    transition: border-color var(--dauer-normal) var(--kurve);
+  }
+  .art-tab:hover { border-color: var(--n-900); }
+  .art-tab[aria-current='page'] { background: var(--n-900); border-color: var(--n-900); color: var(--farbe-papier); }
+  .art-name { font-weight: 600; }
+  .art-dauer { font-size: var(--text-sm); opacity: 0.75; }
+
+  .umbuchen-hinweis { margin-bottom: var(--raum-6); }
+  .schritt h2 { font-size: var(--text-h3); font-family: var(--schrift-text); font-weight: 600; letter-spacing: 0; margin-bottom: var(--raum-6); }
+
+  .kal-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--raum-8); }
+  .kal-layout:has(.zeiten:not([hidden])) { grid-template-columns: minmax(0, 1fr) 210px; }
+  .kalender { max-width: 460px; }
+  .kal-kopf { display: flex; align-items: center; justify-content: space-between; gap: var(--raum-2); margin-bottom: var(--raum-4); }
+  .kal-kopf h3 { font-size: var(--text-base); font-weight: 600; }
+  .kal-nav {
+    display: grid; place-items: center; width: 40px; height: 40px;
+    border: 1px solid var(--farbe-rahmen); background: var(--farbe-papier); color: var(--n-900); cursor: pointer;
+    border-radius: var(--radius-s);
+  }
+  .kal-nav:hover:not(:disabled) { border-color: var(--n-900); }
+  .kal-nav:disabled { opacity: 0.35; cursor: not-allowed; }
+  .kal-wochentage, .kal-tage { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .kal-wochentage span {
+    text-align: center; font-family: var(--schrift-label); font-weight: 500; font-size: 0.875rem;
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--farbe-text-leise); padding-bottom: var(--raum-2);
+  }
+  .kal-tage { min-height: 260px; }
+  .kal-tage[data-laedt='true'] { opacity: 0.5; }
+  .kal-tage :global(.tag) {
+    position: relative; aspect-ratio: 1; min-height: 40px; display: grid; place-items: center;
+    font: inherit; font-size: var(--text-sm); border: 0; background: transparent; color: var(--n-400);
+    border-radius: var(--radius-s);
+  }
+  .kal-tage :global(.tag.frei) { background: var(--n-100); color: var(--n-900); font-weight: 700; cursor: pointer; }
+  .kal-tage :global(.tag.frei:hover) { background: var(--n-900); color: var(--farbe-papier); }
+  .kal-tage :global(.tag[aria-pressed='true']) { background: var(--n-900); color: var(--farbe-papier); }
+  .kal-tage :global(.tag[aria-pressed='true']::after) {
+    content: ''; position: absolute; bottom: 6px; width: 6px; height: 6px; background: var(--farbe-akzent);
+  }
+  .kal-tage :global(.tag.heute:not([aria-pressed='true'])::before) {
+    content: ''; position: absolute; bottom: 6px; width: 4px; height: 4px; background: currentColor;
+  }
+  .kal-status { min-height: 1.6em; margin-top: var(--raum-3); }
+  .zone { display: grid; gap: var(--raum-2); margin-top: var(--raum-4); }
+  .zone .feld-label { display: inline-flex; align-items: center; gap: 6px; }
+
+  .zeiten h3 { font-size: var(--text-base); font-weight: 600; margin: 4px 0 var(--raum-4); min-height: 40px; display: flex; align-items: center; }
+  .zeiten-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-2); max-height: 430px; overflow-y: auto; padding-right: 4px; }
+  .zeiten-liste :global(li) { display: flex; gap: var(--raum-2); }
+  .zeiten-liste :global(.zeit) {
+    flex: 1; min-height: 48px; font: inherit; font-weight: 600; background: var(--farbe-papier);
+    border: 1px solid var(--n-900); color: var(--n-900); cursor: pointer; border-radius: var(--radius-s);
+    transition: background var(--dauer-schnell) var(--kurve), color var(--dauer-schnell) var(--kurve);
+  }
+  .zeiten-liste :global(.zeit:hover) { box-shadow: inset 0 0 0 1px var(--n-900); }
+  .zeiten-liste :global(.zeit[aria-pressed='true']) { background: var(--n-700); color: var(--farbe-papier); border-color: var(--n-700); flex: 0 0 calc(50% - 4px); }
+  .zeiten-liste :global(.weiter) { flex: 0 0 calc(50% - 4px); min-height: 48px; padding-inline: 0.5rem; letter-spacing: 0.15em; }
+  .zeiten-liste :global(.leer) { color: var(--farbe-text-leise); font-size: var(--text-sm); }
+
+  .zurueck { margin: calc(var(--raum-2) * -1) 0 var(--raum-4) calc(var(--raum-3) * -1); }
+  .gewaehlt { margin: calc(var(--raum-4) * -1) 0 var(--raum-6); color: var(--farbe-text-2); font-weight: 500; }
+  #formular { display: grid; gap: var(--raum-6); max-width: 560px; }
+  .honig { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+  .turnstile { min-height: 65px; }
+
+  /* Rechte Spalte */
+  .info {
+    background: var(--n-050);
+    border-left: 1px solid var(--farbe-rahmen);
+    padding: var(--raum-8);
+    display: grid;
+    gap: var(--raum-8);
+    align-content: start;
+  }
+  .info-block { display: grid; gap: var(--raum-4); }
+  .info-block + .info-block { border-top: 1px solid var(--farbe-rahmen); padding-top: var(--raum-8); }
+  .info-titel { font-size: var(--text-h2); }
+  .meta { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-3); color: var(--farbe-text-2); font-weight: 500; }
+  .meta li { display: flex; gap: var(--raum-3); align-items: flex-start; }
+  .meta li :global(svg) { margin-top: 2px; flex-shrink: 0; }
+  .auswahl-zeile { color: var(--farbe-text); font-weight: 600; }
+  .beschreibung { display: grid; gap: var(--raum-3); color: var(--farbe-text-2); font-size: var(--text-sm); }
+  .beschreibung p { white-space: pre-line; }
+  .liste-titel { font-weight: 600; color: var(--farbe-text); margin-top: var(--raum-2); }
+  .beschreibung ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-2); }
+  .beschreibung li { display: flex; gap: var(--raum-2); align-items: flex-start; }
+  .beschreibung li :global(svg) { flex-shrink: 0; margin-top: 3px; color: var(--farbe-akzent); }
+  .block-titel {
+    font-family: var(--schrift-label); font-weight: 500; font-size: var(--text-sm); letter-spacing: var(--sperrung-label);
+    text-transform: uppercase; color: var(--n-900);
+  }
+  .unterlagen { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-2); }
+  .unterlage {
+    display: flex; align-items: center; gap: var(--raum-3); padding: var(--raum-3); background: var(--farbe-papier);
+    border: 1px solid var(--farbe-rahmen); text-decoration: none; color: var(--n-900);
+    transition: border-color var(--dauer-normal) var(--kurve), box-shadow var(--dauer-normal) var(--kurve);
+  }
+  .unterlage:hover { border-color: var(--n-900); box-shadow: var(--schatten-2); }
+  .unterlage-bild { width: 56px; height: 56px; flex-shrink: 0; object-fit: contain; background: var(--n-100); }
+  .unterlage-icon { display: grid; place-items: center; color: var(--n-700); }
+  .unterlage-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+  .unterlage-titel { font-weight: 600; font-size: var(--text-sm); line-height: 1.3; }
+  .unterlage-info { font-size: var(--text-xs); color: var(--farbe-text-leise); line-height: 1.4; }
+  .unterlage :global(.unterlage-pfeil) { flex-shrink: 0; color: var(--n-500); }
+  .team-leiste {
+    display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: var(--raum-6); align-items: center;
+    margin-top: var(--raum-8); padding-top: var(--raum-8); border-top: 1px solid var(--farbe-rahmen);
+  }
+  #schritt-formular:not([hidden]) ~ .team-leiste { display: none; }
+  .team-foto { width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: cover; display: block; }
+  .team-text { display: grid; gap: var(--raum-3); }
+  .team { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--raum-2); }
+  .team img { display: block; width: 44px; height: 44px; object-fit: cover; background: var(--n-200); }
+  .team li:first-child { position: relative; }
+  .team li:first-child::after { content: ''; position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; background: var(--farbe-akzent); }
+  .kontakt { font-size: var(--text-sm); color: var(--farbe-text-2); }
+  .kontakt a[href^='tel'] { white-space: nowrap; }
+
+  @media (max-width: 960px) {
+    .buchung { grid-template-columns: 1fr; }
+    .info { border-left: 0; border-top: 1px solid var(--farbe-rahmen); }
+  }
+  @media (max-width: 860px) {
+    .bereich, .info { padding: var(--raum-6); }
+    .team-leiste { grid-template-columns: 1fr; }
+    .kal-layout:has(.zeiten:not([hidden])) { grid-template-columns: 1fr; }
+    .kalender { max-width: none; }
+    .zeiten-liste { max-height: none; }
+  }
+  @media (max-width: 420px) {
+    .bereich, .info { padding: var(--raum-4); }
+    .kal-tage :global(.tag) { min-height: 36px; }
+    .held-logo { width: 120px; }
+  }
+</style>

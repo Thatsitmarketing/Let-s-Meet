@@ -8,9 +8,10 @@ import { trimmen } from '../../../lib/eingabe';
 import { meldungAusUrl } from '../../../lib/meldungen';
 import { formatDatumKurz, formatDatumLang, formatSpanne, formatZeit, zonenName } from '../../../lib/zeit';
 
-const nutzer = Astro.locals.nutzer!;
+const ich = Astro.locals.nutzer!;
+const nutzer = Astro.locals.gastgeber!;
 const buchung = await buchungNachId(Astro.params.id ?? '');
-if (!buchung || (buchung.nutzer_id !== nutzer.id && nutzer.rolle !== 'admin')) return Astro.redirect('/app/termine');
+if (!buchung || (buchung.nutzer_id !== nutzer.id && ich.rolle !== 'admin')) return Astro.redirect('/app/termine');
 
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
@@ -44,7 +45,7 @@ try {
 } catch {
   antworten = [];
 }
-const umbuchenLink = gastgeber && ta ? `${Astro.url.origin}/${gastgeber.slug}/${ta.slug}?umbuchen=${buchung.id}` : '';
+const umbuchenLink = gastgeber && ta ? `${Astro.url.origin}/${ta.slug}?umbuchen=${buchung.id}` : '';
 ---
 <App titel={buchung.gast_name} eyebrow={ta?.titel ?? 'Termin'} meldung={meldungAusUrl(Astro.url)}>
   <Fragment slot="aktionen">

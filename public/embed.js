@@ -2,8 +2,8 @@
  * Let's Meet Widget von That's it. Marketing
  * Einbinden: <script src="https://letsmeet.thatsit.marketing/embed.js" async></script>
  *
- * Inline:      <div class="letsmeet-inline-widget" data-url="https://letsmeet.thatsit.marketing/name/erstgespraech"></div>
- * Popup Link:  <a href="#" data-letsmeet-popup="https://letsmeet.thatsit.marketing/name/erstgespraech">Termin buchen</a>
+ * Inline:      <div class="letsmeet-inline-widget" data-url="https://letsmeet.thatsit.marketing/erstgespraech"></div>
+ * Popup Link:  <a href="#" data-letsmeet-popup="https://letsmeet.thatsit.marketing/erstgespraech">Termin buchen</a>
  * Per Code:    LetsMeet.initBadgeWidget({ url, text: 'Termin buchen', farbe: 'orange' })
  *              LetsMeet.showPopupWidget(url) / LetsMeet.closePopupWidget()
  * Ereignis:    window.addEventListener('letsmeet:gebucht', (e) => console.log(e.detail))

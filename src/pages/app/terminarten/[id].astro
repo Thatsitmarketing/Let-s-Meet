@@ -7,7 +7,7 @@ import { meldungAusUrl } from '../../../lib/meldungen';
 import { terminartAusFormular, terminartSpeichern, type TerminartWerte } from '../../../lib/terminart-formular';
 import type { Terminart } from '../../../lib/typen';
 
-const nutzer = Astro.locals.nutzer!;
+const nutzer = Astro.locals.gastgeber!;
 const ta = await eins<Terminart>('SELECT * FROM terminarten WHERE id = ? AND nutzer_id = ?', Astro.params.id ?? '', nutzer.id);
 if (!ta) return Astro.redirect('/app/terminarten');
 
@@ -23,12 +23,12 @@ if (Astro.request.method === 'POST') {
     return Astro.redirect(`/app/terminarten/${ta.id}?ok=gespeichert`);
   }
 }
-const link = `${Astro.url.origin}/${nutzer.slug}/${ta.slug}`;
+const link = `${Astro.url.origin}/${ta.slug}`;
 ---
 <App titel={ta.titel} eyebrow="Terminart bearbeiten" meldung={meldungAusUrl(Astro.url)}>
   <Fragment slot="aktionen">
     <button type="button" class="knopf knopf--rahmen" data-kopieren={link}><Icon name="kopieren" />Link kopieren</button>
     <a class="knopf knopf--rahmen" href={link} target="_blank" rel="noopener"><Icon name="auge" />Ansehen</a>
   </Fragment>
-  <TerminartFormular werte={werte} fehler={fehler} nutzerSlug={nutzer.slug} neu={false} />
+  <TerminartFormular werte={werte} fehler={fehler} neu={false} />
 </App>

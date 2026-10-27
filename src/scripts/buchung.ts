@@ -67,6 +67,8 @@ export function starteBuchung() {
   let gewaehlterSlot: string | null = null;
   let anfrageNr = 0;
   let autoWeiter = true;
+  // Beim ersten Laden direkt den ersten freien Tag öffnen, damit die Zeiten sofort sichtbar sind
+  let autoTag = true;
   let turnstileId: string | null = null;
 
   const grenzeMonat = (() => {
@@ -133,7 +135,10 @@ export function starteBuchung() {
       statusEl.textContent = anzahl === 0 ? 'In diesem Monat ist nichts mehr frei.' : `${anzahl} ${anzahl === 1 ? 'Tag' : 'Tage'} mit freien Terminen`;
       zeichneTage(erster, naechster);
       if (gewaehlterTag && slotsNachTag.has(gewaehlterTag)) zeigeZeiten(gewaehlterTag);
-      else {
+      else if (autoTag && anzahl > 0) {
+        autoTag = false;
+        zeigeZeiten([...slotsNachTag.keys()].sort()[0]!);
+      } else {
         gewaehlterTag = null;
         zeitenEl.hidden = true;
       }

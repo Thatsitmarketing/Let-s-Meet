@@ -3,10 +3,10 @@ import type { Nutzer } from './typen';
 export type Ansicht = 'bevorstehend' | 'vergangen' | 'storniert';
 
 /** Baut WHERE Bedingung und Parameter für die Terminliste und den CSV Export. */
-export function terminFilter(url: URL, nutzer: Nutzer) {
+export function terminFilter(url: URL, nutzer: Nutzer, darfTeam = false) {
   const p = url.searchParams;
   const ansicht = (['bevorstehend', 'vergangen', 'storniert'].includes(p.get('ansicht') ?? '') ? p.get('ansicht') : 'bevorstehend') as Ansicht;
-  const team = nutzer.rolle === 'admin' && p.get('wer') === 'team';
+  const team = darfTeam && p.get('wer') === 'team';
   const suche = (p.get('suche') ?? '').trim().slice(0, 100);
   const von = /^\d{4}-\d{2}-\d{2}$/.test(p.get('von') ?? '') ? p.get('von')! : '';
   const bis = /^\d{4}-\d{2}-\d{2}$/.test(p.get('bis') ?? '') ? p.get('bis')! : '';

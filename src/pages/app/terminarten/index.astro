@@ -7,7 +7,7 @@ import { alle, ausfuehren, db, eins, jetztIso, neueId } from '../../../lib/db';
 import { meldungAusUrl } from '../../../lib/meldungen';
 import { ORT_LABEL, type Terminart } from '../../../lib/typen';
 
-const nutzer = Astro.locals.nutzer!;
+const nutzer = Astro.locals.gastgeber!;
 
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
@@ -27,9 +27,9 @@ if (Astro.request.method === 'POST') {
       await db()
         .prepare(
           `INSERT INTO terminarten (id, nutzer_id, slug, titel, beschreibung, dauer_min, farbe, ort_typ, ort_wert, puffer_vor_min, puffer_nach_min,
-            vorlauf_min, max_tage_voraus, raster_min, max_pro_tag, fragen, erinnerung_std, bestaetigung_text, weiterleitung_url, aktiv, geheim, reihenfolge, erstellt_am, aktualisiert_am)
+            vorlauf_min, max_tage_voraus, raster_min, max_pro_tag, fragen, unterlagen, erinnerung_std, bestaetigung_text, weiterleitung_url, aktiv, geheim, reihenfolge, erstellt_am, aktualisiert_am)
            SELECT ?, nutzer_id, ?, titel || ' (Kopie)', beschreibung, dauer_min, farbe, ort_typ, ort_wert, puffer_vor_min, puffer_nach_min,
-            vorlauf_min, max_tage_voraus, raster_min, max_pro_tag, fragen, erinnerung_std, bestaetigung_text, weiterleitung_url, 0, geheim, reihenfolge + 1, ?, ?
+            vorlauf_min, max_tage_voraus, raster_min, max_pro_tag, fragen, unterlagen, erinnerung_std, bestaetigung_text, weiterleitung_url, 0, geheim, reihenfolge + 1, ?, ?
            FROM terminarten WHERE id = ?`,
         )
         .bind(neueId(), slug, jetzt, jetzt, id)
@@ -55,9 +55,9 @@ if (Astro.request.method === 'POST') {
 const arten = await terminartenVon(nutzer.id);
 const basis = Astro.url.origin;
 ---
-<App titel="Terminarten" eyebrow={`${basis.replace(/^https?:\/\//, '')}/${nutzer.slug}`} meldung={meldungAusUrl(Astro.url)}>
+<App titel="Terminarten" eyebrow={`${basis.replace(/^https?:\/\//, '')}`} meldung={meldungAusUrl(Astro.url)}>
   <Fragment slot="aktionen">
-    <button type="button" class="knopf knopf--rahmen" data-kopieren={`${basis}/${nutzer.slug}`}><Icon name="link" />Profillink kopieren</button>
+    <button type="button" class="knopf knopf--rahmen" data-kopieren={`${basis}/`}><Icon name="link" />Buchungslink kopieren</button>
     <a class="knopf knopf--orange" href="/app/terminarten/neu"><Icon name="plus" />Neue Terminart</a>
   </Fragment>
 
@@ -88,9 +88,9 @@ const basis = Astro.url.origin;
             <span><Icon name="uhr" groesse={16} />{ta.dauer_min} Min</span>
             <span><OrtIcon typ={ta.ort_typ} groesse={16} />{ORT_LABEL[ta.ort_typ]}</span>
           </p>
-          <a class="art-link leise klein" href={`/${nutzer.slug}/${ta.slug}`} target="_blank" rel="noopener">/{nutzer.slug}/{ta.slug}</a>
+          <a class="art-link leise klein" href={`/${ta.slug}`} target="_blank" rel="noopener">/{ta.slug}</a>
           <div class="art-fuss">
-            <button type="button" class="knopf knopf--rahmen knopf--klein" data-kopieren={`${basis}/${nutzer.slug}/${ta.slug}`}><Icon name="kopieren" />Link kopieren</button>
+            <button type="button" class="knopf knopf--rahmen knopf--klein" data-kopieren={`${basis}/${ta.slug}`}><Icon name="kopieren" />Link kopieren</button>
             <div class="art-mehr">
               <a class="symbol" href={`/app/terminarten/${ta.id}`} title="Bearbeiten"><Icon name="stift" /><span class="sr-only">{ta.titel} bearbeiten</span></a>
               <form method="post">

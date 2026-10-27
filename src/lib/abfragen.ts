@@ -1,8 +1,15 @@
 import { alle, eins } from './db';
-import type { Buchung, Frage, Nutzer, Terminart } from './typen';
+import type { Buchung, Frage, Nutzer, Terminart, Unterlage } from './typen';
 
 export const nutzerNachSlug = (slug: string) =>
   eins<Nutzer>('SELECT * FROM nutzer WHERE slug = ? AND aktiv = 1', slug.toLowerCase());
+
+/** Das zentrale Büro (info@thatsit.marketing). Alle öffentlichen Buchungen laufen darüber. */
+export const buero = () =>
+  eins<Nutzer>('SELECT * FROM nutzer WHERE ist_buero = 1 ORDER BY erstellt_am LIMIT 1');
+
+/** Teammitglieder, die sich anmelden können (das Büro ohne Passwort zählt nicht). */
+export const LOGIN_KONTO = "passwort_hash LIKE 'pbkdf2$%'";
 
 export const nutzerNachId = (id: string) => eins<Nutzer>('SELECT * FROM nutzer WHERE id = ?', id);
 
@@ -26,6 +33,15 @@ export function fragenLesen(ta: Pick<Terminart, 'fragen'>): Frage[] {
   try {
     const roh = JSON.parse(ta.fragen || '[]');
     return Array.isArray(roh) ? roh : [];
+  } catch {
+    return [];
+  }
+}
+
+export function unterlagenLesen(ta: Pick<Terminart, 'unterlagen'>): Unterlage[] {
+  try {
+    const roh = JSON.parse(ta.unterlagen || '[]');
+    return Array.isArray(roh) ? roh.filter((u) => u && u.titel && u.url) : [];
   } catch {
     return [];
   }

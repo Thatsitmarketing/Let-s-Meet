@@ -3,12 +3,12 @@ import App from '../../layouts/App.astro';
 import Icon from '../../components/ui/Icon.astro';
 import { terminartenVon } from '../../lib/abfragen';
 
-const nutzer = Astro.locals.nutzer!;
+const nutzer = Astro.locals.gastgeber!;
 const arten = await terminartenVon(nutzer.id);
 const basis = Astro.url.origin;
 const ziele = [
-  { url: `${basis}/${nutzer.slug}`, text: 'Profilseite mit allen Terminarten' },
-  ...arten.filter((a) => a.aktiv).map((a) => ({ url: `${basis}/${nutzer.slug}/${a.slug}`, text: `${a.titel} (${a.dauer_min} Min)` })),
+  { url: `${basis}/`, text: 'Zentrale Buchungsseite (erste Terminart)' },
+  ...arten.filter((a) => a.aktiv).map((a) => ({ url: `${basis}/${a.slug}`, text: `${a.titel} (${a.dauer_min} Min)` })),
 ];
 const vorwahl = Astro.url.searchParams.get('ziel');
 ---

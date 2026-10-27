@@ -3,7 +3,7 @@ import App from '../../../layouts/App.astro';
 import TerminartFormular from '../../../components/TerminartFormular.astro';
 import { STANDARD, terminartAusFormular, terminartSpeichern, type TerminartWerte } from '../../../lib/terminart-formular';
 
-const nutzer = Astro.locals.nutzer!;
+const nutzer = Astro.locals.gastgeber!;
 let werte: TerminartWerte = { ...STANDARD };
 let fehler: Record<string, string> = {};
 
@@ -18,5 +18,5 @@ if (Astro.request.method === 'POST') {
 }
 ---
 <App titel="Neue Terminart" eyebrow="Terminarten">
-  <TerminartFormular werte={werte} fehler={fehler} nutzerSlug={nutzer.slug} neu />
+  <TerminartFormular werte={werte} fehler={fehler} neu />
 </App>

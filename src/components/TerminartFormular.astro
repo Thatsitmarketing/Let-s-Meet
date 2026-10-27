@@ -6,10 +6,9 @@ import type { TerminartWerte } from '../lib/terminart-formular';
 interface Props {
   werte: TerminartWerte;
   fehler: Record<string, string>;
-  nutzerSlug: string;
   neu: boolean;
 }
-const { werte: w, fehler, nutzerSlug, neu } = Astro.props;
+const { werte: w, fehler, neu } = Astro.props;
 const host = Astro.url.host;
 const dauern = [15, 30, 45, 60, 90, 120];
 const ortTypen = Object.keys(ORT_LABEL) as OrtTyp[];
@@ -32,7 +31,7 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
     <div class="feld">
       <label for="slug">Link</label>
       <div class="praefix-feld">
-        <span class="praefix">{host}/{nutzerSlug}/</span>
+        <span class="praefix">{host}/</span>
         <input id="slug" name="slug" class="eingabe" maxlength="60" value={w.slug} placeholder="erstgespraech" data-auto={neu ? 'true' : 'false'} {...f('slug')} />
       </div>
       {fehler.slug && <p class="fehlertext" id="fehler-slug">{fehler.slug}</p>}
@@ -83,6 +82,15 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
     </div>
   </section>
 
+  <section class="block karte" aria-labelledby="b-unterlagen">
+    <h2 id="b-unterlagen">Unterlagen zur Vorbereitung</h2>
+    <p class="hilfe">Erscheinen auf der Buchungsseite rechts neben dem Kalender, zum Beispiel Playbooks, Referenzen oder eine Checkliste. Links auf Google Drive nur, wenn die Datei für alle mit Link freigegeben ist.</p>
+    <input type="hidden" name="unterlagen" id="unterlagen-json" value={w.unterlagen} />
+    <ul class="fragen" id="unterlagen-liste" role="list"></ul>
+    <button type="button" class="knopf knopf--rahmen knopf--klein" id="unterlage-plus"><Icon name="plus" />Unterlage hinzufügen</button>
+    {fehler.unterlagen && <p class="fehlertext">{fehler.unterlagen}</p>}
+  </section>
+
   </div>
   <div class="spalte">
   <section class="block karte" aria-labelledby="b-planung">
@@ -126,7 +134,7 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
         </select>
       </div>
     </div>
-    <p class="hilfe">Freie Zeiten richten sich nach deiner <a href="/app/verfuegbarkeit">Verfügbarkeit</a> und, falls verbunden, nach deinem Google Kalender.</p>
+    <p class="hilfe">Freie Zeiten richten sich nach der <a href="/app/verfuegbarkeit">Verfügbarkeit des Büros</a> und, falls verbunden, nach dem Google Kalender von info@thatsit.marketing.</p>
   </section>
 
   <section class="block karte" aria-labelledby="b-fragen">
@@ -192,6 +200,28 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
   </li>
 </template>
 
+<template id="unterlage-vorlage">
+  <li class="frage unterlage-zeile">
+    <div class="feld">
+      <label class="feld-label">Titel</label>
+      <input class="eingabe u-titel" maxlength="120" placeholder="z. B. Social Media Playbook" />
+    </div>
+    <div class="feld">
+      <label class="feld-label">Link</label>
+      <input class="eingabe u-url" type="url" maxlength="500" placeholder="https://" />
+    </div>
+    <div class="feld">
+      <label class="feld-label">Kurzinfo</label>
+      <input class="eingabe u-info" maxlength="200" placeholder="Worum geht es?" />
+    </div>
+    <div class="feld">
+      <label class="feld-label">Vorschaubild<span class="leise"> (optional)</span></label>
+      <input class="eingabe u-bild" maxlength="500" placeholder="/images/unterlagen/... oder https://" />
+    </div>
+    <button type="button" class="symbol frage-weg" aria-label="Unterlage entfernen"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+  </li>
+</template>
+
 <script>
   const form = document.getElementById('ta-form') as HTMLFormElement;
   // Link aus dem Titel ableiten, solange er nicht von Hand geändert wurde
@@ -228,7 +258,7 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
     link: { label: 'Link zum Videocall', platz: 'https://', hilfe: 'Zum Beispiel ein fester Zoom oder Teams Raum.' },
   } as Record<string, { label: string; platz: string; hilfe: string } | null>;
   const ortHinweise: Record<string, string> = {
-    google_meet: 'Der Meet Link wird automatisch erzeugt, sobald dein Google Kalender verbunden ist.',
+    google_meet: 'Der Meet Link wird automatisch erzeugt, sobald der Google Kalender des Büros verbunden ist.',
     telefon_wir: 'Der Gast gibt beim Buchen seine Telefonnummer an.',
   };
   const ortAnzeigen = () => {
@@ -286,7 +316,40 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
       pflicht: li.querySelector<HTMLInputElement>('.frage-pflicht input')!.checked,
     }));
     json.value = JSON.stringify(fragen);
+    unterlagenJson.value = JSON.stringify(
+      [...uListe.querySelectorAll<HTMLLIElement>('.unterlage-zeile')].map((li) => ({
+        titel: li.querySelector<HTMLInputElement>('.u-titel')!.value,
+        url: li.querySelector<HTMLInputElement>('.u-url')!.value,
+        info: li.querySelector<HTMLInputElement>('.u-info')!.value,
+        bild: li.querySelector<HTMLInputElement>('.u-bild')!.value,
+      })),
+    );
   });
+
+  // Unterlagen als Liste bearbeiten, gespeichert als JSON
+  const uListe = document.getElementById('unterlagen-liste')!;
+  const uVorlage = document.getElementById('unterlage-vorlage') as HTMLTemplateElement;
+  const unterlagenJson = document.getElementById('unterlagen-json') as HTMLInputElement;
+  type Unterlage = { titel: string; url: string; info: string; bild: string };
+  const unterlageAnlegen = (u?: Unterlage) => {
+    const knoten = uVorlage.content.firstElementChild!.cloneNode(true) as HTMLLIElement;
+    const nr = ++zaehler;
+    knoten.querySelectorAll<HTMLInputElement>('input').forEach((eingabe, i) => {
+      eingabe.id = `unterlage-${nr}-${i}`;
+      knoten.querySelectorAll('label.feld-label')[i]!.setAttribute('for', eingabe.id);
+    });
+    knoten.querySelector<HTMLInputElement>('.u-titel')!.value = u?.titel ?? '';
+    knoten.querySelector<HTMLInputElement>('.u-url')!.value = u?.url ?? '';
+    knoten.querySelector<HTMLInputElement>('.u-info')!.value = u?.info ?? '';
+    knoten.querySelector<HTMLInputElement>('.u-bild')!.value = u?.bild ?? '';
+    knoten.querySelector('.frage-weg')!.addEventListener('click', () => knoten.remove());
+    uListe.appendChild(knoten);
+    return knoten.querySelector<HTMLInputElement>('.u-titel')!;
+  };
+  try {
+    (JSON.parse(unterlagenJson.value || '[]') as Unterlage[]).forEach((u) => unterlageAnlegen(u));
+  } catch { /* leer lassen */ }
+  document.getElementById('unterlage-plus')!.addEventListener('click', () => unterlageAnlegen().focus());
 </script>
 
 <style>
@@ -327,6 +390,10 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
     display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto auto; gap: var(--raum-3); align-items: end;
     padding: var(--raum-4); background: var(--n-050); border: 1px solid var(--farbe-rahmen);
   }
+  .fragen :global(.unterlage-zeile) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .fragen :global(.unterlage-zeile .feld:nth-child(3)) { grid-column: 1; }
+  .fragen :global(.unterlage-zeile .feld:nth-child(4)) { grid-column: 2; }
+  .fragen :global(.unterlage-zeile .frage-weg) { grid-column: 3; grid-row: 1; }
   .fragen :global(.frage-pflicht) { min-height: 44px; align-items: center; }
   .fragen :global(.symbol) {
     display: grid; place-items: center; width: 44px; height: 44px; background: none; border: 1px solid transparent; cursor: pointer; color: var(--n-700);
@@ -340,5 +407,7 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
     .block { padding: var(--raum-6) var(--raum-4); }
     .fragen :global(.frage) { grid-template-columns: 1fr auto; }
     .fragen :global(.frage .feld:first-child) { grid-column: 1 / -1; }
+    .fragen :global(.unterlage-zeile .feld) { grid-column: 1 / -1; }
+    .fragen :global(.unterlage-zeile .frage-weg) { grid-column: 2; grid-row: auto; justify-self: end; }
   }
 </style>
