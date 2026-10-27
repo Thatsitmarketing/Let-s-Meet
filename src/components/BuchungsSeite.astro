@@ -123,6 +123,7 @@ const absaetze = (terminart.beschreibung ?? '')
       <button type="button" class="knopf knopf--leise knopf--klein zurueck" id="zurueck-kalender"><Icon name="zurueck" />Andere Zeit wählen</button>
       <h2 id="titel-formular">Deine Angaben</h2>
       <p class="gewaehlt" id="gewaehlt-text"></p>
+      <p class="hinweis vorab-hinweis" id="vorab-hinweis" hidden><Icon name="check" />Deine Angaben von unserer Website sind schon eingetragen. Prüf sie kurz und buch den Termin.</p>
 
       <form id="formular" novalidate>
         <div class="feld">
@@ -136,14 +137,12 @@ const absaetze = (terminart.beschreibung ?? '')
           <p class="hilfe" id="hilfe-email">Hierhin schicken wir die Bestätigung mit Kalendereintrag.</p>
           <p class="fehlertext" id="fehler-email"></p>
         </div>
-        {telefonPflicht && (
-          <div class="feld">
-            <label for="f-telefon">Telefon<span class="pflicht" aria-hidden="true">*</span></label>
-            <input id="f-telefon" name="telefon" type="tel" class="eingabe" autocomplete="tel" maxlength="40" required aria-describedby="fehler-telefon" />
-            <p class="hilfe">Unter dieser Nummer rufen wir dich zum Termin an.</p>
-            <p class="fehlertext" id="fehler-telefon"></p>
-          </div>
-        )}
+        <div class="feld">
+          <label for="f-telefon">Telefon{telefonPflicht ? <span class="pflicht" aria-hidden="true">*</span> : <span class="leise"> (optional)</span>}</label>
+          <input id="f-telefon" name="telefon" type="tel" class="eingabe" autocomplete="tel" maxlength="40" required={telefonPflicht} aria-describedby="hilfe-telefon fehler-telefon" />
+          <p class="hilfe" id="hilfe-telefon">{telefonPflicht ? 'Unter dieser Nummer rufen wir dich zum Termin an.' : 'Falls wir dich kurz vorher erreichen müssen.'}</p>
+          <p class="fehlertext" id="fehler-telefon"></p>
+        </div>
         {fragen.map((f) => (
           <div class="feld">
             <label for={`f-frage-${f.id}`}>{f.label}{f.pflicht ? <span class="pflicht" aria-hidden="true">*</span> : <span class="leise"> (optional)</span>}</label>
@@ -352,6 +351,7 @@ const absaetze = (terminart.beschreibung ?? '')
   .zurueck { margin: calc(var(--raum-2) * -1) 0 var(--raum-4) calc(var(--raum-3) * -1); }
   .gewaehlt { margin: calc(var(--raum-4) * -1) 0 var(--raum-6); color: var(--farbe-text-2); font-weight: 500; }
   #formular { display: grid; gap: var(--raum-6); max-width: 560px; }
+  .vorab-hinweis { margin: calc(var(--raum-2) * -1) 0 var(--raum-6); }
   .honig { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
   .turnstile { min-height: 65px; }
 

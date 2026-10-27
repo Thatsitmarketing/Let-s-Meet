@@ -51,6 +51,23 @@ export function starteBuchung() {
   const gewaehltText = $('gewaehlt-text');
   const geladenUm = Date.now();
 
+  // Vorbelegung aus dem Fragment der Adresse (#name=...&email=...&telefon=...&nachricht=...&quelle=...),
+  // zum Beispiel vom Kontakt-Funnel der Homepage. Das Fragment erreicht nie den Server und
+  // verschwindet direkt wieder aus der Adresszeile.
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  const ausFragment = (name: string, max: number) => (fragment.get(name) ?? '').trim().slice(0, max);
+  const vorab = {
+    name: ausFragment('name', 120),
+    email: ausFragment('email', 180),
+    telefon: ausFragment('telefon', 40),
+    nachricht: ausFragment('nachricht', 2000),
+    quelle: ausFragment('quelle', 120),
+  };
+  if (location.hash && Object.values(vorab).some(Boolean)) {
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  const vorabHinweis = document.getElementById('vorab-hinweis');
+
   // Zeitzone: Browserzone als Standard, Liste aller IANA Zonen
   const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone || k.zoneGastgeber;
   let zone = browserZone;
@@ -215,9 +232,14 @@ export function starteBuchung() {
     auswahlAnzeigen(true);
     turnstileLaden();
     const name = $<HTMLInputElement>('f-name');
-    if (!name.value && k.vorbelegt.name) name.value = k.vorbelegt.name;
+    if (!name.value && (k.vorbelegt.name || vorab.name)) name.value = k.vorbelegt.name || vorab.name;
     const email = $<HTMLInputElement>('f-email');
-    if (!email.value && k.vorbelegt.email) email.value = k.vorbelegt.email;
+    if (!email.value && (k.vorbelegt.email || vorab.email)) email.value = k.vorbelegt.email || vorab.email;
+    const telefon = document.getElementById('f-telefon') as HTMLInputElement | null;
+    if (telefon && !telefon.value && vorab.telefon) telefon.value = vorab.telefon;
+    const nachricht = $<HTMLTextAreaElement>('f-nachricht');
+    if (!nachricht.value && vorab.nachricht) nachricht.value = vorab.nachricht;
+    if (vorabHinweis) vorabHinweis.hidden = !(vorab.name || vorab.email);
     $('titel-formular').setAttribute('tabindex', '-1');
     $('titel-formular').focus();
     if (!k.embed) window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -278,7 +300,9 @@ export function starteBuchung() {
     if (name.length < 2) felder.name = 'Bitte gib deinen Namen an.';
     if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email)) felder.email = 'Bitte prüf deine E Mail Adresse.';
     const tel = document.getElementById('f-telefon') as HTMLInputElement | null;
-    if (tel?.required && !/^[0-9+()\/\s.]{5,40}$/.test(tel.value.trim())) felder.telefon = 'Bitte gib eine Telefonnummer an, unter der wir dich erreichen.';
+    const telOk = (t: string) => /^[0-9+()\/\s.-]{5,40}$/.test(t) && t.replace(/\D/g, '').length >= 4;
+    if (tel?.required && !telOk(tel.value.trim())) felder.telefon = 'Bitte gib eine Telefonnummer an, unter der wir dich erreichen.';
+    else if (tel && tel.value.trim() && !telOk(tel.value.trim())) felder.telefon = 'Bitte prüf die Telefonnummer.';
     form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-frage]').forEach((f) => {
       if (f.required && !f.value.trim()) felder[`frage_${f.dataset.frage}`] = 'Bitte füll dieses Feld aus.';
     });
@@ -298,7 +322,7 @@ export function starteBuchung() {
     const turnstileToken = (form.querySelector('[name="cf-turnstile-response"]') as HTMLInputElement | null)?.value ?? '';
     let quelle = '';
     try {
-      quelle = k.embed ? document.referrer || '' : '';
+      quelle = vorab.quelle || (k.embed ? document.referrer || '' : '');
     } catch {
       quelle = '';
     }
