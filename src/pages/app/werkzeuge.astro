@@ -1,0 +1,189 @@
+---
+/* Adminportal: Status der Dienste, Gespräche mit Links zur Homepage, Verweise auf alle Werkzeuge. Nur für Admins. */
+import { env } from 'cloudflare:workers';
+import App from '../../layouts/App.astro';
+import Icon from '../../components/ui/Icon.astro';
+import OrtIcon from '../../components/OrtIcon.astro';
+import { terminartenVon } from '../../lib/abfragen';
+import { googleAktiv } from '../../lib/google';
+import { ORT_LABEL } from '../../lib/typen';
+
+const ich = Astro.locals.nutzer!;
+if (ich.rolle !== 'admin') return Astro.redirect('/app');
+
+const buero = Astro.locals.gastgeber!;
+const arten = await terminartenVon(buero.id);
+const origin = Astro.url.origin;
+
+const E = env as unknown as Record<string, string | undefined>;
+interface Dienst { name: string; text: string; ok: boolean; status: [string, string]; intern?: { href: string; text: string }; extern: { href: string; text: string } }
+const dienste: Dienst[] = [
+  {
+    name: 'Google Kalender und Meet',
+    text: 'Belegte Zeiten, neue Termine mit Meet Link im Kalender von info@thatsit.marketing.',
+    ok: Boolean(buero.google_refresh_token),
+    status: googleAktiv() ? (buero.google_refresh_token ? ['Verbunden', buero.google_email ?? ''] : ['Nicht verbunden', 'OAuth Client ist hinterlegt']) : ['Nicht eingerichtet', 'GOOGLE_CLIENT_ID und GOOGLE_CLIENT_SECRET fehlen'],
+    intern: { href: '/app/integrationen', text: 'Verbindung verwalten' },
+    extern: { href: 'https://console.cloud.google.com/apis/credentials', text: 'Google Cloud Console' },
+  },
+  {
+    name: 'Mailversand (Resend)',
+    text: 'Bestätigungen, Erinnerungen und Absagen an Gäste und Team.',
+    ok: Boolean(E.RESEND_API_KEY),
+    status: E.RESEND_API_KEY ? ['Aktiv', E.MAIL_FROM ?? ''] : ['Kein Schlüssel', 'Mails werden nur protokolliert'],
+    extern: { href: 'https://resend.com/domains', text: 'Resend Domains' },
+  },
+  {
+    name: 'Spamschutz (Turnstile)',
+    text: 'Schutz des Buchungsformulars, zusätzlich Honigtopf und Mindestzeit.',
+    ok: Boolean(E.PUBLIC_TURNSTILE_SITE_KEY && E.TURNSTILE_SECRET_KEY),
+    status: E.PUBLIC_TURNSTILE_SITE_KEY && E.TURNSTILE_SECRET_KEY ? ['Aktiv', ''] : ['Aus', 'Nur Honigtopf und Mindestzeit'],
+    extern: { href: 'https://dash.cloudflare.com/?to=/:account/turnstile', text: 'Cloudflare Turnstile' },
+  },
+  {
+    name: 'Webhook (CRM, Make)',
+    text: 'Jede Buchung, Umbuchung und Absage als signiertes JSON, etwa für Close.',
+    ok: Boolean(buero.webhook_url),
+    status: buero.webhook_url ? ['Aktiv', new URL(buero.webhook_url).host] : ['Aus', 'Keine Adresse hinterlegt'],
+    intern: { href: '/app/integrationen#webhook', text: 'Webhook einrichten' },
+    extern: { href: 'https://app.close.com/', text: 'Close öffnen' },
+  },
+  {
+    name: 'Cron (Erinnerungen, Löschfristen)',
+    text: 'Läuft alle 10 Minuten als Cloudflare Cron Trigger. Manueller Aufruf über /api/cron.',
+    ok: Boolean(E.CRON_SECRET),
+    status: E.CRON_SECRET ? ['Geschützt', ''] : ['Kein Secret', 'CRON_SECRET fehlt'],
+    extern: { href: 'https://dash.cloudflare.com/?to=/:account/workers/services/view/let-s-meet/production/settings', text: 'Worker Einstellungen' },
+  },
+];
+
+// Wo ein Gespräch auf der Homepage (thatsit.marketing) verlinkt ist. Pflege: src/daten/letsmeet.ts und src/daten/blog.ts im Homepage Repository.
+const HOMEPAGE: Record<string, string> = {
+  strategiegespraech: 'Funnel (Webdesign, Fotos & Videos, Mehrfachauswahl), Blog Website und Fotos & Videos',
+  'strategiegespraech-social-media': 'Funnel mit Auswahl Social Media, Blog Social Media',
+  'strategiegespraech-recruiting': 'Funnel mit Auswahl Recruiting, Blog Recruiting',
+  'sichtbarkeits-check': 'Blog KI Sichtbarkeit',
+};
+
+const links: { gruppe: string; eintraege: { name: string; href: string; text: string }[] }[] = [
+  {
+    gruppe: 'Betrieb',
+    eintraege: [
+      { name: 'Cloudflare Worker let-s-meet', href: 'https://dash.cloudflare.com/?to=/:account/workers/services/view/let-s-meet/production', text: 'Deployments, Secrets, Domain, Logs' },
+      { name: 'Datenbank D1 terminethatsitmarketing', href: 'https://dash.cloudflare.com/?to=/:account/workers/d1', text: 'Tabellen und Abfragen' },
+      { name: 'Resend', href: 'https://resend.com/emails', text: 'Versandprotokoll und Domain' },
+      { name: 'Google Kalender', href: 'https://calendar.google.com/', text: 'Kalender von info@thatsit.marketing' },
+    ],
+  },
+  {
+    gruppe: 'Code',
+    eintraege: [
+      { name: 'Let\'s Meet (GitHub)', href: 'https://github.com/Thatsitmarketing/Let-s-Meet', text: 'Terminbuchung und Backoffice' },
+      { name: 'Homepage (GitHub)', href: 'https://github.com/Thatsitmarketing/thatsit_homepage_new', text: 'Funnel, Blog, Playbooks' },
+    ],
+  },
+  {
+    gruppe: 'Website und Vertrieb',
+    eintraege: [
+      { name: 'Homepage', href: 'https://thatsit.marketing/', text: 'Startseite und Leistungen' },
+      { name: 'Blog', href: 'https://thatsit.marketing/blog/', text: 'Beiträge mit Playbook und Strategiegespräch' },
+      { name: 'Close CRM', href: 'https://app.close.com/', text: 'Leads, Meetings, Pipeline' },
+      { name: 'Calendly (alt)', href: 'https://calendly.com/event_types/user/me', text: 'Zum Abschalten, sobald alle Links umgestellt sind' },
+    ],
+  },
+];
+
+const sichtbarkeit = (a: (typeof arten)[number]): [string, string] => (!a.aktiv ? ['Inaktiv', ''] : a.geheim ? ['Nur per Link', ''] : ['Öffentlich', 'pille--erfolg']);
+---
+<App titel="Adminportal" eyebrow="Dienste, Gespräche und Werkzeuge des Büros">
+  <section class="block" aria-labelledby="d-titel">
+    <h2 id="d-titel">Dienste</h2>
+    <div class="dienste">
+      {dienste.map((d) => (
+        <article class="karte dienst">
+          <div class="dienst-kopf">
+            <h3>{d.name}</h3>
+            <span class:list={['pille', d.ok && 'pille--erfolg']}>{d.status[0]}</span>
+          </div>
+          <p class="leise klein">{d.text}</p>
+          {d.status[1] && <p class="klein code-zeile">{d.status[1]}</p>}
+          <div class="reihe">
+            {d.intern && <a class="knopf knopf--rahmen knopf--klein" href={d.intern.href}><Icon name="stecker" groesse={16} />{d.intern.text}</a>}
+            <a class="knopf knopf--leise knopf--klein" href={d.extern.href} target="_blank" rel="noopener"><Icon name="extern" groesse={16} />{d.extern.text}</a>
+          </div>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="g-titel">
+    <div class="titelzeile">
+      <h2 id="g-titel">Gespräche und Homepage</h2>
+      <a class="knopf knopf--orange knopf--klein" href="/app/terminarten/neu"><Icon name="plus" groesse={16} />Neues Gespräch</a>
+    </div>
+    <p class="leise klein">Jedes Gespräch hat einen eigenen Link. Welches Gespräch die Homepage verlinkt, wird dort pro Leistung festgelegt (<code>src/daten/letsmeet.ts</code> und <code>src/daten/blog.ts</code> im Repository der Homepage). Neue Gespräche erscheinen erst auf der Homepage, wenn sie dort eingetragen sind.</p>
+    <div class="karte tabelle-rahmen">
+      <table class="tabelle">
+        <thead><tr><th>Gespräch</th><th>Dauer und Ort</th><th>Status</th><th>Auf der Homepage</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
+        <tbody>
+          {arten.map((a) => {
+            const [text, klasse] = sichtbarkeit(a);
+            const url = `${origin}/${a.slug}`;
+            return (
+              <tr>
+                <td><strong>{a.titel}</strong><br /><span class="klein leise code-zeile">/{a.slug}</span></td>
+                <td class="klein"><OrtIcon typ={a.ort_typ} groesse={16} /> {a.dauer_min} Min, {ORT_LABEL[a.ort_typ]}</td>
+                <td><span class:list={['pille', klasse]}>{text}</span></td>
+                <td class="klein">{HOMEPAGE[a.slug] ?? <span class="leise">Nicht verlinkt</span>}</td>
+                <td class="aktionen">
+                  <button type="button" class="knopf knopf--rahmen knopf--klein" data-kopieren={url}><Icon name="kopieren" groesse={16} />Link</button>
+                  <a class="knopf knopf--leise knopf--klein" href={url} target="_blank" rel="noopener" aria-label={`${a.titel} ansehen`}><Icon name="extern" groesse={16} /></a>
+                  <a class="knopf knopf--leise knopf--klein" href={`/app/terminarten/${a.id}`}><Icon name="stift" groesse={16} />Bearbeiten</a>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="l-titel">
+    <h2 id="l-titel">Werkzeuge und Links</h2>
+    <div class="dienste">
+      {links.map((g) => (
+        <article class="karte dienst">
+          <h3>{g.gruppe}</h3>
+          <ul class="linkliste">
+            {g.eintraege.map((l) => (
+              <li><a href={l.href} target="_blank" rel="noopener"><Icon name="extern" groesse={16} /><span><strong>{l.name}</strong><br /><span class="klein leise">{l.text}</span></span></a></li>
+            ))}
+          </ul>
+        </article>
+      ))}
+    </div>
+    <p class="leise klein">Im Backoffice selbst: <a href="/app/team">Team</a>, <a href="/app/verfuegbarkeit">Verfügbarkeit</a>, <a href="/app/einbetten">Einbetten</a>, <a href="/app/einstellungen">Einstellungen der Buchungsseite</a>.</p>
+  </section>
+</App>
+
+<style>
+  .block { display: grid; gap: var(--raum-4); margin-bottom: var(--raum-8); }
+  .block h2 { font-size: var(--text-h3, 1.375rem); }
+  .titelzeile { display: flex; align-items: center; justify-content: space-between; gap: var(--raum-4); flex-wrap: wrap; }
+  .dienste { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--raum-4); }
+  .dienst { padding: var(--raum-5); display: grid; gap: var(--raum-3); align-content: start; }
+  .dienst-kopf { display: flex; align-items: center; justify-content: space-between; gap: var(--raum-3); }
+  .dienst h3 { font-size: var(--text-base); }
+  .code-zeile { font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
+  .reihe { display: flex; flex-wrap: wrap; gap: var(--raum-2); }
+  .tabelle-rahmen { overflow-x: auto; }
+  .tabelle { width: 100%; border-collapse: collapse; min-width: 860px; }
+  .tabelle th, .tabelle td { text-align: left; padding: var(--raum-3) var(--raum-4); border-bottom: 1px solid var(--farbe-rahmen); vertical-align: top; }
+  .tabelle th { font-size: var(--text-sm); font-weight: 600; color: var(--n-600); }
+  .tabelle tr:last-child td { border-bottom: 0; }
+  .aktionen { display: flex; flex-wrap: wrap; gap: var(--raum-2); justify-content: flex-end; }
+  .linkliste { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-3); }
+  .linkliste a { display: flex; gap: var(--raum-3); align-items: flex-start; text-decoration: none; color: inherit; }
+  .linkliste a:hover strong { text-decoration: underline; }
+  .linkliste :global(svg) { margin-top: 3px; flex: none; color: var(--farbe-akzent); }
+</style>
