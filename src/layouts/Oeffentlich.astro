@@ -18,7 +18,13 @@ const embed = Astro.url.searchParams.get('embed') === '1';
   {!embed && (
     <header class="kopf">
       <div class="kopf-innen">
-        <Logo form="voll" hoehe={bild ? 40 : 34} href="/" variante={bild ? 'weiss' : 'schwarz'} />
+        {bild ? (
+          <a href="/" class="kopf-logo" aria-label="That's it. Marketing, zur Startseite">
+            <img src="/images/brand/logo-weiss.webp" alt="Logo That's it. Marketing" title="That's it. Marketing, Gelsenkirchen" width="198" height="60" />
+          </a>
+        ) : (
+          <Logo form="voll" hoehe={34} href="/" />
+        )}
       </div>
     </header>
   )}
@@ -84,6 +90,8 @@ const embed = Astro.url.searchParams.get('embed') === '1';
     border-top: 3px solid var(--farbe-akzent);
     border-bottom: 1px solid var(--farbe-rahmen);
   }
+  .kopf-logo { display: inline-block; line-height: 0; }
+  .kopf-logo img { height: 60px; width: auto; }
   .kopf-innen { padding-top: var(--raum-3); padding-bottom: var(--raum-3); }
   .kopf-innen,
   .fuss-innen {
