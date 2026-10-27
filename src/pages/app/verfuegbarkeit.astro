@@ -328,7 +328,7 @@ if (!zonen.includes(nutzer.zeitzone)) zonen.unshift(nutzer.zeitzone);
 
 <style>
   .raster {
-    display: grid; gap: var(--raum-6); align-items: start;
+    display: grid; gap: var(--raum-8); align-items: start;
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: 'kal' 'woche' 'aus';
   }
@@ -342,28 +342,28 @@ if (!zonen.includes(nutzer.zeitzone)) zonen.unshift(nutzer.zeitzone);
     .raster { grid-template-columns: 640px minmax(0, 1fr); grid-template-areas: 'woche kal' 'woche aus'; }
     .woche { position: sticky; top: var(--raum-6); }
   }
-  .block { padding: var(--raum-6); display: grid; gap: var(--raum-4); min-width: 0; }
+  .block { padding: var(--raum-8); display: grid; gap: var(--raum-6); min-width: 0; }
   .block h2 { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-h4); letter-spacing: 0; }
-  .block-titel { display: grid; gap: var(--raum-1); }
+  .block-titel { display: grid; gap: var(--raum-2); }
   .block-kopf { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--raum-4); flex-wrap: wrap; }
   .block-kopf .block-titel { flex: 1 1 220px; }
   .zone { min-width: 200px; }
   .tage { list-style: none; margin: 0; padding: 0; }
-  .tag { display: grid; grid-template-columns: 140px minmax(0, 1fr) auto; gap: var(--raum-4); align-items: start; padding: var(--raum-3) 0; border-top: 1px solid var(--farbe-rahmen); }
+  .tag { display: grid; grid-template-columns: 140px minmax(0, 1fr) auto; gap: var(--raum-4) var(--raum-6); align-items: start; padding: var(--raum-4) 0; border-top: 1px solid var(--farbe-rahmen); }
   .tag-name { min-height: 44px; align-items: center; font-weight: 600; }
-  .intervalle { display: grid; gap: var(--raum-2); }
+  .intervalle { display: grid; gap: var(--raum-3); }
   .intervall { display: flex; align-items: center; gap: var(--raum-2); }
   .intervall .eingabe { width: 8.5rem; }
   .nicht { display: none; min-height: 44px; align-items: center; }
   .tag.aus .intervall { display: none; }
   .tag.aus .nicht { display: flex; }
-  .tag-aktionen { display: flex; gap: 2px; padding-left: var(--raum-2); border-left: 1px solid var(--farbe-rahmen); }
+  .tag-aktionen { display: flex; align-items: center; min-height: 44px; gap: var(--raum-1); padding-left: var(--raum-4); border-left: 1px solid var(--farbe-rahmen); }
   .tag.aus .kopie { visibility: hidden; }
   .symbol {
     display: grid; place-items: center; width: 40px; height: 40px; background: none; border: 1px solid transparent; cursor: pointer; color: var(--n-700); border-radius: var(--radius-s); flex: none;
   }
   .symbol:hover { border-color: var(--n-900); color: var(--n-900); }
-  .block-fuss { display: flex; align-items: center; gap: var(--raum-4); flex-wrap: wrap; padding-top: var(--raum-4); border-top: 1px solid var(--farbe-rahmen); }
+  .block-fuss { display: flex; align-items: center; gap: var(--raum-4); flex-wrap: wrap; padding-top: var(--raum-6); border-top: 1px solid var(--farbe-rahmen); }
   .ungespeichert { display: inline-flex; align-items: center; gap: var(--raum-2); font-weight: 600; }
   .ungespeichert::before { content: ''; width: 8px; height: 8px; background: var(--farbe-akzent); }
 
@@ -382,7 +382,7 @@ if (!zonen.includes(nutzer.zeitzone)) zonen.unshift(nutzer.zeitzone);
   .leer { padding: var(--raum-4); border: 1px dashed var(--farbe-rahmen-stark); }
   @media (max-width: 640px) {
     .tag { grid-template-columns: minmax(0, 1fr) auto; }
-    .block { padding: var(--raum-4); }
+    .block { padding: var(--raum-4); gap: var(--raum-4); }
     .intervalle { grid-column: 1 / -1; grid-row: 2; }
     .intervall .eingabe { width: 0; flex: 1 1 0; min-width: 0; }
     .zwei { grid-template-columns: 1fr; }

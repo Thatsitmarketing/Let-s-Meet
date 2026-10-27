@@ -1,0 +1,154 @@
+---
+/** Adminportal: Gespräche samt Homepage Zuordnung und Verweise auf alle Werkzeuge. Nur für Admins, eingebunden in die Einstellungen. */
+import Icon from './ui/Icon.astro';
+import Marke from './ui/Marke.astro';
+import OrtIcon from './OrtIcon.astro';
+import { terminartenVon } from '../lib/abfragen';
+import { ORT_LABEL } from '../lib/typen';
+
+const buero = Astro.locals.gastgeber!;
+const arten = await terminartenVon(buero.id);
+const origin = Astro.url.origin;
+type MarkeName = 'google' | 'resend' | 'cloudflare' | 'github' | 'close' | 'thatsit' | 'kalender';
+
+// Wo ein Gespräch auf der Homepage (thatsit.marketing) verlinkt ist. Pflege: src/daten/letsmeet.ts und src/daten/blog.ts im Homepage Repository.
+const HOMEPAGE: Record<string, string> = {
+  strategiegespraech: 'Funnel (Webdesign, Fotos & Videos, Mehrfachauswahl), Blog Website und Fotos & Videos',
+  'strategiegespraech-social-media': 'Funnel mit Auswahl Social Media, Blog Social Media',
+  'strategiegespraech-recruiting': 'Funnel mit Auswahl Recruiting, Blog Recruiting',
+  'sichtbarkeits-check': 'Blog KI Sichtbarkeit',
+};
+
+const links: { gruppe: string; eintraege: { marke: MarkeName; name: string; href: string; text: string }[] }[] = [
+  {
+    gruppe: 'Betrieb',
+    eintraege: [
+      { marke: 'cloudflare', name: 'Cloudflare Worker let-s-meet', href: 'https://dash.cloudflare.com/?to=/:account/workers/services/view/let-s-meet/production', text: 'Deployments, Secrets, Domain, Logs' },
+      { marke: 'cloudflare', name: 'Datenbank D1 terminethatsitmarketing', href: 'https://dash.cloudflare.com/?to=/:account/workers/d1', text: 'Tabellen und Abfragen' },
+      { marke: 'resend', name: 'Resend', href: 'https://resend.com/emails', text: 'Versandprotokoll und Domain' },
+      { marke: 'kalender', name: 'Google Kalender', href: 'https://calendar.google.com/', text: 'Kalender von info@thatsit.marketing' },
+    ],
+  },
+  {
+    gruppe: 'Code',
+    eintraege: [
+      { marke: 'github', name: 'Let\'s Meet (GitHub)', href: 'https://github.com/Thatsitmarketing/Let-s-Meet', text: 'Terminbuchung und Backoffice' },
+      { marke: 'github', name: 'Homepage (GitHub)', href: 'https://github.com/Thatsitmarketing/thatsit_homepage_new', text: 'Funnel, Blog, Playbooks' },
+    ],
+  },
+  {
+    gruppe: 'Website und Vertrieb',
+    eintraege: [
+      { marke: 'thatsit', name: 'Homepage', href: 'https://thatsit.marketing/', text: 'Startseite und Leistungen' },
+      { marke: 'thatsit', name: 'Blog', href: 'https://thatsit.marketing/blog/', text: 'Beiträge mit Playbook und Strategiegespräch' },
+      { marke: 'close', name: 'Close CRM', href: 'https://app.close.com/', text: 'Leads, Meetings, Pipeline' },
+      { marke: 'kalender', name: 'Calendly (alt)', href: 'https://calendly.com/event_types/user/me', text: 'Zum Abschalten, sobald alle Links umgestellt sind' },
+    ],
+  },
+];
+
+const sichtbarkeit = (a: (typeof arten)[number]): [string, string] => (!a.aktiv ? ['Inaktiv', ''] : a.geheim ? ['Nur per Link', ''] : ['Öffentlich', 'pille--erfolg']);
+---
+  <section class="block" aria-labelledby="g-titel">
+    <div class="titelzeile">
+      <h2 id="g-titel">Gespräche und Homepage</h2>
+      <a class="knopf knopf--orange knopf--klein" href="/app/terminarten/neu"><Icon name="plus" groesse={16} />Neues Gespräch</a>
+    </div>
+    <p class="leise klein">Jedes Gespräch hat einen eigenen Link. Welches Gespräch die Homepage verlinkt, wird dort pro Leistung festgelegt (<code>src/daten/letsmeet.ts</code> und <code>src/daten/blog.ts</code> im Repository der Homepage). Neue Gespräche erscheinen erst auf der Homepage, wenn sie dort eingetragen sind.</p>
+    <div class="karte tabelle-rahmen">
+      <table class="tabelle">
+        <thead><tr><th>Gespräch</th><th>Dauer und Ort</th><th>Status</th><th>Auf der Homepage</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
+        <tbody>
+          {arten.map((a) => {
+            const [text, klasse] = sichtbarkeit(a);
+            const url = `${origin}/${a.slug}`;
+            return (
+              <tr>
+                <td data-label="Gespräch"><strong>{a.titel}</strong><span class="klein leise code-zeile slug">/{a.slug}</span></td>
+                <td data-label="Dauer und Ort" class="klein"><span class="ort"><OrtIcon typ={a.ort_typ} groesse={16} /> {a.dauer_min} Min, {ORT_LABEL[a.ort_typ]}</span></td>
+                <td data-label="Status"><span class:list={['pille', klasse]}>{text}</span></td>
+                <td data-label="Auf der Homepage" class="klein">{HOMEPAGE[a.slug] ?? <span class="leise">Nicht verlinkt</span>}</td>
+                <td class="aktionen">
+                  <span class="aktionen-in">
+                  <button type="button" class="knopf knopf--rahmen knopf--klein" data-kopieren={url}><Icon name="kopieren" groesse={16} />Link</button>
+                  <a class="knopf knopf--leise knopf--klein" href={url} target="_blank" rel="noopener" aria-label={`${a.titel} ansehen`}><Icon name="extern" groesse={16} /></a>
+                  <a class="knopf knopf--leise knopf--klein" href={`/app/terminarten/${a.id}`}><Icon name="stift" groesse={16} />Bearbeiten</a>
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="l-titel">
+    <h2 id="l-titel">Werkzeuge und Links</h2>
+    <div class="dienste dienste--links">
+      {links.map((g) => (
+        <article class="karte dienst">
+          <h3 class="gruppe">{g.gruppe}</h3>
+          <ul class="linkliste">
+            {g.eintraege.map((l) => (
+              <li><a href={l.href} target="_blank" rel="noopener"><Marke marke={l.marke} name={l.name} groesse={36} /><span class="ltext"><strong>{l.name}</strong><span class="klein leise">{l.text}</span></span><Icon name="extern" groesse={16} /></a></li>
+            ))}
+          </ul>
+        </article>
+      ))}
+    </div>
+  </section>
+<style>
+  .block { display: grid; gap: var(--raum-6); margin-bottom: var(--raum-12); }
+  .block:last-child { margin-bottom: 0; }
+  .block h2 { font-size: var(--text-h3, 1.375rem); }
+  .block > p { margin: 0; max-width: 80ch; line-height: 1.6; }
+  .titelzeile { display: flex; align-items: center; justify-content: space-between; gap: var(--raum-4); flex-wrap: wrap; }
+  .dienste { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--raum-4); align-items: stretch; }
+  .dienste--links { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+  .dienst { padding: var(--raum-6); display: flex; flex-direction: column; gap: var(--raum-3); min-width: 0; }
+  .dienst > p { margin: 0; line-height: 1.55; }
+  .dienst .reihe { margin-top: auto; padding-top: var(--raum-3); }
+  .dienst-kopf { display: flex; align-items: center; gap: var(--raum-3); }
+  .dienst-titel { display: grid; gap: var(--raum-2); justify-items: start; min-width: 0; }
+  .dienst h3 { font-size: var(--text-base); line-height: 1.3; margin: 0; }
+  .gruppe { font-size: var(--text-xs) !important; letter-spacing: 0.2em; text-transform: uppercase; color: var(--n-600); padding-bottom: var(--raum-3); border-bottom: 1px solid var(--farbe-rahmen); }
+  .code-zeile { font-family: ui-monospace, monospace; overflow-wrap: anywhere; min-height: 1.4em; }
+  .reihe { display: flex; flex-wrap: wrap; gap: var(--raum-2); }
+  .tabelle-rahmen { overflow: hidden; }
+  .tabelle { width: 100%; border-collapse: collapse; }
+  .tabelle th, .tabelle td { text-align: left; padding: var(--raum-4) var(--raum-6); border-bottom: 1px solid var(--farbe-rahmen); vertical-align: middle; }
+  .tabelle th { font-size: var(--text-sm); font-weight: 600; color: var(--n-600); background: var(--n-050, transparent); white-space: nowrap; }
+  .tabelle tr:last-child td { border-bottom: 0; }
+  .tabelle .slug { display: block; margin-top: 2px; }
+  .ort { display: inline-flex; gap: var(--raum-2); align-items: center; }
+  .aktionen { width: 1%; white-space: nowrap; }
+  .aktionen-in { display: flex; gap: var(--raum-2); justify-content: flex-end; align-items: center; }
+  .linkliste { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+  .linkliste li + li { border-top: 1px solid var(--farbe-rahmen); }
+  .linkliste a { display: flex; gap: var(--raum-3); align-items: center; text-decoration: none; color: inherit; padding: var(--raum-3) 0; }
+  .linkliste .ltext { display: grid; gap: 2px; min-width: 0; flex: 1; line-height: 1.4; }
+  .linkliste a:hover strong { text-decoration: underline; }
+  .linkliste a > :global(svg) { flex: none; color: var(--n-500, var(--farbe-akzent)); }
+  .linkliste a:hover > :global(svg) { color: var(--farbe-akzent); }
+  @media (max-width: 1100px) {
+    .tabelle th, .tabelle td { padding: var(--raum-3) var(--raum-4); }
+  }
+  @media (max-width: 900px) {
+    .tabelle thead { display: none; }
+    .tabelle, .tabelle tbody { display: block; }
+    .tabelle tr { display: grid; grid-template-columns: 1fr auto; gap: var(--raum-2) var(--raum-4); padding: var(--raum-4); border-bottom: 1px solid var(--farbe-rahmen); }
+    .tabelle tr:last-child { border-bottom: 0; }
+    .tabelle td { display: block; padding: 0; border: 0; }
+    .tabelle td:nth-child(1) { grid-column: 1; }
+    .tabelle td:nth-child(3) { grid-column: 2; grid-row: 1; justify-self: end; }
+    .tabelle td:nth-child(2), .tabelle td:nth-child(4), .tabelle td.aktionen { grid-column: 1 / -1; }
+    .tabelle td:nth-child(4)::before { content: attr(data-label); display: block; font-size: var(--text-xs); letter-spacing: 0.2em; text-transform: uppercase; color: var(--n-600); margin-bottom: 2px; }
+    .aktionen { width: auto; padding-top: var(--raum-2) !important; }
+    .aktionen-in { justify-content: flex-start; }
+  }
+  @media (max-width: 480px) {
+    .dienst { padding: var(--raum-4); }
+    .block { margin-bottom: var(--raum-8); gap: var(--raum-4); }
+  }
+</style>
