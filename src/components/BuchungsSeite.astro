@@ -15,10 +15,10 @@ import { formatDatumLang, formatSpanne } from '../lib/zeit';
 interface Props {
   gastgeber: Nutzer;
   terminart: Terminart;
-  /** Alle öffentlichen Terminarten für die Auswahl oben, leer oder eine bedeutet keine Auswahl */
-  arten: Terminart[];
+  /** Wird nicht mehr für eine Auswahl genutzt: jede Terminart hat ihre eigene Seite */
+  arten?: Terminart[];
 }
-const { gastgeber, terminart, arten } = Astro.props;
+const { gastgeber, terminart } = Astro.props;
 
 const p = Astro.url.searchParams;
 const embed = p.get('embed') === '1';
@@ -47,7 +47,6 @@ const konfig = {
 };
 const telefonPflicht = terminart.ort_typ === 'telefon_wir';
 const ortText = terminart.ort_typ === 'vor_ort' && terminart.ort_wert ? terminart.ort_wert : ORT_LABEL[terminart.ort_typ];
-const auswahl = arten.length > 1 && !umbuchenGueltig;
 
 // Beschreibung: Absätze durch Leerzeilen. Endet die erste Zeile eines Absatzes mit Doppelpunkt
 // und folgen weitere Zeilen, werden diese als Liste mit Haken gezeigt.
@@ -72,17 +71,6 @@ const absaetze = (terminart.beschreibung ?? '')
 
 <div class:list={['buchung', 'karte', { 'ohne-details': !detailsZeigen, embed }]} id="buchung" data-konfig={JSON.stringify(konfig)}>
   <div class="bereich">
-    {auswahl && (
-      <nav class="arten" aria-label="Terminart wählen">
-        {arten.map((a) => (
-          <a href={`/${a.slug}${suffix}`} class="art-tab" aria-current={a.id === terminart.id ? 'page' : undefined}>
-            <span class="art-name">{a.titel}</span>
-            <span class="art-dauer">{a.dauer_min} Min</span>
-          </a>
-        ))}
-      </nav>
-    )}
-
     {umbuchenGueltig && (
       <p class="hinweis hinweis--akzent umbuchen-hinweis">
         <Icon name="umbuchen" />
