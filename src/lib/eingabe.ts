@@ -2,7 +2,7 @@ export const trimmen = (wert: unknown, max = 500) => String(wert ?? '').trim().s
 
 export const emailGueltig = (email: string) => email.length <= 180 && /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email);
 
-export const telefonGueltig = (tel: string) => /^[0-9+()\/\s.]{5,40}$/.test(tel);
+export const telefonGueltig = (tel: string) => /^[0-9+()\/\s.-]{5,40}$/.test(tel) && /\d{4}/.test(tel.replace(/\D/g, ''));
 
 export const urlGueltig = (url: string) => {
   try {

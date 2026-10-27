@@ -70,7 +70,7 @@ Absenderdomain `thatsit.marketing` bei Resend verifizieren (SPF, DKIM), `RESEND_
 | Pfad | Zweck |
 | --- | --- |
 | `/` | Zentrale Buchungsseite: erste öffentliche Terminart des Büros, Kalender mit direkt geöffnetem erstem freien Tag, rechts Beschreibung, Unterlagen. Bürofoto als Hintergrund, Teamleiste unter dem Kalender. Bei mehreren Terminarten Auswahl oben |
-| `/{terminart}` | Dieselbe Seite für eine bestimmte Terminart. Parameter: `embed=1`, `details=0`, `name`, `email`, `umbuchen={id}` |
+| `/{terminart}` | Dieselbe Seite für eine bestimmte Terminart. Parameter: `embed=1`, `details=0`, `name`, `email`, `umbuchen={id}`. Vorbelegung ohne Serverkontakt über das Fragment `#name=&email=&telefon=&nachricht=&quelle=` (Schnittstelle zur Homepage, siehe unten) |
 | `/{nutzer}`, `/{nutzer}/{terminart}` | Alte Personenlinks, 301 auf `/` bzw. `/{terminart}` (Parameter bleiben erhalten) |
 | `/termin/{id}` | Bestätigung und Verwaltung für den Gast (Kalender, Umbuchen, Absagen) |
 | `/termin/{id}/absagen` | Absage mit optionalem Grund |
@@ -153,6 +153,10 @@ Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `termina
 
 Unterlagen zur Vorbereitung (Quelle Google Drive, Ordner mit den Playbook PDFs, und Homepage `src/daten/playbooks.ts`): Website Conversion, Social Media, Social Recruiting und Gastro Marketing Playbook verlinken auf die öffentlichen Landingpages `*-playbook.thatsit.marketing`, dazu `thatsit.marketing/referenzen/`. Die PDFs in Drive sind nicht öffentlich freigegeben, darum nicht direkt verlinkt. Weitere Unterlagen pflegt ihr im Terminart Editor. Keine IP Adressen, keine User Agents. Löschfrist `loeschen_ab` 365 Tage nach Terminende, der Cron löscht.
 
+### Schnittstelle zur Homepage (Kontakt Funnel)
+
+Der vierstufige Kontakt Funnel der Homepage (`Thatsitmarketing/thatsit_homepage_new`, `src/components/ui/KontaktFunnel.astro`, Link in `src/daten/letsmeet.ts`) sendet die Anfrage wie bisher an `/api/kontakt` und leitet danach auf `/erstgespraech#name=...&email=...&telefon=...&nachricht=...&quelle=website {variante}` weiter. `src/scripts/buchung.ts` liest das Fragment, entfernt es sofort aus der Adresszeile (`history.replaceState`) und füllt Name, E Mail, Telefon und „Was sollen wir vorab wissen?“ (Unternehmen, Website, Teamgröße, Interesse) im Formularschritt vor, mit Hinweis „Deine Angaben von unserer Website sind schon eingetragen“. `quelle` landet in `buchungen.quelle`. Das Fragment geht nie an einen Server, die Daten stehen also in keinem Log. Telefonfeld ist immer sichtbar (Pflicht nur bei „Telefon, wir rufen an“), Nummern mit Bindestrich sind erlaubt.
+
 ## Umgebungsvariablen mit Zweck, ohne Werte
 
 | Name | Art | Zweck |
@@ -185,6 +189,8 @@ Unterlagen zur Vorbereitung (Quelle Google Drive, Ordner mit den Playbook PDFs, 
 * Secrets in Cloudflare setzen, Resend Domain verifizieren, Turnstile Widget anlegen
 * Google OAuth Client anlegen (Anleitung oben). Google Verbindung, freeBusy und Meet Links sind mangels Zugang in der Entwicklung nicht live getestet
 * Datenschutzerklärung auf thatsit.marketing um Let's Meet ergänzen (Zweck, Rechtsgrundlage, Speicherdauer 12 Monate, Empfänger Cloudflare, Resend, Google)
+* Dauer abstimmen: die Homepage verspricht 60 Minuten Erstgespräch, die Terminart steht auf 30 Minuten (Entscheidung offen)
+* Recruiting Funnel der Homepage (`/api/lead`) ist noch nicht an Let's Meet angebunden
 * Optional später: Rundenverteilung im Team, mehrere Verfügbarkeitspläne pro Person, Zahlungen, Microsoft Kalender
 
 ## Änderungsverlauf mit Datum
@@ -199,3 +205,4 @@ Unterlagen zur Vorbereitung (Quelle Google Drive, Ordner mit den Playbook PDFs, 
 * 2026-10-26: Schema `0001_grundschema.sql` auf die D1 `terminethatsitmarketing` eingespielt und in `d1_migrations` vermerkt, damit `wrangler d1 migrations apply` es nicht doppelt ausführt (übernommen aus Branch `claude/affectionate-pasteur-q3ennq`)
 * 2026-10-27: Umbau auf zentrale Buchung über das Büro info@thatsit.marketing statt einzelner Mitarbeiter. Neue Startseite mit Kalender und direkt sichtbaren freien Zeiten, rechts Beschreibung und Unterlagen zur Vorbereitung (Playbooks, Referenzen), Teamleiste mit Foto und Portraits, Bürofoto aus dem Homepage Repository als Hintergrund. Neue Adressen `/{terminart}`, alte Personenlinks leiten weiter. Backoffice arbeitet für alle angemeldeten Konten auf dem Büro (Terminarten, Termine, Verfügbarkeit, Einbetten, Integrationen), Einstellungen mit Karte für die Buchungsseite, Unterlagen im Terminart Editor, Migration 0002. Geprüft lokal mit Abbild der echten D1 Daten: Migration, Typprüfung, Build, Buchung bis Bestätigungsseite, alle Backofficeseiten, Screenshots in 390, 900 (Embed), 1024, 1440 und 2000px ohne horizontales Scrollen. Lokal nur Node 22.22 vorhanden, Astro daher direkt über `dist/cli` gestartet
 * 2026-10-27: Migration `0002_zentrales_buero.sql` auf die D1 `terminethatsitmarketing` eingespielt und in `d1_migrations` vermerkt. Ergebnis: info@thatsit.marketing ist Büro („That's it. Marketing“, Büro Gelsenkirchen) mit Erstgespräch inklusive Beschreibung und fünf Unterlagen, Verfügbarkeit Mo bis Fr 9 bis 17 Uhr. Erstgespräche von Mike und Victor inaktiv. Keine Buchungen betroffen (es gab keine)
+* 2026-10-27: Schnittstelle zum Kontakt Funnel der Homepage: Vorbelegung über das Fragment der Adresse (Name, E Mail, Telefon, Nachricht, Quelle), Telefonfeld immer sichtbar, Bindestrich in Telefonnummern erlaubt. Lokal geprüft: Funnel ausgefüllt, Weiterleitung, Felder vorausgefüllt, Buchung mit allen Angaben gespeichert. Typprüfung ohne Fehler
