@@ -9,7 +9,7 @@ interface Props {
 const { name, url, groesse = 64 } = Astro.props;
 ---
 <span class="avatar" style={`--g:${groesse}px`}>
-  {url ? <img src={url} alt="" width={groesse} height={groesse} loading="lazy" /> : <span class="kuerzel" aria-hidden="true">{initialen(name)}</span>}
+  {url ? <img src={url} alt={`Profilbild ${name}`} title={name} width={groesse} height={groesse} loading="lazy" /> : <span class="kuerzel" aria-hidden="true">{initialen(name)}</span>}
   <span class="punkt-ecke" aria-hidden="true"></span>
 </span>
 <style>

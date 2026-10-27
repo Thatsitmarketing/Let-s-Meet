@@ -29,7 +29,7 @@ export function slugify(text: string) {
 }
 
 export const RESERVIERTE_SLUGS = new Set([
-  'app', 'api', 'termin', 'embed', 'embed.js', 'fonts', 'images', '_astro', 'favicon.svg', 'favicon.ico', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'site.webmanifest', 'robots.txt', 'setup', 'login', 'impressum', 'datenschutz',
+  'app', 'api', 'termin', 'embed', 'embed.js', 'fonts', 'images', '_astro', 'favicon.svg', 'favicon.png', 'favicon.ico', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'site.webmanifest', 'robots.txt', 'setup', 'login', 'impressum', 'datenschutz',
   'sitemap.xml', '404', 'buero', 'team',
 ]);
 

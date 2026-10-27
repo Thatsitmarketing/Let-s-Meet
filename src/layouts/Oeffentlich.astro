@@ -18,7 +18,7 @@ const embed = Astro.url.searchParams.get('embed') === '1';
   {!embed && (
     <header class="kopf">
       <div class="kopf-innen">
-        <Logo hoehe={44} href="/" />
+        <Logo form="kompakt" hoehe={34} href="/" />
       </div>
     </header>
   )}
@@ -72,7 +72,8 @@ const embed = Astro.url.searchParams.get('embed') === '1';
   @media (min-width: 1000px) and (hover: hover) {
     :global(body.mit-bild) { background-attachment: fixed; }
   }
-  .haupt.bild { max-width: 1240px; }
+  .haupt.bild { max-width: 1440px; padding-top: var(--raum-8); padding-bottom: var(--raum-12); }
+  :global(body.mit-bild) .kopf-innen { max-width: 1440px; }
   :global(body.embed) {
     background: transparent;
   }
@@ -84,7 +85,7 @@ const embed = Astro.url.searchParams.get('embed') === '1';
   .fuss-innen {
     max-width: var(--breite-inhalt);
     margin: 0 auto;
-    padding: var(--raum-4) var(--rand-seite);
+    padding: var(--raum-3) var(--rand-seite);
     display: flex;
     align-items: center;
     justify-content: space-between;

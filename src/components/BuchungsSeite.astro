@@ -9,6 +9,7 @@ import Icon from './ui/Icon.astro';
 import OrtIcon from './OrtIcon.astro';
 import { buchungNachId, fragenLesen, unterlagenLesen } from '../lib/abfragen';
 import { KONTAKT, STANDARD_BEGRUESSUNG, TEAM } from '../lib/marke';
+import { unterlageThema } from '../lib/themen';
 import { ORT_LABEL, type Nutzer, type Terminart } from '../lib/typen';
 import { formatDatumLang, formatSpanne } from '../lib/zeit';
 
@@ -31,7 +32,8 @@ const umbuchen = umbuchenId ? await buchungNachId(umbuchenId) : null;
 const umbuchenGueltig = Boolean(umbuchen && umbuchen.status === 'bestaetigt' && umbuchen.terminart_id === terminart.id && Date.parse(umbuchen.start_utc) > Date.now());
 
 const fragen = fragenLesen(terminart);
-const unterlagen = unterlagenLesen(terminart);
+// Jede Unterlage bekommt ihr Thema, im Browser bleiben nur die zur Anfrage passenden sichtbar
+const unterlagen = unterlagenLesen(terminart).map((u) => ({ ...u, thema: unterlageThema(u) }));
 const konfig = {
   terminart: terminart.id,
   dauer: terminart.dauer_min,
@@ -65,9 +67,10 @@ const absaetze = (terminart.beschreibung ?? '')
 ---
 {!embed && (
   <section class="held dunkel" aria-labelledby="held-titel">
-    <img class="held-logo" src="/images/brand/logo-weiss.webp" alt="That's it. Marketing" width="180" height="55" />
-    <p class="eyebrow">Let's Meet &middot; {gastgeber.name}</p>
-    <h1 id="held-titel">Lass uns reden<span class="punkt">.</span></h1>
+    <div class="held-titel">
+      <p class="eyebrow">Let's Meet &middot; {gastgeber.name}</p>
+      <h1 id="held-titel">Lass uns reden<span class="punkt">.</span></h1>
+    </div>
     <p class="unterzeile">{gastgeber.begruessung || STANDARD_BEGRUESSUNG}</p>
   </section>
 )}
@@ -180,20 +183,31 @@ const absaetze = (terminart.beschreibung ?? '')
       </form>
     </section>
 
-    {!embed && (
-      <section class="team-leiste" aria-labelledby="team-titel">
-        <img class="team-foto" src="/images/team/team-besprechung.webp" alt="Das Team von That's it. Marketing bei einer Besprechung im Büro in Gelsenkirchen" width="960" height="640" loading="lazy" decoding="async" />
-        <div class="team-text">
-          <h3 class="block-titel" id="team-titel">Dein Team in {KONTAKT.ort}</h3>
-          <ul class="team" role="list">
-            {TEAM.map((t) => (
-              <li title={`${t.name}, ${t.rolle}`}>
-                <img src={t.bild} alt={`${t.name}, ${t.rolle}`} width="44" height="44" loading="lazy" decoding="async" />
-              </li>
-            ))}
-          </ul>
-          <p class="kontakt">Du sprichst mit Menschen aus unserem Büro, nicht mit einem Callcenter. Fragen vorab: <a href={`mailto:${KONTAKT.email}`}>{KONTAKT.email}</a> oder <a href={KONTAKT.telefonLink}>{KONTAKT.telefon}</a></p>
+    {detailsZeigen && unterlagen.length > 0 && (
+      <section class="unterlagen-block" aria-labelledby="unterlagen-titel">
+        <div class="unterlagen-kopf">
+          <h3 class="block-titel" id="unterlagen-titel">Unterlagen zur Vorbereitung</h3>
+          <p class="unterlagen-passend leise klein" id="unterlagen-passend" hidden>Passend zu deiner Anfrage</p>
         </div>
+        <ul class="unterlagen" id="unterlagen" role="list" data-anzahl={unterlagen.length}>
+          {unterlagen.map((u) => (
+            <li data-thema={u.thema ?? undefined}>
+              <a class="unterlage" href={u.url} {...(extern(u.url) ? { target: '_blank', rel: 'noopener' } : {})}>
+                {u.bild ? (
+                  <img class="unterlage-bild" src={u.bild} alt={`Vorschau ${u.titel}`} title={u.titel} width="48" height="48" loading="lazy" decoding="async" />
+                ) : (
+                  <span class="unterlage-bild unterlage-icon" aria-hidden="true"><Icon name="dokument" /></span>
+                )}
+                <span class="unterlage-text">
+                  <span class="unterlage-titel">{u.titel}</span>
+                  {u.info && <span class="unterlage-info">{u.info}</span>}
+                </span>
+                <Icon name="extern" groesse={16} class="icon unterlage-pfeil" />
+                {extern(u.url) && <span class="sr-only">(öffnet in neuem Tab)</span>}
+              </a>
+            </li>
+          ))}
+        </ul>
       </section>
     )}
   </div>
@@ -201,12 +215,26 @@ const absaetze = (terminart.beschreibung ?? '')
   {detailsZeigen && (
     <aside class="info" aria-label="Details zum Termin">
       <div class="info-block">
-        <p class="eyebrow">Dein Termin</p>
+        <div class="info-kopf">
+          <p class="eyebrow">Dein Termin</p>
+          <img class="info-logo" src="/images/brand/logo-schwarz.webp" alt="Logo That's it. Marketing" title="That's it. Marketing, Gelsenkirchen" width="594" height="180" />
+        </div>
         <h2 class="info-titel">{terminart.titel}<span class="punkt">.</span></h2>
         <ul class="meta" role="list">
           <li><Icon name="uhr" />{terminart.dauer_min} Minuten</li>
           <li><OrtIcon typ={terminart.ort_typ} />{ortText}</li>
-          <li><Icon name="team" />Mit unserem Team</li>
+          <li class="team-zeile">
+            <Icon name="team" /><span>Mit unserem Team</span>
+            {!embed && (
+              <ul class="team" role="list" aria-label={`Dein Team in ${KONTAKT.ort}`}>
+                {TEAM.map((t) => (
+                  <li>
+                    <img src={t.bild} alt={`Portrait ${t.name}, ${t.rolle} bei That's it. Marketing`} title={`${t.name}, ${t.rolle}`} width="26" height="26" loading="lazy" decoding="async" />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
           <li class="auswahl-zeile" id="auswahl-zeile" hidden><Icon name="kalender" /><span id="auswahl-text"></span></li>
           <li class="auswahl-zeile" id="zone-zeile" hidden><Icon name="globus" /><span id="zone-text"></span></li>
         </ul>
@@ -222,31 +250,9 @@ const absaetze = (terminart.beschreibung ?? '')
         )}
       </div>
 
-      {unterlagen.length > 0 && (
-        <div class="info-block">
-          <h3 class="block-titel">Unterlagen zur Vorbereitung</h3>
-          <ul class="unterlagen" role="list">
-            {unterlagen.map((u) => (
-              <li>
-                <a class="unterlage" href={u.url} {...(extern(u.url) ? { target: '_blank', rel: 'noopener' } : {})}>
-                  {u.bild ? (
-                    <img class="unterlage-bild" src={u.bild} alt="" width="56" height="56" loading="lazy" decoding="async" />
-                  ) : (
-                    <span class="unterlage-bild unterlage-icon" aria-hidden="true"><Icon name="dokument" /></span>
-                  )}
-                  <span class="unterlage-text">
-                    <span class="unterlage-titel">{u.titel}</span>
-                    {u.info && <span class="unterlage-info">{u.info}</span>}
-                  </span>
-                  <Icon name="extern" groesse={16} class="icon unterlage-pfeil" />
-                  {extern(u.url) && <span class="sr-only">(öffnet in neuem Tab)</span>}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
+      {!embed && (
+        <p class="kontakt">Fragen vorab: <a href={`mailto:${KONTAKT.email}`}>{KONTAKT.email}</a> oder <a href={KONTAKT.telefonLink}>{KONTAKT.telefon}</a></p>
       )}
-
     </aside>
   )}
 </div>
@@ -264,26 +270,29 @@ const absaetze = (terminart.beschreibung ?? '')
   /* Kopfbereich auf dem Bürofoto */
   .held {
     display: grid;
-    gap: var(--raum-4);
-    max-width: 46rem;
-    margin-bottom: var(--raum-8);
+    gap: var(--raum-3) var(--raum-12);
+    margin-bottom: var(--raum-6);
     color: var(--farbe-papier);
   }
-  .held-logo { width: 150px; height: auto; margin-bottom: var(--raum-4); }
-  .held h1 { font-size: var(--text-display); color: var(--farbe-papier); }
-  .unterzeile { font-size: var(--text-lg); color: rgba(255, 255, 255, 0.82); max-width: 40rem; }
+  .held-titel { display: grid; gap: var(--raum-3); }
+  .held h1 { font-size: clamp(2.25rem, 1.4rem + 3vw, 3.5rem); color: var(--farbe-papier); }
+  .unterzeile { font-size: var(--text-base); color: rgba(255, 255, 255, 0.82); max-width: 34rem; }
+  /* Breit: Überschrift links, Text rechts daneben, spart Höhe */
+  @media (min-width: 1000px) {
+    .held { grid-template-columns: auto minmax(0, 1fr); align-items: end; }
+    .unterzeile { padding-bottom: 0.4rem; }
+  }
 
   .buchung {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
-    min-height: 560px;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 460px);
     box-shadow: var(--schatten-3);
     border: 0;
   }
   .buchung.embed { box-shadow: none; border: 1px solid var(--farbe-rahmen); }
   .buchung.ohne-details { grid-template-columns: 1fr; }
 
-  .bereich { padding: var(--raum-8); min-width: 0; }
+  .bereich { padding: var(--raum-6) var(--raum-8); min-width: 0; }
   .arten { display: flex; flex-wrap: wrap; gap: var(--raum-2); margin-bottom: var(--raum-6); }
   .art-tab {
     display: inline-flex; align-items: baseline; gap: var(--raum-2); min-height: 44px; padding: var(--raum-2) var(--raum-4);
@@ -296,12 +305,12 @@ const absaetze = (terminart.beschreibung ?? '')
   .art-dauer { font-size: var(--text-sm); opacity: 0.75; }
 
   .umbuchen-hinweis { margin-bottom: var(--raum-6); }
-  .schritt h2 { font-size: var(--text-h3); font-family: var(--schrift-text); font-weight: 600; letter-spacing: 0; margin-bottom: var(--raum-6); }
+  .schritt h2 { font-size: var(--text-h3); font-family: var(--schrift-text); font-weight: 600; letter-spacing: 0; margin-bottom: var(--raum-4); }
 
-  .kal-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--raum-8); }
+  .kal-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--raum-8); align-items: start; }
   .kal-layout:has(.zeiten:not([hidden])) { grid-template-columns: minmax(0, 1fr) 210px; }
-  .kalender { max-width: 460px; }
-  .kal-kopf { display: flex; align-items: center; justify-content: space-between; gap: var(--raum-2); margin-bottom: var(--raum-4); }
+  .kalender { max-width: 540px; }
+  .kal-kopf { display: flex; align-items: center; justify-content: space-between; gap: var(--raum-2); margin-bottom: var(--raum-3); }
   .kal-kopf h3 { font-size: var(--text-base); font-weight: 600; }
   .kal-nav {
     display: grid; place-items: center; width: 40px; height: 40px;
@@ -315,10 +324,10 @@ const absaetze = (terminart.beschreibung ?? '')
     text-align: center; font-family: var(--schrift-label); font-weight: 500; font-size: 0.875rem;
     letter-spacing: 0.2em; text-transform: uppercase; color: var(--farbe-text-leise); padding-bottom: var(--raum-2);
   }
-  .kal-tage { min-height: 260px; }
+  .kal-tage { min-height: 240px; }
   .kal-tage[data-laedt='true'] { opacity: 0.5; }
   .kal-tage :global(.tag) {
-    position: relative; aspect-ratio: 1; min-height: 40px; display: grid; place-items: center;
+    position: relative; height: 42px; display: grid; place-items: center;
     font: inherit; font-size: var(--text-sm); border: 0; background: transparent; color: var(--n-400);
     border-radius: var(--radius-s);
   }
@@ -326,26 +335,27 @@ const absaetze = (terminart.beschreibung ?? '')
   .kal-tage :global(.tag.frei:hover) { background: var(--n-900); color: var(--farbe-papier); }
   .kal-tage :global(.tag[aria-pressed='true']) { background: var(--n-900); color: var(--farbe-papier); }
   .kal-tage :global(.tag[aria-pressed='true']::after) {
-    content: ''; position: absolute; bottom: 6px; width: 6px; height: 6px; background: var(--farbe-akzent);
+    content: ''; position: absolute; bottom: 4px; width: 5px; height: 5px; background: var(--farbe-akzent);
   }
   .kal-tage :global(.tag.heute:not([aria-pressed='true'])::before) {
-    content: ''; position: absolute; bottom: 6px; width: 4px; height: 4px; background: currentColor;
+    content: ''; position: absolute; bottom: 4px; width: 4px; height: 4px; background: currentColor;
   }
-  .kal-status { min-height: 1.6em; margin-top: var(--raum-3); }
-  .zone { display: grid; gap: var(--raum-2); margin-top: var(--raum-4); }
-  .zone .feld-label { display: inline-flex; align-items: center; gap: 6px; }
+  .kal-status { min-height: 1.6em; margin-top: var(--raum-2); }
+  .zone { display: flex; align-items: center; gap: var(--raum-3); margin-top: var(--raum-2); }
+  .zone .feld-label { display: inline-flex; align-items: center; gap: 6px; margin: 0; flex-shrink: 0; }
+  .zone .auswahl { flex: 1; min-width: 0; }
 
-  .zeiten h3 { font-size: var(--text-base); font-weight: 600; margin: 4px 0 var(--raum-4); min-height: 40px; display: flex; align-items: center; }
-  .zeiten-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-2); max-height: 430px; overflow-y: auto; padding-right: 4px; }
+  .zeiten h3 { font-size: var(--text-base); font-weight: 600; margin: 0 0 var(--raum-3); min-height: 40px; display: flex; align-items: center; }
+  .zeiten-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-2); max-height: 370px; overflow-y: auto; padding-right: 4px; }
   .zeiten-liste :global(li) { display: flex; gap: var(--raum-2); }
   .zeiten-liste :global(.zeit) {
-    flex: 1; min-height: 48px; font: inherit; font-weight: 600; background: var(--farbe-papier);
+    flex: 1; min-height: 44px; font: inherit; font-weight: 600; background: var(--farbe-papier);
     border: 1px solid var(--n-900); color: var(--n-900); cursor: pointer; border-radius: var(--radius-s);
     transition: background var(--dauer-schnell) var(--kurve), color var(--dauer-schnell) var(--kurve);
   }
   .zeiten-liste :global(.zeit:hover) { box-shadow: inset 0 0 0 1px var(--n-900); }
   .zeiten-liste :global(.zeit[aria-pressed='true']) { background: var(--n-700); color: var(--farbe-papier); border-color: var(--n-700); flex: 0 0 calc(50% - 4px); }
-  .zeiten-liste :global(.weiter) { flex: 0 0 calc(50% - 4px); min-height: 48px; padding-inline: 0.5rem; letter-spacing: 0.15em; }
+  .zeiten-liste :global(.weiter) { flex: 0 0 calc(50% - 4px); min-height: 44px; padding-inline: 0.5rem; letter-spacing: 0.15em; }
   .zeiten-liste :global(.leer) { color: var(--farbe-text-leise); font-size: var(--text-sm); }
 
   .zurueck { margin: calc(var(--raum-2) * -1) 0 var(--raum-4) calc(var(--raum-3) * -1); }
@@ -359,62 +369,66 @@ const absaetze = (terminart.beschreibung ?? '')
   .info {
     background: var(--n-050);
     border-left: 1px solid var(--farbe-rahmen);
-    padding: var(--raum-8);
+    padding: var(--raum-6) var(--raum-8);
     display: grid;
-    gap: var(--raum-8);
+    gap: var(--raum-6);
     align-content: start;
   }
-  .info-block { display: grid; gap: var(--raum-4); }
-  .info-block + .info-block { border-top: 1px solid var(--farbe-rahmen); padding-top: var(--raum-8); }
+  .info-block { display: grid; gap: var(--raum-3); }
+  .info-block + .info-block { border-top: 1px solid var(--farbe-rahmen); padding-top: var(--raum-6); }
+  .info-kopf { display: flex; align-items: center; justify-content: space-between; gap: var(--raum-4); }
+  .info-logo { width: 104px; height: auto; display: block; }
   .info-titel { font-size: var(--text-h2); }
-  .meta { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-3); color: var(--farbe-text-2); font-weight: 500; }
+  .meta { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-2); color: var(--farbe-text-2); font-weight: 500; }
   .meta li { display: flex; gap: var(--raum-3); align-items: flex-start; }
   .meta li :global(svg) { margin-top: 2px; flex-shrink: 0; }
   .auswahl-zeile { color: var(--farbe-text); font-weight: 600; }
-  .beschreibung { display: grid; gap: var(--raum-3); color: var(--farbe-text-2); font-size: var(--text-sm); }
+  .beschreibung { display: grid; gap: var(--raum-2); color: var(--farbe-text-2); font-size: var(--text-sm); line-height: 1.55; }
   .beschreibung p { white-space: pre-line; }
   .liste-titel { font-weight: 600; color: var(--farbe-text); margin-top: var(--raum-2); }
-  .beschreibung ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-2); }
+  .beschreibung ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-1); }
   .beschreibung li { display: flex; gap: var(--raum-2); align-items: flex-start; }
   .beschreibung li :global(svg) { flex-shrink: 0; margin-top: 3px; color: var(--farbe-akzent); }
   .block-titel {
     font-family: var(--schrift-label); font-weight: 500; font-size: var(--text-sm); letter-spacing: var(--sperrung-label);
     text-transform: uppercase; color: var(--n-900);
   }
-  .unterlagen { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-2); }
+  /* Unterlagen unter dem Kalender, zwei Spalten */
+  .unterlagen-block { margin-top: var(--raum-4); padding-top: var(--raum-4); border-top: 1px solid var(--farbe-rahmen); display: grid; gap: var(--raum-3); }
+  .unterlagen-kopf { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--raum-2) var(--raum-4); }
+  .unterlagen { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--raum-2); }
+  .unterlagen li[hidden] { display: none; }
   .unterlage {
-    display: flex; align-items: center; gap: var(--raum-3); padding: var(--raum-3); background: var(--farbe-papier);
+    display: flex; align-items: center; gap: var(--raum-2); padding: var(--raum-2); height: 100%; background: var(--farbe-papier);
     border: 1px solid var(--farbe-rahmen); text-decoration: none; color: var(--n-900);
     transition: border-color var(--dauer-normal) var(--kurve), box-shadow var(--dauer-normal) var(--kurve);
   }
   .unterlage:hover { border-color: var(--n-900); box-shadow: var(--schatten-2); }
-  .unterlage-bild { width: 56px; height: 56px; flex-shrink: 0; object-fit: contain; background: var(--n-100); }
+  .unterlage-bild { width: 44px; height: 44px; flex-shrink: 0; object-fit: contain; background: var(--n-100); }
   .unterlage-icon { display: grid; place-items: center; color: var(--n-700); }
   .unterlage-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
-  .unterlage-titel { font-weight: 600; font-size: var(--text-sm); line-height: 1.3; }
-  .unterlage-info { font-size: var(--text-xs); color: var(--farbe-text-leise); line-height: 1.4; }
+  .unterlage-titel { font-weight: 600; font-size: 0.8125rem; line-height: 1.3; }
+  .unterlage-info { font-size: var(--text-xs); color: var(--farbe-text-leise); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  /* Bei vier Unterlagen nebeneinander nur Titel, bei wenigen auch die Kurzinfo */
+  .unterlagen:not([data-anzahl='1']):not([data-anzahl='2']) .unterlage-info,
+  .unterlagen:not([data-anzahl='1']):not([data-anzahl='2']) :global(.unterlage-pfeil) { display: none; }
   .unterlage :global(.unterlage-pfeil) { flex-shrink: 0; color: var(--n-500); }
-  .team-leiste {
-    display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: var(--raum-6); align-items: center;
-    margin-top: var(--raum-8); padding-top: var(--raum-8); border-top: 1px solid var(--farbe-rahmen);
-  }
-  #schritt-formular:not([hidden]) ~ .team-leiste { display: none; }
-  .team-foto { width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: cover; display: block; }
-  .team-text { display: grid; gap: var(--raum-3); }
-  .team { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--raum-2); }
-  .team img { display: block; width: 44px; height: 44px; object-fit: cover; background: var(--n-200); }
-  .team li:first-child { position: relative; }
-  .team li:first-child::after { content: ''; position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; background: var(--farbe-akzent); }
-  .kontakt { font-size: var(--text-sm); color: var(--farbe-text-2); }
+
+  /* Team als Portraitreihe in der Zeile „Mit unserem Team“ */
+  .meta .team-zeile { align-items: center; }
+  .meta .team-zeile > span { white-space: nowrap; }
+  .meta .team-zeile :global(svg) { margin-top: 0; }
+  .team { list-style: none; margin: 0 0 0 auto; padding: 0; display: flex; gap: 2px; }
+  .team img { display: block; width: 26px; height: 26px; object-fit: cover; background: var(--n-200); }
+  .kontakt { font-size: var(--text-xs); color: var(--farbe-text-2); border-top: 1px solid var(--farbe-rahmen); padding-top: var(--raum-4); }
   .kontakt a[href^='tel'] { white-space: nowrap; }
 
-  @media (max-width: 960px) {
+  @media (max-width: 1180px) {
     .buchung { grid-template-columns: 1fr; }
     .info { border-left: 0; border-top: 1px solid var(--farbe-rahmen); }
   }
   @media (max-width: 860px) {
     .bereich, .info { padding: var(--raum-6); }
-    .team-leiste { grid-template-columns: 1fr; }
     .kal-layout:has(.zeiten:not([hidden])) { grid-template-columns: 1fr; }
     .kalender { max-width: none; }
     .zeiten-liste { max-height: none; }
@@ -422,6 +436,6 @@ const absaetze = (terminart.beschreibung ?? '')
   @media (max-width: 420px) {
     .bereich, .info { padding: var(--raum-4); }
     .kal-tage :global(.tag) { min-height: 36px; }
-    .held-logo { width: 120px; }
+    .team img { width: 22px; height: 22px; }
   }
 </style>
