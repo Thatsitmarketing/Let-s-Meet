@@ -2,6 +2,7 @@
  * Buchungsablauf im Browser: Monat laden, Tag wählen, Uhrzeit wählen, Formular senden.
  * Zeiten kommen in UTC vom Server und werden in der gewählten Zeitzone angezeigt.
  */
+import { themenAusInteresse } from '../lib/themen';
 import { addTage, datumInZone, teileInZone, wochentagVon, zoneZuUtc } from '../lib/zeit';
 
 interface Konfig {
@@ -67,6 +68,7 @@ export function starteBuchung() {
     history.replaceState(null, '', location.pathname + location.search);
   }
   const vorabHinweis = document.getElementById('vorab-hinweis');
+  unterlagenFiltern(vorab.nachricht, vorab.quelle);
 
   // Zeitzone: Browserzone als Standard, Liste aller IANA Zonen
   const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone || k.zoneGastgeber;
@@ -402,4 +404,29 @@ export function starteBuchung() {
   $('zurueck-kalender').addEventListener('click', zumKalender);
 
   monatLaden();
+}
+
+/**
+ * Zeigt nur die Unterlagen, die zur Anfrage passen. Quellen: Zeile „Interesse:“ aus dem Funnel
+ * der Homepage, ersatzweise die Variante in `quelle` („website social“), dazu `?thema=` in der
+ * Adresse. Gastro kommt hinzu, wenn die Zeile „Unternehmen:“ nach Gastronomie klingt.
+ * Ohne Treffer bleiben alle Unterlagen sichtbar.
+ */
+function unterlagenFiltern(nachricht: string, quelle: string) {
+  const liste = document.getElementById('unterlagen');
+  if (!liste) return;
+  const zeile = (name: string) => nachricht.match(new RegExp(`^${name}:\\s*(.+)$`, 'mi'))?.[1] ?? '';
+  const interesse = [
+    zeile('Interesse') || quelle.replace(/^website\s*/i, ''),
+    new URLSearchParams(location.search).get('thema') ?? '',
+  ].join(',');
+  const themen = themenAusInteresse(interesse, zeile('Unternehmen'));
+  if (themen.size === 0) return;
+  const eintraege = [...liste.querySelectorAll<HTMLLIElement>('li[data-thema]')];
+  const passend = eintraege.filter((li) => themen.has(li.dataset.thema as never));
+  if (passend.length === 0) return;
+  for (const li of eintraege) li.hidden = !passend.includes(li);
+  liste.dataset.anzahl = String(liste.querySelectorAll('li:not([hidden])').length);
+  const hinweis = document.getElementById('unterlagen-passend');
+  if (hinweis) hinweis.hidden = false;
 }

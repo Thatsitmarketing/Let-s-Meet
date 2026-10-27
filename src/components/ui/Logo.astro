@@ -20,10 +20,10 @@ const name = "Let's Meet. That's it. Marketing";
 ---
 {href ? (
   <a href={href} class:list={['logo', klasse]} aria-label={`${name}, zur Startseite`}>
-    <img src={datei} alt="" width={breite} height={hoehe} />
+    <img src={datei} alt={name} title={name} width={breite} height={hoehe} />
   </a>
 ) : (
-  <img class:list={['logo', klasse]} src={datei} alt={name} width={breite} height={hoehe} />
+  <img class:list={['logo', klasse]} src={datei} alt={name} title={name} width={breite} height={hoehe} />
 )}
 <style>
   .logo { display: inline-block; line-height: 0; max-width: 100%; }
