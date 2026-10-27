@@ -1,15 +1,14 @@
 ---
 /*
- * Zentrale Buchung über das Büro: links Kalender, Zeiten und Formular, rechts Details zum Termin,
- * Unterlagen zur Vorbereitung und das Team. Genutzt von / und /{terminart}.
+ * Zentrale Buchung über das Büro: links Kalender, Zeiten und Formular, rechts Details zum Termin.
+ * Genutzt von / und /{terminart}.
  * Außerhalb des Embed Modus liegt darüber ein Kopfbereich auf dem Bürofoto.
  */
 import { env } from 'cloudflare:workers';
 import Icon from './ui/Icon.astro';
 import OrtIcon from './OrtIcon.astro';
-import { buchungNachId, fragenLesen, unterlagenLesen } from '../lib/abfragen';
-import { KONTAKT, STANDARD_BEGRUESSUNG, TEAM } from '../lib/marke';
-import { unterlageThema } from '../lib/themen';
+import { buchungNachId, fragenLesen } from '../lib/abfragen';
+import { KONTAKT, STANDARD_BEGRUESSUNG } from '../lib/marke';
 import { ORT_LABEL, type Nutzer, type Terminart } from '../lib/typen';
 import { formatDatumLang, formatSpanne } from '../lib/zeit';
 
@@ -32,8 +31,6 @@ const umbuchen = umbuchenId ? await buchungNachId(umbuchenId) : null;
 const umbuchenGueltig = Boolean(umbuchen && umbuchen.status === 'bestaetigt' && umbuchen.terminart_id === terminart.id && Date.parse(umbuchen.start_utc) > Date.now());
 
 const fragen = fragenLesen(terminart);
-// Jede Unterlage bekommt ihr Thema, im Browser bleiben nur die zur Anfrage passenden sichtbar
-const unterlagen = unterlagenLesen(terminart).map((u) => ({ ...u, thema: unterlageThema(u) }));
 const konfig = {
   terminart: terminart.id,
   dauer: terminart.dauer_min,
@@ -51,7 +48,6 @@ const konfig = {
 const telefonPflicht = terminart.ort_typ === 'telefon_wir';
 const ortText = terminart.ort_typ === 'vor_ort' && terminart.ort_wert ? terminart.ort_wert : ORT_LABEL[terminart.ort_typ];
 const auswahl = arten.length > 1 && !umbuchenGueltig;
-const extern = (url: string) => /^https?:\/\//.test(url);
 
 // Beschreibung: Absätze durch Leerzeilen. Endet die erste Zeile eines Absatzes mit Doppelpunkt
 // und folgen weitere Zeilen, werden diese als Liste mit Haken gezeigt.
@@ -182,34 +178,6 @@ const absaetze = (terminart.beschreibung ?? '')
         <button type="submit" class="knopf knopf--orange knopf--breit" id="absenden">{umbuchenGueltig ? 'Termin umbuchen' : 'Termin buchen'}</button>
       </form>
     </section>
-
-    {detailsZeigen && unterlagen.length > 0 && (
-      <section class="unterlagen-block" aria-labelledby="unterlagen-titel">
-        <div class="unterlagen-kopf">
-          <h3 class="block-titel" id="unterlagen-titel">Unterlagen zur Vorbereitung</h3>
-          <p class="unterlagen-passend leise klein" id="unterlagen-passend" hidden>Passend zu deiner Anfrage</p>
-        </div>
-        <ul class="unterlagen" id="unterlagen" role="list" data-anzahl={unterlagen.length}>
-          {unterlagen.map((u) => (
-            <li data-thema={u.thema ?? undefined}>
-              <a class="unterlage" href={u.url} {...(extern(u.url) ? { target: '_blank', rel: 'noopener' } : {})}>
-                {u.bild ? (
-                  <img class="unterlage-bild" src={u.bild} alt={`Vorschau ${u.titel}`} title={u.titel} width="48" height="48" loading="lazy" decoding="async" />
-                ) : (
-                  <span class="unterlage-bild unterlage-icon" aria-hidden="true"><Icon name="dokument" /></span>
-                )}
-                <span class="unterlage-text">
-                  <span class="unterlage-titel">{u.titel}</span>
-                  {u.info && <span class="unterlage-info">{u.info}</span>}
-                </span>
-                <Icon name="extern" groesse={16} class="icon unterlage-pfeil" />
-                {extern(u.url) && <span class="sr-only">(öffnet in neuem Tab)</span>}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </section>
-    )}
   </div>
 
   {detailsZeigen && (
@@ -223,18 +191,6 @@ const absaetze = (terminart.beschreibung ?? '')
         <ul class="meta" role="list">
           <li><Icon name="uhr" />{terminart.dauer_min} Minuten</li>
           <li><OrtIcon typ={terminart.ort_typ} />{ortText}</li>
-          <li class="team-zeile">
-            <Icon name="team" /><span>Mit unserem Team</span>
-            {!embed && (
-              <ul class="team" role="list" aria-label={`Dein Team in ${KONTAKT.ort}`}>
-                {TEAM.map((t) => (
-                  <li>
-                    <img src={t.bild} alt={`Portrait ${t.name}, ${t.rolle} bei That's it. Marketing`} title={`${t.name}, ${t.rolle}`} width="26" height="26" loading="lazy" decoding="async" />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
           <li class="auswahl-zeile" id="auswahl-zeile" hidden><Icon name="kalender" /><span id="auswahl-text"></span></li>
           <li class="auswahl-zeile" id="zone-zeile" hidden><Icon name="globus" /><span id="zone-text"></span></li>
         </ul>
@@ -389,37 +345,6 @@ const absaetze = (terminart.beschreibung ?? '')
   .beschreibung ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-1); }
   .beschreibung li { display: flex; gap: var(--raum-2); align-items: flex-start; }
   .beschreibung li :global(svg) { flex-shrink: 0; margin-top: 3px; color: var(--farbe-akzent); }
-  .block-titel {
-    font-family: var(--schrift-label); font-weight: 500; font-size: var(--text-sm); letter-spacing: var(--sperrung-label);
-    text-transform: uppercase; color: var(--n-900);
-  }
-  /* Unterlagen unter dem Kalender, zwei Spalten */
-  .unterlagen-block { margin-top: var(--raum-4); padding-top: var(--raum-4); border-top: 1px solid var(--farbe-rahmen); display: grid; gap: var(--raum-3); }
-  .unterlagen-kopf { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--raum-2) var(--raum-4); }
-  .unterlagen { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--raum-2); }
-  .unterlagen li[hidden] { display: none; }
-  .unterlage {
-    display: flex; align-items: center; gap: var(--raum-2); padding: var(--raum-2); height: 100%; background: var(--farbe-papier);
-    border: 1px solid var(--farbe-rahmen); text-decoration: none; color: var(--n-900);
-    transition: border-color var(--dauer-normal) var(--kurve), box-shadow var(--dauer-normal) var(--kurve);
-  }
-  .unterlage:hover { border-color: var(--n-900); box-shadow: var(--schatten-2); }
-  .unterlage-bild { width: 44px; height: 44px; flex-shrink: 0; object-fit: contain; background: var(--n-100); }
-  .unterlage-icon { display: grid; place-items: center; color: var(--n-700); }
-  .unterlage-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
-  .unterlage-titel { font-weight: 600; font-size: 0.8125rem; line-height: 1.3; }
-  .unterlage-info { font-size: var(--text-xs); color: var(--farbe-text-leise); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  /* Bei vier Unterlagen nebeneinander nur Titel, bei wenigen auch die Kurzinfo */
-  .unterlagen:not([data-anzahl='1']):not([data-anzahl='2']) .unterlage-info,
-  .unterlagen:not([data-anzahl='1']):not([data-anzahl='2']) :global(.unterlage-pfeil) { display: none; }
-  .unterlage :global(.unterlage-pfeil) { flex-shrink: 0; color: var(--n-500); }
-
-  /* Team als Portraitreihe in der Zeile „Mit unserem Team“ */
-  .meta .team-zeile { align-items: center; }
-  .meta .team-zeile > span { white-space: nowrap; }
-  .meta .team-zeile :global(svg) { margin-top: 0; }
-  .team { list-style: none; margin: 0 0 0 auto; padding: 0; display: flex; gap: 2px; }
-  .team img { display: block; width: 26px; height: 26px; object-fit: cover; background: var(--n-200); }
   .kontakt { font-size: var(--text-xs); color: var(--farbe-text-2); border-top: 1px solid var(--farbe-rahmen); padding-top: var(--raum-4); }
   .kontakt a[href^='tel'] { white-space: nowrap; }
 
@@ -436,6 +361,5 @@ const absaetze = (terminart.beschreibung ?? '')
   @media (max-width: 420px) {
     .bereich, .info { padding: var(--raum-4); }
     .kal-tage :global(.tag) { min-height: 36px; }
-    .team img { width: 22px; height: 22px; }
   }
 </style>
