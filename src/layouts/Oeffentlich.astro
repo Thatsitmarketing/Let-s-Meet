@@ -18,7 +18,7 @@ const embed = Astro.url.searchParams.get('embed') === '1';
   {!embed && (
     <header class="kopf">
       <div class="kopf-innen">
-        <Logo form="kompakt" hoehe={34} href="/" />
+        <Logo form="kompakt" hoehe={26} href="/" />
       </div>
     </header>
   )}
@@ -28,7 +28,7 @@ const embed = Astro.url.searchParams.get('embed') === '1';
   {!embed && (
     <footer class="fuss">
       <div class="fuss-innen">
-        <span>That's it. Marketing &middot; Gelsenkirchen</span>
+        <span>&copy; 2026 That's it. Marketing &middot; Alle Rechte vorbehalten</span>
         <nav aria-label="Rechtliches">
           <a href="https://thatsit.marketing/impressum" rel="noopener">Impressum</a>
           <a href="https://thatsit.marketing/datenschutz" rel="noopener">Datenschutz</a>
@@ -73,14 +73,16 @@ const embed = Astro.url.searchParams.get('embed') === '1';
     :global(body.mit-bild) { background-attachment: fixed; }
   }
   .haupt.bild { max-width: 1440px; padding-top: var(--raum-8); padding-bottom: var(--raum-12); }
-  :global(body.mit-bild) .kopf-innen { max-width: 1440px; }
+  :global(body.mit-bild) .kopf-innen { max-width: 1240px; }
   :global(body.embed) {
     background: transparent;
   }
   .kopf {
     background: var(--farbe-papier);
+    border-top: 3px solid var(--farbe-akzent);
     border-bottom: 1px solid var(--farbe-rahmen);
   }
+  .kopf-innen { padding-top: var(--raum-4); padding-bottom: var(--raum-4); }
   .kopf-innen,
   .fuss-innen {
     max-width: var(--breite-inhalt);
@@ -105,12 +107,16 @@ const embed = Astro.url.searchParams.get('embed') === '1';
     padding: var(--raum-2);
     max-width: none;
   }
+  /* Dunkler Fuß wie auf der Homepage */
   .fuss {
-    border-top: 1px solid var(--farbe-rahmen);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
     font-size: var(--text-sm);
-    color: var(--farbe-text-2);
-    background: var(--farbe-papier);
+    color: rgba(255, 255, 255, 0.7);
+    background: var(--n-900);
   }
+  :global(body.mit-bild) .fuss-innen { max-width: 1240px; }
+  .fuss a { color: rgba(255, 255, 255, 0.7); }
+  .fuss a:hover { color: var(--farbe-papier); }
   .fuss nav {
     display: flex;
     gap: var(--raum-4);

@@ -226,20 +226,20 @@ const absaetze = (terminart.beschreibung ?? '')
   /* Kopfbereich auf dem Bürofoto */
   .held {
     display: grid;
-    gap: var(--raum-3) var(--raum-12);
-    margin-bottom: var(--raum-6);
+    justify-items: center;
+    text-align: center;
+    gap: var(--raum-3);
+    margin: 0 auto var(--raum-8);
     color: var(--farbe-papier);
   }
-  .held-titel { display: grid; gap: var(--raum-3); }
+  .held-titel { display: grid; gap: var(--raum-3); justify-items: center; }
   .held h1 { font-size: clamp(2.25rem, 1.4rem + 3vw, 3.5rem); color: var(--farbe-papier); }
-  .unterzeile { font-size: var(--text-base); color: rgba(255, 255, 255, 0.82); max-width: 34rem; }
-  /* Breit: Überschrift links, Text rechts daneben, spart Höhe */
-  @media (min-width: 1000px) {
-    .held { grid-template-columns: auto minmax(0, 1fr); align-items: end; }
-    .unterzeile { padding-bottom: 0.4rem; }
-  }
+  .unterzeile { font-size: var(--text-base); color: rgba(255, 255, 255, 0.82); max-width: 40rem; }
 
   .buchung {
+    width: 100%;
+    max-width: 1240px;
+    margin-inline: auto;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(300px, 460px);
     box-shadow: var(--schatten-3);
