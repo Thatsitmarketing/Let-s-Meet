@@ -15,51 +15,12 @@ const vorwahl = Astro.url.searchParams.get('ziel');
 <App titel="Einbetten" eyebrow="Auf Websites einbauen">
   <div class="raster" id="einbetten" data-basis={basis}>
     <form class="karte block optionen" id="optionen" onsubmit="return false">
-      <fieldset class="arten">
-        <legend class="feld-label">Wie soll Let's Meet erscheinen?</legend>
-        <label class="art-karte">
-          <input type="radio" name="art" value="inline" checked />
-          <span>
-            <span class="art-bild inline" aria-hidden="true"><i></i><i></i><b></b></span>
-            <strong>Inline</strong>
-            <span class="leise klein">Kalender direkt in der Seite</span>
-          </span>
-        </label>
-        <label class="art-karte">
-          <input type="radio" name="art" value="badge" />
-          <span>
-            <span class="art-bild badge-bild" aria-hidden="true"><i></i><i></i><b></b></span>
-            <strong>Popup Button</strong>
-            <span class="leise klein">Schwebender Button unten rechts</span>
-          </span>
-        </label>
-        <label class="art-karte">
-          <input type="radio" name="art" value="text" />
-          <span>
-            <span class="art-bild text-bild" aria-hidden="true"><i></i><u></u><i></i></span>
-            <strong>Popup Link</strong>
-            <span class="leise klein">Eigener Link oder Button öffnet das Popup</span>
-          </span>
-        </label>
-      </fieldset>
-
       <div class="feld">
         <label for="ziel">Was wird eingebettet?</label>
         <select id="ziel" class="auswahl">
           {ziele.map((z) => <option value={z.url} selected={vorwahl === z.url}>{z.text}</option>)}
         </select>
       </div>
-      <div class="feld nur-badge nur-text">
-        <label for="text">Beschriftung</label>
-        <input id="text" class="eingabe" value="Termin buchen" maxlength="40" />
-      </div>
-      <fieldset class="feld nur-badge">
-        <legend class="feld-label">Farbe des Buttons</legend>
-        <div class="reihe">
-          <label class="haken"><input type="radio" name="farbe" value="orange" checked />Orange</label>
-          <label class="haken"><input type="radio" name="farbe" value="schwarz" />Schwarz</label>
-        </div>
-      </fieldset>
       <label class="schalter"><input type="checkbox" id="details" checked />Details zum Termin anzeigen</label>
 
       <div class="feld">
@@ -85,7 +46,7 @@ const vorwahl = Astro.url.searchParams.get('ziel');
         <h2 id="vorschau-titel" class="eyebrow">Vorschau</h2>
         <span class="punkte" aria-hidden="true"><i></i><i></i><i></i></span>
       </div>
-      <div class="vorschau-flaeche" id="vorschau"></div>
+      <div class="vorschau-flaeche" id="vorschau" data-art="inline"></div>
     </section>
   </div>
 </App>
@@ -102,41 +63,15 @@ const vorwahl = Astro.url.searchParams.get('ziel');
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
   function aktualisieren() {
-    const art = (form.querySelector('input[name="art"]:checked') as HTMLInputElement).value;
     const zielBasis = (document.getElementById('ziel') as HTMLSelectElement).value;
-    const text = (document.getElementById('text') as HTMLInputElement).value.trim() || 'Termin buchen';
-    const farbe = (form.querySelector('input[name="farbe"]:checked') as HTMLInputElement).value;
     const details = (document.getElementById('details') as HTMLInputElement).checked;
     const ziel = details ? zielBasis : `${zielBasis}?details=0`;
-    form.querySelectorAll<HTMLElement>('.nur-badge, .nur-text').forEach((el) => {
-      el.hidden = !el.classList.contains(`nur-${art}`);
-    });
-    const skript = `<script src="${basis}/embed.js" async><\/script>`;
-    if (art === 'inline') {
-      code.value = `<!-- Let's Meet Inline Widget -->\n<div class="letsmeet-inline-widget" data-url="${esc(ziel)}" style="min-width:320px;"></div>\n${skript}`;
-    } else if (art === 'badge') {
-      code.value = `<!-- Let's Meet Popup Button -->\n${skript}\n<script>\n  window.addEventListener('load', function () {\n    LetsMeet.initBadgeWidget({ url: '${ziel}', text: '${text.replace(/'/g, "\\'")}', farbe: '${farbe}' });\n  });\n<\/script>`;
-    } else {
-      code.value = `<!-- Let's Meet Popup Link -->\n${skript}\n<a href="${esc(zielBasis)}" data-letsmeet-popup="${esc(ziel)}">${esc(text)}</a>`;
-    }
+    code.value = `<!-- Let's Meet Inline Widget -->\n<div class="letsmeet-inline-widget" data-url="${esc(ziel)}" style="min-width:320px;"></div>\n<script src="${basis}/embed.js" async><\/script>`;
     direkt.value = zielBasis;
-
-    // Vorschau neu aufbauen
-    document.querySelector('.lm-badge')?.remove();
     vorschau.innerHTML = '';
-    vorschau.dataset.art = art;
-    if (art === 'inline') {
-      const box = document.createElement('div');
-      vorschau.appendChild(box);
-      lm().initInlineWidget({ url: ziel, parentElement: box, hoehe: 640 });
-    } else if (art === 'badge') {
-      vorschau.innerHTML = '<p class="leise klein">Der Button sitzt auf deiner Website unten rechts. Hier siehst du ihn unten rechts im Fenster.</p>';
-      lm().initBadgeWidget({ url: ziel, text, farbe });
-    } else {
-      const p = document.createElement('p');
-      p.innerHTML = `So sieht ein Satz auf deiner Website aus, in dem der Link steckt: <a href="#" data-letsmeet-popup="${esc(ziel)}">${esc(text)}</a>. Klick ihn an, um das Popup zu testen.`;
-      vorschau.appendChild(p);
-    }
+    const box = document.createElement('div');
+    vorschau.appendChild(box);
+    lm().initInlineWidget({ url: ziel, parentElement: box, hoehe: 640 });
   }
   form.addEventListener('input', aktualisieren);
   form.addEventListener('change', aktualisieren);

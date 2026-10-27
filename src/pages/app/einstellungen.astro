@@ -1,6 +1,8 @@
 ---
 import App from '../../layouts/App.astro';
 import Avatar from '../../components/Avatar.astro';
+import Adminportal from '../../components/Adminportal.astro';
+import Icon from '../../components/ui/Icon.astro';
 import { passwortHash, passwortPruefen } from '../../lib/auth';
 import { ausfuehren, eins, jetztIso } from '../../lib/db';
 import { emailGueltig, trimmen, urlGueltig } from '../../lib/eingabe';
@@ -64,7 +66,7 @@ if (Astro.request.method === 'POST') {
 }
 const ff = (n: string) => (fehler[n] ? { 'aria-invalid': 'true' as const, 'aria-describedby': `fehler-${n}` } : {});
 ---
-<App titel="Einstellungen" eyebrow="Dein Profil" meldung={Object.keys(fehler).length ? { art: 'fehler', text: 'Bitte prüf die markierten Felder.' } : meldungAusUrl(Astro.url)}>
+<App titel="Einstellungen" eyebrow={istAdmin ? 'Buchungsseite, Profil und Adminportal' : 'Dein Profil'} meldung={Object.keys(fehler).length ? { art: 'fehler', text: 'Bitte prüf die markierten Felder.' } : meldungAusUrl(Astro.url)}>
   <div class="liste">
     {istAdmin && (
       <form method="post" class="karte block" novalidate>
@@ -136,6 +138,21 @@ const ff = (n: string) => (fehler[n] ? { 'aria-invalid': 'true' as const, 'aria-
       <div><button type="submit" class="knopf">Passwort ändern</button></div>
     </form>
   </div>
+  {istAdmin && (
+    <div class="admin">
+      <Adminportal />
+      <section class="vorschau-block" aria-labelledby="vs-titel">
+        <div class="vs-kopf">
+          <h2 id="vs-titel">Vorschau der Buchungsseite</h2>
+          <a class="knopf knopf--rahmen knopf--klein" href="/" target="_blank" rel="noopener"><Icon name="extern" groesse={16} />In neuem Tab öffnen</a>
+        </div>
+        <p class="leise klein">So sehen Gäste die zentrale Buchungsseite und das eingebettete Widget. Änderungen am Text oder Namen oben erscheinen nach dem Speichern hier.</p>
+        <div class="karte vs-rahmen">
+          <iframe src="/?embed=1" title="Vorschau der zentralen Buchungsseite" loading="lazy"></iframe>
+        </div>
+      </section>
+    </div>
+  )}
 </App>
 <style>
   .liste { display: grid; gap: var(--raum-6); grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); align-items: start; }
@@ -143,4 +160,11 @@ const ff = (n: string) => (fehler[n] ? { 'aria-invalid': 'true' as const, 'aria-
   .block h2 { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-h4); letter-spacing: 0; }
   .profil-kopf { display: flex; gap: var(--raum-4); align-items: center; }
   .zwei { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: var(--raum-4) var(--raum-6); }
+  .admin { display: grid; gap: var(--raum-12); margin-top: var(--raum-12); padding-top: var(--raum-12); border-top: 1px solid var(--farbe-rahmen); }
+  .vorschau-block { display: grid; gap: var(--raum-4); }
+  .vorschau-block h2 { font-size: var(--text-h3, 1.375rem); }
+  .vorschau-block p { margin: 0; }
+  .vs-kopf { display: flex; justify-content: space-between; align-items: center; gap: var(--raum-4); flex-wrap: wrap; }
+  .vs-rahmen { overflow: hidden; }
+  .vs-rahmen iframe { display: block; width: 100%; height: clamp(640px, 85vh, 900px); border: 0; }
 </style>

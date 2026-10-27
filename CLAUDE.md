@@ -90,10 +90,10 @@ Backoffice (`/app`, geschützt durch Middleware, `noindex`, `X-Frame-Options: DE
 | `/app/termine` | Standard Tab Kalender (Woche oder Monat, daneben „Als Nächstes“), dazu Listen Anstehend, Vergangen, Abgesagt mit Suche und Zeitraum, Team Ansicht für Admins, CSV Export. Parameter: `ansicht`, `kal=woche\|monat`, `datum`, `wer=team` |
 | `/app/termine/{id}` | Details, interne Notiz, nicht erschienen, Absagen, Umbuchungslink |
 | `/app/verfuegbarkeit` | Wochenzeiten mit mehreren Zeiträumen pro Tag, Zeitzone, Kalender mit Live Vorschau ungespeicherter Wochenzeiten, Ausnahmen für Tage oder Zeiträume (Klick auf einen Tag im Kalender trägt das Datum ein, `?ausnahme=`) |
-| `/app/einbetten` | Codegenerator mit Live Vorschau |
-| `/app/integrationen` | Google Kalender, Webhook mit HMAC Signatur |
-| `/app/einstellungen` | Admins: zentrale Buchungsseite (Name des Büros als Gastgeber, Text unter „Lass uns reden.“). Alle: eigenes Profil und Passwort |
-| `/app/werkzeuge` | Nur Admins, Adminportal: Status der Dienste (Google, Resend, Turnstile, Webhook, Cron) mit Link zur Einrichtung und zur jeweiligen Konsole, alle Gespräche mit Status, Link kopieren, Bearbeiten, Neu erstellen und Hinweis, wo die Homepage sie verlinkt (Zuordnung steht in der Seite als `HOMEPAGE`), Verweise auf Cloudflare, D1, Resend, GitHub Repositories (Let's Meet, `thatsit_homepage_new`), Homepage, Blog, Close, Calendly |
+| `/app/einbetten` | Codegenerator nur für das Inline Widget, mit Live Vorschau |
+| `/app/integrationen` | Oben Status aller Dienste mit Logos (Google, Resend, Turnstile, Webhook, Cron, `DiensteStatus.astro`), darunter Einrichtung von Google Kalender und Webhook mit HMAC Signatur |
+| `/app/einstellungen` | Admins: zentrale Buchungsseite (Name des Büros als Gastgeber, Text unter „Lass uns reden.“). Alle: eigenes Profil und Passwort. Admins zusätzlich unten das Adminportal (`Adminportal.astro`: alle Gespräche mit Homepage Zuordnung `HOMEPAGE`, Verweise auf Werkzeuge) und ganz unten die Vorschau der Buchungsseite (iframe `/?embed=1`) |
+| `/app/werkzeuge` | Leitet per 301 auf `/app/einstellungen` (Adminportal ist dort eingebaut) |
 | `/app/team` | Nur Admins: Mitglieder anlegen, Rolle, deaktivieren, Passwort setzen. Das Büro steht oben mit Badge „Büro, zentrale Buchung“ und lässt sich nicht deaktivieren |
 
 ## Designsystem: Tokens, Schriften, Typoskala
@@ -126,7 +126,7 @@ Alle Werte in `src/styles/tokens.css`, abgeleitet aus dem Branding Guide.
 | `src/lib/marke.ts` | Kontakt (info@, Telefon), Standardtext unter „Lass uns reden.“ |
 | `src/components/TerminartFormular.astro` | Editor der Terminarten inklusive Fragenliste und Unterlagenliste (Titel, Link, Kurzinfo, Vorschaubild), ab 1400px zweispaltig |
 | `src/components/Kalender.astro` | Backoffice Kalender, Woche und Monat: Verfügbarkeit weiß, nicht buchbar schraffiert, Termine als Blöcke in Terminartfarbe, Google Belegtzeiten gestrichelt, orangene Jetzt Linie. Navigation über URL (`kal`, `datum`), Anker `#kalender` |
-| `src/components/ui/Marke.astro` | Logos der Dienste (Google, Kalender, Resend, Cloudflare, GitHub, Close, That's it.) als Kachel, Props `marke`, `name`, `groesse`. Genutzt im Adminportal |
+| `src/components/ui/Marke.astro` | Logos der Dienste (Google, Kalender, Resend, Cloudflare, GitHub, Close, That's it.) als Kachel, Props `marke`, `name`, `groesse`. Genutzt in Adminportal und Integrationen |
 | `src/components/ui/Logo.astro` | Let's Meet Logo, Props `variante` (`schwarz`, `weiss`), `form` (`voll`, `kompakt`), `hoehe`, `href`, `klasse`. Genutzt im öffentlichen Kopf (44px), in der Seitenleiste (44px, mobil 150px breit) und groß auf Login und Einrichtung |
 | `src/components/Avatar.astro`, `OrtIcon.astro`, `ui/Icon.astro` | Kleinteile |
 | `src/scripts/buchung.ts` | Kalender, Zeitzonen, Slotwahl und Formularversand im Browser |
@@ -220,3 +220,4 @@ Der vierstufige Kontakt Funnel der Homepage (`Thatsitmarketing/thatsit_homepage_
 * 2026-10-27: Adminportal `/app/werkzeuge` (Menüpunkt „Adminportal“, nur Admins) mit Dienststatus, Gesprächsübersicht samt Homepage Zuordnung und Verweisen auf alle Werkzeuge. Typprüfung ohne Fehler, Seite nicht im Browser angesehen. Close Anbindung weiter offen (API Schlüssel und Statusnamen fehlen), bis dahin über den Webhook
 * 2026-10-27: Auswahl der Gespräche oben auf `/` entfernt. `/` zeigt nur das Kostenfreie Strategiegespräch, die anderen Gespräche erreicht man nur über ihre eigenen Links (`/strategiegespraech-social-media`, `/strategiegespraech-recruiting`, `/sichtbarkeits-check`). Zuordnung Homepage: mehrere Leistungen oder gemischt führt auf das allgemeine Gespräch, nur Social Media, nur Recruiting oder nur Sichtbarkeit auf das jeweilige. Typprüfung nicht ausgeführt
 * 2026-10-27: Adminportal überarbeitet: Dienstkarten gleich hoch mit Logo Kachel, Status und Aktionen am Kartenende, mehr Abstand zwischen Abschnitten, Gesprächstabelle wird unter 900px zu Karten, Werkzeuge mit Logos je Eintrag und Gruppenüberschriften. Neue Komponente `Marke.astro`. Build ohne Fehler, nicht im Browser angesehen (Typprüfung lokal nicht möglich, Node 22.22)
+* 2026-10-27: Adminportal in die Einstellungen verschoben (Menüpunkt entfällt, `/app/werkzeuge` leitet weiter), darunter Vorschau der Buchungsseite. Dienststatus mit Logos jetzt oben unter Integrationen. Einbetten nur noch Inline Widget. Verfügbarkeit mit mehr Abstand. Build ohne Fehler, nicht im Browser angesehen
