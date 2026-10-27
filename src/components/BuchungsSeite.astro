@@ -342,6 +342,9 @@ const absaetze = (terminart.beschreibung ?? '')
     .info { order: 0; border-right: 0; border-top: 1px solid var(--farbe-rahmen); }
   }
   @media (max-width: 860px) {
+    .held { margin-bottom: var(--raum-4); gap: var(--raum-2); }
+    .held h1 { font-size: clamp(2rem, 1.2rem + 4vw, 2.75rem); }
+    .unterzeile { font-size: var(--text-sm); }
     .bereich, .info { padding: var(--raum-6); }
     .kal-layout:has(.zeiten:not([hidden])) { grid-template-columns: 1fr; }
     .kalender { max-width: none; }
