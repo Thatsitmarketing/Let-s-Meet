@@ -8,7 +8,7 @@ import { meldungAusUrl } from '../../lib/meldungen';
 import type { Ausnahme, Regel } from '../../lib/typen';
 import { datumInZone, formatDatumLang, gueltigeZone, minZuZeit, WOCHENTAGE, zeitZuMin } from '../../lib/zeit';
 
-const nutzer = Astro.locals.nutzer!;
+const nutzer = Astro.locals.gastgeber!;
 const REIHENFOLGE = [1, 2, 3, 4, 5, 6, 0];
 let fehler = '';
 
@@ -111,7 +111,7 @@ const tagLink = (datum: string) => {
 const zonen = ['Europe/Berlin', 'Europe/Vienna', 'Europe/Zurich', 'Europe/London', 'Europe/Madrid', 'Europe/Istanbul', 'America/New_York', 'Asia/Dubai', 'UTC'];
 if (!zonen.includes(nutzer.zeitzone)) zonen.unshift(nutzer.zeitzone);
 ---
-<App titel="Verfügbarkeit" eyebrow="Wann man dich buchen kann" meldung={fehler ? { art: 'fehler', text: fehler } : meldungAusUrl(Astro.url)}>
+<App titel="Verfügbarkeit" eyebrow="Wann das Büro buchbar ist" meldung={fehler ? { art: 'fehler', text: fehler } : meldungAusUrl(Astro.url)}>
   <div class="raster">
     <form method="post" class="karte block woche" id="woche">
       <input type="hidden" name="aktion" value="woche" />

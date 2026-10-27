@@ -1,12 +1,14 @@
 # Let's Meet
 
-Eigene Terminbuchung von That's it. Marketing nach dem Vorbild von Calendly: öffentliche Buchungsseiten, einbettbares Widget und ein Backoffice für das Team, komplett im Branding von That's it. Marketing.
+Eigene Terminbuchung von That's it. Marketing nach dem Vorbild von Calendly: eine zentrale Buchungsseite für das Büro, einbettbares Widget und ein Backoffice für das Team, komplett im Branding von That's it. Marketing.
+
+**Zentrale Buchung (seit 2026-10-27):** Gebucht wird nie bei einzelnen Mitarbeitern, sondern immer beim Büro `info@thatsit.marketing`. Das Büro ist ein Eintrag in `nutzer` mit `ist_buero = 1`. Ihm gehören Terminarten, Verfügbarkeit, Ausnahmen, Google Kalender, Webhook und alle Buchungen. Teammitglieder melden sich mit ihrem eigenen Konto an und verwalten das Büro gemeinsam (Middleware setzt `locals.gastgeber` = Büro, `locals.nutzer` = angemeldete Person).
 
 ## Kunde und Ziel
 
 * Kunde: That's it. Marketing, Gelsenkirchen (intern genutzt, Ansprache per du)
 * Ziel: Calendly ersetzen. Interessenten buchen Erstgespräche und Calls direkt, ohne Mailpingpong
-* Primäre Conversion: abgeschlossene Buchung auf `/{nutzer}/{terminart}` oder im eingebetteten Widget
+* Primäre Conversion: abgeschlossene Buchung auf `/` bzw. `/{terminart}` oder im eingebetteten Widget
 * Branding Quelle: „Thats it Marketing Branding Guide“ (Google Drive, Ordner Marketing intern, Version 1.0, 2026)
 
 ## Stack und Befehle
@@ -43,7 +45,7 @@ Ein Pages Projekt funktioniert mit diesem Setup nicht (liefert 404), weil der As
 1. D1 Datenbank ist angelegt und in `wrangler.jsonc` verknüpft (`terminethatsitmarketing`)
 2. Cloudflare Dashboard, Workers & Pages, Erstellen, Worker, Repository importieren: `Thatsitmarketing/Let-s-Meet`
 3. Workername exakt `let-s-meet` (muss zu `name` in `wrangler.jsonc` passen)
-4. Buildbefehl `pnpm build`, Deploybefehl `pnpm run deploy:cloudflare`, Produktionsbranch nach Wahl (aktuell liegt der Code auf `claude/affectionate-pasteur-q3ennq`)
+4. Buildbefehl `pnpm build`, Deploybefehl `pnpm run deploy:cloudflare`, Produktionsbranch `main` (empfohlen, der alte Branch `claude/affectionate-pasteur-q3ennq` ist veraltet)
 5. Unter Einstellungen, Variablen und Geheimnisse als Secret setzen: `SESSION_SECRET`, `SETUP_TOKEN`, später die übrigen aus `.env.example`
 6. Der Deploybefehl wendet die Migrationen auf die D1 an. Falls dem Build Token die D1 Rechte fehlen: einmal lokal `pnpm db:migrate:remote` ausführen
 7. Custom Domain `letsmeet.thatsit.marketing` im Worker hinterlegen und `SITE_URL` in `wrangler.jsonc` prüfen
@@ -55,7 +57,7 @@ Ein Pages Projekt funktioniert mit diesem Setup nicht (liefert 404), weil der As
 2. OAuth Zustimmungsbildschirm (intern oder extern), Scopes `calendar.events` und `calendar.freebusy`
 3. OAuth Client vom Typ Webanwendung, Weiterleitungs URI `https://letsmeet.thatsit.marketing/api/google/rueckruf` (lokal `http://localhost:4321/api/google/rueckruf`). Die URI wird aus der Adresse im Browser gebildet (`url.origin`), daher jede genutzte Domain eintragen, auch `https://let-s-meet.<konto>.workers.dev/api/google/rueckruf`, solange die Custom Domain noch nicht läuft. Sonst meldet Google `redirect_uri_mismatch`
 4. `GOOGLE_CLIENT_ID` und `GOOGLE_CLIENT_SECRET` als Secret setzen
-5. Jedes Teammitglied verbindet sich selbst unter Backoffice, Integrationen
+5. Unter Backoffice, Integrationen einmal „Mit Google verbinden“ und bei Google mit **info@thatsit.marketing** anmelden. Die Verbindung gehört dem Büro, alle Buchungen landen in diesem Kalender
 
 ### Resend einrichten
 
@@ -67,9 +69,9 @@ Absenderdomain `thatsit.marketing` bei Resend verifizieren (SPF, DKIM), `RESEND_
 
 | Pfad | Zweck |
 | --- | --- |
-| `/` | Teamübersicht, leitet bei nur einer Person direkt auf deren Profil |
-| `/{nutzer}` | Profilseite mit allen öffentlichen Terminarten |
-| `/{nutzer}/{terminart}` | Buchungsseite: Monatskalender, Zeitzone, Slots, Formular. Parameter: `embed=1`, `details=0`, `name`, `email`, `umbuchen={id}` |
+| `/` | Zentrale Buchungsseite: erste öffentliche Terminart des Büros, Kalender mit direkt geöffnetem erstem freien Tag, rechts Beschreibung, Unterlagen. Bürofoto als Hintergrund, Teamleiste unter dem Kalender. Bei mehreren Terminarten Auswahl oben |
+| `/{terminart}` | Dieselbe Seite für eine bestimmte Terminart. Parameter: `embed=1`, `details=0`, `name`, `email`, `umbuchen={id}` |
+| `/{nutzer}`, `/{nutzer}/{terminart}` | Alte Personenlinks, 301 auf `/` bzw. `/{terminart}` (Parameter bleiben erhalten) |
 | `/termin/{id}` | Bestätigung und Verwaltung für den Gast (Kalender, Umbuchen, Absagen) |
 | `/termin/{id}/absagen` | Absage mit optionalem Grund |
 | `/termin/{id}/kalender.ics` | Kalenderdatei |
@@ -84,14 +86,14 @@ Backoffice (`/app`, geschützt durch Middleware, `noindex`, `X-Frame-Options: DE
 | --- | --- |
 | `/app/login`, `/app/setup`, `/app/abmelden` | Anmeldung, Ersteinrichtung, Abmelden |
 | `/app/terminarten` | Übersicht als Karten, aktiv schalten, Link kopieren, duplizieren, löschen |
-| `/app/terminarten/neu`, `/app/terminarten/{id}` | Editor: Titel, Link, Dauer, Farbe, Ort, Planung, Fragen, Mails, Sichtbarkeit |
+| `/app/terminarten/neu`, `/app/terminarten/{id}` | Editor: Titel, Link, Dauer, Farbe, Ort, Unterlagen zur Vorbereitung, Planung, Fragen, Mails, Sichtbarkeit |
 | `/app/termine` | Standard Tab Kalender (Woche oder Monat, daneben „Als Nächstes“), dazu Listen Anstehend, Vergangen, Abgesagt mit Suche und Zeitraum, Team Ansicht für Admins, CSV Export. Parameter: `ansicht`, `kal=woche\|monat`, `datum`, `wer=team` |
 | `/app/termine/{id}` | Details, interne Notiz, nicht erschienen, Absagen, Umbuchungslink |
 | `/app/verfuegbarkeit` | Wochenzeiten mit mehreren Zeiträumen pro Tag, Zeitzone, Kalender mit Live Vorschau ungespeicherter Wochenzeiten, Ausnahmen für Tage oder Zeiträume (Klick auf einen Tag im Kalender trägt das Datum ein, `?ausnahme=`) |
 | `/app/einbetten` | Codegenerator mit Live Vorschau |
 | `/app/integrationen` | Google Kalender, Webhook mit HMAC Signatur |
-| `/app/einstellungen` | Profil, Buchungslink, Passwort |
-| `/app/team` | Nur Admins: Mitglieder anlegen, Rolle, deaktivieren, Passwort setzen |
+| `/app/einstellungen` | Admins: zentrale Buchungsseite (Name des Büros als Gastgeber, Text unter „Lass uns reden.“). Alle: eigenes Profil und Passwort |
+| `/app/team` | Nur Admins: Mitglieder anlegen, Rolle, deaktivieren, Passwort setzen. Das Büro steht oben mit Badge „Büro, zentrale Buchung“ und lässt sich nicht deaktivieren |
 
 ## Designsystem: Tokens, Schriften, Typoskala
 
@@ -106,7 +108,8 @@ Alle Werte in `src/styles/tokens.css`, abgeleitet aus dem Branding Guide.
 * Backoffice Breite: Inhalt bis 1840px, Formularseiten (Einstellungen, Integrationen) ab 560px pro Karte nebeneinander. Verfügbarkeit: ab 1800px Wochenzeiten links und Kalender rechts, ab 1380px Kalender oben und Wochenzeiten neben Ausnahmen, darunter einspaltig
 * Logo Let's Meet: `public/images/brand/letsmeet-schwarz.svg` und `letsmeet-weiss.svg` (mit Unterzeile „THAT'S IT. MARKETING“), `letsmeet-kompakt-*.svg` (nur „Let's Meet.“), PNG 600px für Mails (`letsmeet-weiss.png`, `letsmeet-schwarz.png`). Aufbau wie das That's it. Logo: t, Apostroph, s und orangener Quadratpunkt aus dem Original vektorisiert, L und M aus den gemessenen Strichstärken gebaut (Versalhöhe 129, Grundstrich 21,3, Querstrich 17), e aus Inter angeglichen, Unterzeile Montserrat 240 mit 0,4em Sperrung, rechtsbündig zum letzten t. Alle Schriften als Pfade, keine Webfonts nötig. Mindestgröße der vollen Variante etwa 150px Breite, darunter kompakt nutzen
 * Favicon: weißes L mit orangenem Quadratpunkt auf Schwarz, auf 4er Raster für scharfe 16 und 32px. Dateien `public/favicon.svg`, `favicon.ico` (16, 32, 48), `apple-touch-icon.png` (180), `icon-192.png`, `icon-512.png`, `site.webmanifest`. Diese Pfade stehen in `RESERVIERTE_SLUGS`
-* Logos That's it. Marketing (Original, aktuell nicht eingebunden): `public/images/brand/logo-schwarz.*` und `logo-weiss.*` (aus dem Branding Guide extrahiert)
+* Logos That's it. Marketing (Original): `public/images/brand/logo-schwarz.*` und `logo-weiss.*` (aus dem Branding Guide extrahiert). `logo-weiss.webp` steht im Kopf der zentralen Buchungsseite
+* Bilder aus dem Repository der neuen Homepage (`Thatsitmarketing/thatsit_homepage_new`, `src/assets/bilder`): Besprechungsraum mit Logowand `buero-tisch.jpg` als `public/images/buero/besprechungsraum-1200.webp` und `-2400.webp` (Seitenhintergrund, abgedunkelt, ab 1000px die große Datei, auf Desktop fixiert), `start/team-held.jpg` als `public/images/team/team-besprechung.webp`, Portraits `team/portrait-*.jpg` quadratisch 160px als `public/images/team/{name}.webp`, Playbook Mockups als `public/images/unterlagen/*.webp`
 
 ## Komponenten und wo sie liegen
 
@@ -117,14 +120,16 @@ Alle Werte in `src/styles/tokens.css`, abgeleitet aus dem Branding Guide.
 | `src/layouts/Oeffentlich.astro` | Kopf und Fuß der öffentlichen Seiten, Embed Modus mit Höhenmeldung an das Widget |
 | `src/layouts/App.astro` | Backoffice mit schwarzer Seitenleiste, mobilem Menü, Kopierknöpfen, Rückfragen |
 | `src/layouts/Zugang.astro` | Login und Einrichtung |
-| `src/components/TerminartFormular.astro` | Editor der Terminarten inklusive Fragenliste, ab 1400px zweispaltig |
+| `src/components/BuchungsSeite.astro` | Öffentliche Buchung: Kopf auf dem Bürofoto (Logo That's it. weiß, „Lass uns reden.“), Karte mit Kalender, Zeiten und Formular links, rechts „Dein Termin“ (Dauer, Ort, Beschreibung, Zeilen nach einer Zeile mit Doppelpunkt werden Hakenliste) und „Unterlagen zur Vorbereitung“. Teamleiste mit Teamfoto, Portraits und Kontakt unter dem Kalender (nicht im Embed, ausgeblendet im Formularschritt). Ab 960px zweispaltig |
+| `src/lib/marke.ts` | Kontakt (info@, Telefon), Teamportraits mit Namen und Rollen, Standardtext unter „Lass uns reden.“ |
+| `src/components/TerminartFormular.astro` | Editor der Terminarten inklusive Fragenliste und Unterlagenliste (Titel, Link, Kurzinfo, Vorschaubild), ab 1400px zweispaltig |
 | `src/components/Kalender.astro` | Backoffice Kalender, Woche und Monat: Verfügbarkeit weiß, nicht buchbar schraffiert, Termine als Blöcke in Terminartfarbe, Google Belegtzeiten gestrichelt, orangene Jetzt Linie. Navigation über URL (`kal`, `datum`), Anker `#kalender` |
 | `src/components/ui/Logo.astro` | Let's Meet Logo, Props `variante` (`schwarz`, `weiss`), `form` (`voll`, `kompakt`), `hoehe`, `href`, `klasse`. Genutzt im öffentlichen Kopf (44px), in der Seitenleiste (44px, mobil 150px breit) und groß auf Login und Einrichtung |
 | `src/components/Avatar.astro`, `OrtIcon.astro`, `ui/Icon.astro` | Kleinteile |
 | `src/scripts/buchung.ts` | Kalender, Zeitzonen, Slotwahl und Formularversand im Browser |
 | `public/embed.js` | Widget ohne Abhängigkeiten, API `LetsMeet.initInlineWidget`, `initBadgeWidget`, `showPopupWidget`, `closePopupWidget`, Ereignis `letsmeet:gebucht` |
 
-Logik in `src/lib/`: `slots.ts` (freie Zeiten), `kalender.ts` (Kalenderdaten je Tag: Verfügbarkeit, Termine mit Spaltenverteilung bei Überschneidung, Google freeBusy ohne die eigenen Buchungen), `zeit.ts` (Zeitzonen ohne Bibliothek), `buchungen.ts` (anlegen, absagen, umbuchen, Mails, Webhook, Cron), `google.ts`, `mail.ts` (Vorlagen), `ics.ts`, `auth.ts`, `konten.ts`, `terminart-formular.ts`, `termin-filter.ts`.
+Logik in `src/lib/`: `abfragen.ts` (unter anderem `buero()`, `LOGIN_KONTO`, `unterlagenLesen`), `slots.ts` (freie Zeiten), `kalender.ts` (Kalenderdaten je Tag: Verfügbarkeit, Termine mit Spaltenverteilung bei Überschneidung, Google freeBusy ohne die eigenen Buchungen), `zeit.ts` (Zeitzonen ohne Bibliothek), `buchungen.ts` (anlegen, absagen, umbuchen, Mails, Webhook, Cron), `google.ts`, `mail.ts` (Vorlagen), `ics.ts`, `auth.ts`, `konten.ts`, `terminart-formular.ts`, `termin-filter.ts`.
 
 ## Formulare und Datenfluss
 
@@ -144,7 +149,9 @@ Anmeldung Backoffice: Passwort als PBKDF2 SHA256 (100.000 Iterationen), Sitzung 
 
 Webhook Ereignisse: `buchung.erstellt`, `buchung.umgebucht`, `buchung.storniert`, `test`. Header `x-letsmeet-signatur` = HMAC SHA256 des Rohkörpers mit dem Signaturschlüssel.
 
-Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `terminarten`, `verfuegbarkeit`, `ausnahmen`, `buchungen`. Keine IP Adressen, keine User Agents. Löschfrist `loeschen_ab` 365 Tage nach Terminende, der Cron löscht.
+Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `terminarten`, `verfuegbarkeit`, `ausnahmen`, `buchungen`. `migrations/0002_zentrales_buero.sql`: Spalten `nutzer.ist_buero` und `terminarten.unterlagen` (JSON `[{titel, url, info, bild}]`). Macht das Konto `info@thatsit.marketing` zum Büro (Name „That's it. Marketing“, Position „Büro Gelsenkirchen“) oder legt es ohne Anmeldung an (`passwort_hash = '!'`), ergänzt Standardverfügbarkeit Mo bis Fr 9 bis 17 Uhr und ein Erstgespräch, füllt dessen Beschreibung und Unterlagen (vier Playbooks, Referenzen), falls leer, und setzt persönliche Terminarten der übrigen Konten auf inaktiv (Daten bleiben). Login und Einrichtung zählen nur Konten mit echtem Passwort (`LOGIN_KONTO`). Neue Konten bekommen keine eigenen Terminarten mehr.
+
+Unterlagen zur Vorbereitung (Quelle Google Drive, Ordner mit den Playbook PDFs, und Homepage `src/daten/playbooks.ts`): Website Conversion, Social Media, Social Recruiting und Gastro Marketing Playbook verlinken auf die öffentlichen Landingpages `*-playbook.thatsit.marketing`, dazu `thatsit.marketing/referenzen/`. Die PDFs in Drive sind nicht öffentlich freigegeben, darum nicht direkt verlinkt. Weitere Unterlagen pflegt ihr im Terminart Editor. Keine IP Adressen, keine User Agents. Löschfrist `loeschen_ab` 365 Tage nach Terminende, der Cron löscht.
 
 ## Umgebungsvariablen mit Zweck, ohne Werte
 
@@ -169,11 +176,14 @@ Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `termina
 
 ## Offene Punkte
 
-* Pages Projekt `let-s-meet` löschen und stattdessen den Worker anlegen (siehe Deployment)
+* Worker `let-s-meet` läuft unter `let-s-meet.aged-brook-9137.workers.dev`. Pages Projekt `let-s-meet` kann gelöscht werden
+* Migration 0002 auf die D1 anwenden (passiert beim nächsten Deploy über `pnpm run deploy:cloudflare`, sonst `pnpm db:migrate:remote`). Danach heißt das Konto info@thatsit.marketing „That's it. Marketing“. Wer sich bisher persönlich damit angemeldet hat (bisher Name Tim Barela), bekommt unter Team ein eigenes Konto
+* Google Kalender unter Integrationen mit info@thatsit.marketing verbinden (bisher ist nur Mikes persönlicher Kalender verbunden, der zählt nicht mehr)
+* Erreichbarkeit der Playbook Landingpages und von `thatsit.marketing/referenzen/` prüfen (aus der Entwicklungsumgebung nicht erreichbar, Links aus dem Homepage Repository übernommen; `social-media-playbook.thatsit.marketing` ist dort als angenommen markiert)
+* Branch `claude/affectionate-pasteur-q3ennq` ist veraltet (ein Commit nur an der CLAUDE.md, Inhalt hier übernommen) und kann ohne Merge gelöscht werden
 * Secrets in Cloudflare setzen, Resend Domain verifizieren, Turnstile Widget anlegen
 * Google OAuth Client anlegen (Anleitung oben). Google Verbindung, freeBusy und Meet Links sind mangels Zugang in der Entwicklung nicht live getestet
 * Datenschutzerklärung auf thatsit.marketing um Let's Meet ergänzen (Zweck, Rechtsgrundlage, Speicherdauer 12 Monate, Empfänger Cloudflare, Resend, Google)
-* Profilbilder des Teams als https Link unter Einstellungen hinterlegen
 * Optional später: Rundenverteilung im Team, mehrere Verfügbarkeitspläne pro Person, Zahlungen, Microsoft Kalender
 
 ## Änderungsverlauf mit Datum
@@ -185,3 +195,5 @@ Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `termina
 * 2026-10-26: Backoffice überarbeitet: volle Breite statt 1180px, neuer Kalender (Woche und Monat) mit Terminen, Verfügbarkeit, Ausnahmen und Google Belegtzeiten auf Termine (Standard Tab) und Verfügbarkeit, Live Vorschau der Wochenzeiten, Tagesklick legt Ausnahme an, Terminart Editor sowie Einstellungen und Integrationen zweispaltig, Feldausrichtung in Formularrastern korrigiert. Lokal mit Testdaten in 390, 1024, 1440 und 2000px geprüft
 * 2026-10-26: Google Verbindung repariert: nach der Freigabe landete man auf der Loginmaske und die Verbindung wurde nicht gespeichert, ohne sichtbaren Grund. Rückruf leitet jetzt per meta refresh weiter (Sitzung bleibt erhalten), zeigt den genauen Fehlergrund von Google an und trimmt Client ID und Secret
 * 2026-10-26: Eigenes Logo „Let's Meet.“ im Stil des That's it. Marketing Logos (Schwarz, Weiß, kompakt, PNG für Mails) und neues Favicon Set (SVG, ICO, Apple Touch Icon, 192 und 512px, Webmanifest). Eingebunden in Kopf, Seitenleiste, Login, Einrichtung und Mailkopf, der Text „Let's Meet.“ neben dem alten Logo entfällt. Build, Typprüfung und Sichtprüfung in 390 und 1440px lokal
+* 2026-10-26: Schema `0001_grundschema.sql` auf die D1 `terminethatsitmarketing` eingespielt und in `d1_migrations` vermerkt, damit `wrangler d1 migrations apply` es nicht doppelt ausführt (übernommen aus Branch `claude/affectionate-pasteur-q3ennq`)
+* 2026-10-27: Umbau auf zentrale Buchung über das Büro info@thatsit.marketing statt einzelner Mitarbeiter. Neue Startseite mit Kalender und direkt sichtbaren freien Zeiten, rechts Beschreibung und Unterlagen zur Vorbereitung (Playbooks, Referenzen), Teamleiste mit Foto und Portraits, Bürofoto aus dem Homepage Repository als Hintergrund. Neue Adressen `/{terminart}`, alte Personenlinks leiten weiter. Backoffice arbeitet für alle angemeldeten Konten auf dem Büro (Terminarten, Termine, Verfügbarkeit, Einbetten, Integrationen), Einstellungen mit Karte für die Buchungsseite, Unterlagen im Terminart Editor, Migration 0002. Geprüft lokal mit Abbild der echten D1 Daten: Migration, Typprüfung, Build, Buchung bis Bestätigungsseite, alle Backofficeseiten, Screenshots in 390, 900 (Embed), 1024, 1440 und 2000px ohne horizontales Scrollen. Lokal nur Node 22.22 vorhanden, Astro daher direkt über `dist/cli` gestartet

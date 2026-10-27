@@ -3,11 +3,12 @@ import Zugang from '../../layouts/Zugang.astro';
 import Icon from '../../components/ui/Icon.astro';
 import { passwortPruefen, sitzungStarten } from '../../lib/auth';
 import { ausfuehren, eins } from '../../lib/db';
+import { LOGIN_KONTO } from '../../lib/abfragen';
 import { trimmen } from '../../lib/eingabe';
 import type { Nutzer } from '../../lib/typen';
 
 if (Astro.locals.nutzer) return Astro.redirect('/app');
-const anzahl = await eins<{ n: number }>('SELECT COUNT(*) AS n FROM nutzer');
+const anzahl = await eins<{ n: number }>(`SELECT COUNT(*) AS n FROM nutzer WHERE ${LOGIN_KONTO}`);
 if (!anzahl?.n) return Astro.redirect('/app/setup');
 
 const weiterRoh = Astro.url.searchParams.get('weiter') ?? '/app';

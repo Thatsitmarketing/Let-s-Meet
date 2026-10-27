@@ -1,5 +1,6 @@
 import { defineMiddleware } from 'astro:middleware';
 import { nutzerAusSitzung } from './lib/auth';
+import { buero } from './lib/abfragen';
 
 const OFFEN_IM_APP = ['/app/login', '/app/setup'];
 
@@ -10,7 +11,11 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
 
   if (istApp || istAppApi) {
     const nutzer = await nutzerAusSitzung(ctx.cookies);
-    if (nutzer) ctx.locals.nutzer = nutzer;
+    if (nutzer) {
+      ctx.locals.nutzer = nutzer;
+      // Alles rund um Buchungen gehört dem Büro, nicht der angemeldeten Person
+      ctx.locals.gastgeber = (await buero()) ?? nutzer;
+    }
     const offen = OFFEN_IM_APP.some((p) => pfad === p || pfad.startsWith(p + '/'));
     if (!nutzer && !offen) {
       if (istAppApi) {

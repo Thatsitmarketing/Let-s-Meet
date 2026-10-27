@@ -276,7 +276,7 @@ export async function buchungAbsagen(e: {
           grund: e.grund,
           vonGast,
           anGast: true,
-          neuBuchenUrl: `${e.basis}/${n.slug}/${ta.slug}`,
+          neuBuchenUrl: `${e.basis}/${ta.slug}`,
         }),
         anhaenge: [anhang],
       }),

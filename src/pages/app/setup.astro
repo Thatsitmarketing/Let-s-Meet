@@ -3,11 +3,12 @@ import { env } from 'cloudflare:workers';
 import Zugang from '../../layouts/Zugang.astro';
 import Icon from '../../components/ui/Icon.astro';
 import { sitzungStarten } from '../../lib/auth';
-import { eins } from '../../lib/db';
+import { eins, neueId } from '../../lib/db';
+import { LOGIN_KONTO } from '../../lib/abfragen';
 import { emailGueltig, trimmen } from '../../lib/eingabe';
 import { kontoAnlegen, slugPruefen } from '../../lib/konten';
 
-const anzahl = await eins<{ n: number }>('SELECT COUNT(*) AS n FROM nutzer');
+const anzahl = await eins<{ n: number }>(`SELECT COUNT(*) AS n FROM nutzer WHERE ${LOGIN_KONTO}`);
 if (anzahl?.n) return Astro.redirect('/app/login');
 
 const fehler: Record<string, string> = {};
@@ -25,7 +26,8 @@ if (Astro.request.method === 'POST' && !ohneToken) {
   if (trimmen(form.get('token'), 200) !== env.SETUP_TOKEN) fehler.token = 'Der Einrichtungsschlüssel stimmt nicht.';
   if (werte.name.length < 2) fehler.name = 'Bitte gib deinen Namen an.';
   if (!emailGueltig(werte.email)) fehler.email = 'Bitte prüf die E Mail Adresse.';
-  if (slugErgebnis.fehler) fehler.slug = slugErgebnis.fehler;
+  if (slugErgebnis.fehler) werte.slug = `${werte.slug.length >= 2 ? werte.slug : 'konto'}-${neueId(4).toLowerCase()}`;
+  if (!fehler.email && (await eins('SELECT id FROM nutzer WHERE email = ?', werte.email))) fehler.email = 'Diese Adresse gehört schon einem Konto, zum Beispiel dem Büro. Leg hier dein persönliches Konto an.';
   if (passwort.length < 10) fehler.passwort = 'Mindestens 10 Zeichen.';
 
   if (!Object.keys(fehler).length) {
@@ -60,12 +62,6 @@ if (Astro.request.method === 'POST' && !ohneToken) {
         <label for="email">E Mail</label>
         <input id="email" name="email" type="email" class="eingabe" autocomplete="email" required value={werte.email} aria-invalid={fehler.email ? 'true' : undefined} />
         {fehler.email && <p class="fehlertext">{fehler.email}</p>}
-      </div>
-      <div class="feld">
-        <label for="slug">Adresse deiner Buchungsseite</label>
-        <input id="slug" name="slug" class="eingabe" placeholder="vorname" value={werte.slug} aria-invalid={fehler.slug ? 'true' : undefined} aria-describedby="hilfe-slug" />
-        <p class="hilfe" id="hilfe-slug">Wird Teil des Links, zum Beispiel {Astro.url.host}/vorname</p>
-        {fehler.slug && <p class="fehlertext">{fehler.slug}</p>}
       </div>
       <div class="feld">
         <label for="passwort">Passwort</label>

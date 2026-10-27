@@ -7,7 +7,7 @@ import { trimmen, urlGueltig } from '../../lib/eingabe';
 import { googleAktiv } from '../../lib/google';
 import { meldungAusUrl } from '../../lib/meldungen';
 
-const nutzer = Astro.locals.nutzer!;
+const nutzer = Astro.locals.gastgeber!;
 let fehler = '';
 
 if (Astro.request.method === 'POST') {
@@ -48,7 +48,7 @@ if (Astro.request.method === 'POST') {
 }
 
 const GOOGLE_FEHLER: Record<string, string> = {
-  abgelehnt: 'Du hast den Zugriff bei Google nicht erlaubt. Ohne Freigabe kann Let\'s Meet deinen Kalender nicht nutzen.',
+  abgelehnt: 'Du hast den Zugriff bei Google nicht erlaubt. Ohne Freigabe kann Let\'s Meet den Kalender nicht nutzen.',
   state: 'Die Anfrage an Google ist abgelaufen oder ungültig. Bitte starte die Verbindung noch einmal.',
   kein_refresh: 'Google hat keinen dauerhaften Zugang geliefert. Entferne Let\'s Meet unter myaccount.google.com/permissions und verbinde dich neu.',
   invalid_client: 'Google kennt die Zugangsdaten nicht: GOOGLE_CLIENT_ID und GOOGLE_CLIENT_SECRET in Cloudflare gehören nicht zum selben OAuth Client oder enthalten Tippfehler.',
@@ -63,14 +63,14 @@ const googleFehlerText = googleFehler
   : '';
 const meldung = fehler ? { art: 'fehler' as const, text: fehler } : googleFehlerText ? { art: 'fehler' as const, text: googleFehlerText } : meldungAusUrl(Astro.url);
 ---
-<App titel="Integrationen" eyebrow="Verbindungen" meldung={meldung}>
+<App titel="Integrationen" eyebrow={`Verbindungen des Büros ${nutzer.email}`} meldung={meldung}>
   <div class="liste">
     <section class="karte block" aria-labelledby="g-titel">
       <div class="kopf">
         <span class="logo-kachel" aria-hidden="true"><Icon name="kalender" groesse={24} /></span>
         <div>
           <h2 id="g-titel">Google Kalender</h2>
-          <p class="leise klein">Belegte Zeiten blocken Slots automatisch. Neue Buchungen landen in deinem Kalender, bei Google Meet inklusive Meetinglink.</p>
+          <p class="leise klein">Belegte Zeiten blocken Slots automatisch. Neue Buchungen landen im zentralen Kalender, bei Google Meet inklusive Meetinglink. Melde dich bei Google mit <strong>info@thatsit.marketing</strong> an.</p>
         </div>
         {nutzer.google_refresh_token ? <span class="pille pille--erfolg">Verbunden</span> : <span class="pille">Nicht verbunden</span>}
       </div>
@@ -84,7 +84,7 @@ const meldung = fehler ? { art: 'fehler' as const, text: fehler } : googleFehler
             <div class="feld wachsen">
               <label for="kalender">Kalender ID</label>
               <input id="kalender" name="kalender" class="eingabe" value={nutzer.google_kalender_id} aria-describedby="kal-hilfe" />
-              <p class="hilfe" id="kal-hilfe">„primary“ ist dein Hauptkalender. Für einen anderen Kalender die ID aus den Google Kalender Einstellungen eintragen.</p>
+              <p class="hilfe" id="kal-hilfe">„primary“ ist der Hauptkalender des verbundenen Kontos. Für einen anderen Kalender die ID aus den Google Kalender Einstellungen eintragen.</p>
             </div>
             <button type="submit" class="knopf knopf--rahmen">Speichern</button>
           </form>

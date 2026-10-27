@@ -73,7 +73,7 @@ const kalDaten = {
           <section class="verwalten" aria-labelledby="verwalten-titel">
             <h2 id="verwalten-titel" class="klein-titel">Passt doch nicht?</h2>
             <div class="reihe">
-              <a class="knopf" href={`/${nutzer.slug}/${terminart.slug}?umbuchen=${buchung.id}${suffix}`}><Icon name="umbuchen" />Umbuchen</a>
+              <a class="knopf" href={`/${terminart.slug}?umbuchen=${buchung.id}${suffix}`}><Icon name="umbuchen" />Umbuchen</a>
               <a class="knopf knopf--gefahr" href={`/termin/${buchung.id}/absagen${embed ? '?embed=1' : ''}`}><Icon name="x" />Absagen</a>
             </div>
           </section>
@@ -86,7 +86,7 @@ const kalDaten = {
         {nachfolger ? (
           <a class="knopf knopf--orange" href={`${nachfolger}${embed ? '?embed=1' : ''}`}>Zum neuen Termin</a>
         ) : (
-          <a class="knopf knopf--orange" href={`/${nutzer.slug}/${terminart.slug}${embed ? '?embed=1' : ''}`}>Neuen Termin buchen</a>
+          <a class="knopf knopf--orange" href={`/${terminart.slug}${embed ? '?embed=1' : ''}`}>Neuen Termin buchen</a>
         )}
       </div>
     )}
