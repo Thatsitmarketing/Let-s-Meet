@@ -104,7 +104,9 @@ Alle Werte in `src/styles/tokens.css`, abgeleitet aus dem Branding Guide.
 * Form: eckig, Radius 2px für UI, 0px für Markenflächen, Pillen nur für Status
 * Icons: Lucide, Strichstärke 1.75, in `src/components/ui/Icon.astro`
 * Backoffice Breite: Inhalt bis 1840px, Formularseiten (Einstellungen, Integrationen) ab 560px pro Karte nebeneinander. Verfügbarkeit: ab 1800px Wochenzeiten links und Kalender rechts, ab 1380px Kalender oben und Wochenzeiten neben Ausnahmen, darunter einspaltig
-* Logos: `public/images/brand/logo-schwarz.*` und `logo-weiss.*` (aus dem Branding Guide extrahiert)
+* Logo Let's Meet: `public/images/brand/letsmeet-schwarz.svg` und `letsmeet-weiss.svg` (mit Unterzeile „THAT'S IT. MARKETING“), `letsmeet-kompakt-*.svg` (nur „Let's Meet.“), PNG 600px für Mails (`letsmeet-weiss.png`, `letsmeet-schwarz.png`). Aufbau wie das That's it. Logo: t, Apostroph, s und orangener Quadratpunkt aus dem Original vektorisiert, L und M aus den gemessenen Strichstärken gebaut (Versalhöhe 129, Grundstrich 21,3, Querstrich 17), e aus Inter angeglichen, Unterzeile Montserrat 240 mit 0,4em Sperrung, rechtsbündig zum letzten t. Alle Schriften als Pfade, keine Webfonts nötig. Mindestgröße der vollen Variante etwa 150px Breite, darunter kompakt nutzen
+* Favicon: weißes L mit orangenem Quadratpunkt auf Schwarz, auf 4er Raster für scharfe 16 und 32px. Dateien `public/favicon.svg`, `favicon.ico` (16, 32, 48), `apple-touch-icon.png` (180), `icon-192.png`, `icon-512.png`, `site.webmanifest`. Diese Pfade stehen in `RESERVIERTE_SLUGS`
+* Logos That's it. Marketing (Original, aktuell nicht eingebunden): `public/images/brand/logo-schwarz.*` und `logo-weiss.*` (aus dem Branding Guide extrahiert)
 
 ## Komponenten und wo sie liegen
 
@@ -117,7 +119,8 @@ Alle Werte in `src/styles/tokens.css`, abgeleitet aus dem Branding Guide.
 | `src/layouts/Zugang.astro` | Login und Einrichtung |
 | `src/components/TerminartFormular.astro` | Editor der Terminarten inklusive Fragenliste, ab 1400px zweispaltig |
 | `src/components/Kalender.astro` | Backoffice Kalender, Woche und Monat: Verfügbarkeit weiß, nicht buchbar schraffiert, Termine als Blöcke in Terminartfarbe, Google Belegtzeiten gestrichelt, orangene Jetzt Linie. Navigation über URL (`kal`, `datum`), Anker `#kalender` |
-| `src/components/Avatar.astro`, `OrtIcon.astro`, `ui/Logo.astro`, `ui/Icon.astro` | Kleinteile |
+| `src/components/ui/Logo.astro` | Let's Meet Logo, Props `variante` (`schwarz`, `weiss`), `form` (`voll`, `kompakt`), `hoehe`, `href`, `klasse`. Genutzt im öffentlichen Kopf (44px), in der Seitenleiste (44px, mobil 150px breit) und groß auf Login und Einrichtung |
+| `src/components/Avatar.astro`, `OrtIcon.astro`, `ui/Icon.astro` | Kleinteile |
 | `src/scripts/buchung.ts` | Kalender, Zeitzonen, Slotwahl und Formularversand im Browser |
 | `public/embed.js` | Widget ohne Abhängigkeiten, API `LetsMeet.initInlineWidget`, `initBadgeWidget`, `showPopupWidget`, `closePopupWidget`, Ereignis `letsmeet:gebucht` |
 
@@ -181,3 +184,4 @@ Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `termina
 * 2026-10-26: Domain festgelegt auf `letsmeet.thatsit.marketing` (vorher Vorschlag `termine.thatsit.marketing`), angepasst in `astro.config.mjs`, `wrangler.jsonc`, `public/embed.js` und Anleitung. Google Weiterleitungs URI: `https://letsmeet.thatsit.marketing/api/google/rueckruf`
 * 2026-10-26: Backoffice überarbeitet: volle Breite statt 1180px, neuer Kalender (Woche und Monat) mit Terminen, Verfügbarkeit, Ausnahmen und Google Belegtzeiten auf Termine (Standard Tab) und Verfügbarkeit, Live Vorschau der Wochenzeiten, Tagesklick legt Ausnahme an, Terminart Editor sowie Einstellungen und Integrationen zweispaltig, Feldausrichtung in Formularrastern korrigiert. Lokal mit Testdaten in 390, 1024, 1440 und 2000px geprüft
 * 2026-10-26: Google Verbindung repariert: nach der Freigabe landete man auf der Loginmaske und die Verbindung wurde nicht gespeichert, ohne sichtbaren Grund. Rückruf leitet jetzt per meta refresh weiter (Sitzung bleibt erhalten), zeigt den genauen Fehlergrund von Google an und trimmt Client ID und Secret
+* 2026-10-26: Eigenes Logo „Let's Meet.“ im Stil des That's it. Marketing Logos (Schwarz, Weiß, kompakt, PNG für Mails) und neues Favicon Set (SVG, ICO, Apple Touch Icon, 192 und 512px, Webmanifest). Eingebunden in Kopf, Seitenleiste, Login, Einrichtung und Mailkopf, der Text „Let's Meet.“ neben dem alten Logo entfällt. Build, Typprüfung und Sichtprüfung in 390 und 1440px lokal

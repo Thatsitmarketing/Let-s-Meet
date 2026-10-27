@@ -16,8 +16,7 @@ const embed = Astro.url.searchParams.get('embed') === '1';
   {!embed && (
     <header class="kopf">
       <div class="kopf-innen">
-        <Logo hoehe={30} href="/" />
-        <span class="marke-app">Let's Meet<span class="punkt">.</span></span>
+        <Logo hoehe={44} href="/" />
       </div>
     </header>
   )}
@@ -70,12 +69,6 @@ const embed = Astro.url.searchParams.get('embed') === '1';
     align-items: center;
     justify-content: space-between;
     gap: var(--raum-4);
-  }
-  .marke-app {
-    font-family: var(--schrift-display);
-    font-weight: 900;
-    font-size: var(--text-lg);
-    letter-spacing: -0.01em;
   }
   .haupt {
     flex: 1;

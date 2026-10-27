@@ -1,20 +1,31 @@
 ---
+/*
+ * Logo Let's Meet im Stil des That's it. Marketing Logos.
+ * voll: „Let's Meet.“ mit Unterzeile „THAT'S IT. MARKETING“, kompakt: nur „Let's Meet.“
+ * Alle Schriften sind Vektorpfade, das Logo braucht keine Webfonts.
+ */
 interface Props {
   variante?: 'schwarz' | 'weiss';
+  form?: 'voll' | 'kompakt';
   hoehe?: number;
   href?: string | null;
+  klasse?: string;
 }
-const { variante = 'schwarz', hoehe = 32, href = null } = Astro.props;
-const breite = Math.round((hoehe * 594) / 180);
+const { variante = 'schwarz', form = 'voll', hoehe = 40, href = null, klasse } = Astro.props;
+// Seitenverhältnisse aus der viewBox der SVG Dateien
+const verhaeltnis = form === 'voll' ? 768.5 / 170.3 : 768.5 / 131;
+const breite = Math.round(hoehe * verhaeltnis);
+const datei = `/images/brand/letsmeet-${form === 'kompakt' ? 'kompakt-' : ''}${variante}.svg`;
+const name = "Let's Meet. That's it. Marketing";
 ---
 {href ? (
-  <a href={href} class="logo" aria-label="That's it. Marketing, zur Startseite">
-    <img src={`/images/brand/logo-${variante}.webp`} alt="" width={breite} height={hoehe} />
+  <a href={href} class:list={['logo', klasse]} aria-label={`${name}, zur Startseite`}>
+    <img src={datei} alt="" width={breite} height={hoehe} />
   </a>
 ) : (
-  <img class="logo" src={`/images/brand/logo-${variante}.webp`} alt="That's it. Marketing" width={breite} height={hoehe} />
+  <img class:list={['logo', klasse]} src={datei} alt={name} width={breite} height={hoehe} />
 )}
 <style>
-  .logo { display: inline-block; line-height: 0; }
-  img { height: auto; }
+  .logo { display: inline-block; line-height: 0; max-width: 100%; }
+  img { height: auto; max-width: 100%; }
 </style>
