@@ -177,7 +177,7 @@ Unterlagen zur Vorbereitung (Quelle Google Drive, Ordner mit den Playbook PDFs, 
 ## Offene Punkte
 
 * Worker `let-s-meet` läuft unter `let-s-meet.aged-brook-9137.workers.dev`. Pages Projekt `let-s-meet` kann gelöscht werden
-* Code der zentralen Buchung live bringen: Branch `claude/youthful-euler-wb9tj4` nach `main` mergen, Workers Builds deployt dann. Die D1 ist bereits auf Stand 0002
+* Prüfen, ob Workers Builds nach dem Merge von PR #7 aus `main` deployt hat (Startseite zeigt „Lass uns reden.“ auf dem Bürofoto). Die D1 ist bereits auf Stand 0002
 * Das Konto info@thatsit.marketing heißt jetzt „That's it. Marketing“. Wer sich bisher persönlich damit angemeldet hat (bisher Name Tim Barela), bekommt unter Team ein eigenes Konto
 * Google Kalender unter Integrationen mit info@thatsit.marketing verbinden (bisher ist nur Mikes persönlicher Kalender verbunden, der zählt nicht mehr)
 * Erreichbarkeit der Playbook Landingpages und von `thatsit.marketing/referenzen/` prüfen (aus der Entwicklungsumgebung nicht erreichbar, Links aus dem Homepage Repository übernommen; `social-media-playbook.thatsit.marketing` ist dort als angenommen markiert)
