@@ -18,7 +18,7 @@ const embed = Astro.url.searchParams.get('embed') === '1';
   {!embed && (
     <header class="kopf">
       <div class="kopf-innen">
-        <Logo form="voll" hoehe={34} href="/" />
+        <Logo form="voll" hoehe={bild ? 40 : 34} href="/" variante={bild ? 'weiss' : 'schwarz'} />
       </div>
     </header>
   )}
@@ -74,6 +74,8 @@ const embed = Astro.url.searchParams.get('embed') === '1';
   }
   .haupt.bild { max-width: 1440px; padding-top: var(--raum-16); padding-bottom: var(--raum-4); }
   :global(body.mit-bild) .kopf-innen { max-width: 1240px; }
+  /* Auf dem Bürofoto steht nur das weiße Logo, ohne Leiste */
+  :global(body.mit-bild) .kopf { background: transparent; border: 0; }
   :global(body.embed) {
     background: transparent;
   }
