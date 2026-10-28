@@ -349,11 +349,14 @@ if (!zonen.includes(nutzer.zeitzone)) zonen.unshift(nutzer.zeitzone);
   .block-kopf .block-titel { flex: 1 1 220px; }
   .zone { min-width: 200px; }
   .tage { list-style: none; margin: 0; padding: 0; }
-  .tag { display: grid; grid-template-columns: 140px minmax(0, 1fr) auto; gap: var(--raum-4) var(--raum-6); align-items: start; padding: var(--raum-4) 0; border-top: 1px solid var(--farbe-rahmen); }
+  .tag { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: var(--raum-4); align-items: start; padding: var(--raum-4) 0; border-top: 1px solid var(--farbe-rahmen); }
   .tag-name { min-height: 44px; align-items: center; font-weight: 600; }
-  .intervalle { display: grid; gap: var(--raum-3); }
-  .intervall { display: flex; align-items: center; gap: var(--raum-2); }
-  .intervall .eingabe { width: 8.5rem; }
+  .intervalle { display: grid; gap: var(--raum-3); min-width: 0; }
+  /* Zeitfelder passen sich der Breite an, damit das X nie in die Spalte mit Plus und Kopieren rutscht */
+  .intervall { display: flex; align-items: center; gap: var(--raum-2); min-width: 0; }
+  .intervall .eingabe { flex: 1 1 6.75rem; min-width: 6.75rem; max-width: 9rem; width: auto; }
+  .intervall .weg { margin-left: var(--raum-1); }
+  .intervall .weg:hover { border-color: var(--farbe-fehler); color: var(--farbe-fehler); }
   .nicht { display: none; min-height: 44px; align-items: center; }
   .tag.aus .intervall { display: none; }
   .tag.aus .nicht { display: flex; }

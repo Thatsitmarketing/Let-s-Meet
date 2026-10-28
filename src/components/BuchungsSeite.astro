@@ -3,7 +3,7 @@
  * Zentrale Buchung über das Büro: links Details zum Termin, rechts Kalender, Zeiten und Formular.
  * Genutzt von / und /{terminart}.
  * Außerhalb des Embed Modus liegt darüber ein Kopfbereich auf dem Bürofoto.
- * Mobil (bis 860px) läuft die Buchung in drei Schritten (data-schritt am Wurzelelement):
+ * Mobil (bis 860px) läuft die Buchung in drei Schritten ohne sichtbare Schrittanzeige (data-schritt am Wurzelelement):
  * tag (Infos und Kalender), zeit (nur die Zeiten des Tages), daten (Übersicht und Formular).
  */
 import { env } from 'cloudflare:workers';
@@ -72,12 +72,6 @@ const absaetze = (terminart.beschreibung ?? '')
 )}
 
 <div class:list={['buchung', 'karte', { 'ohne-details': !detailsZeigen, embed }]} id="buchung" data-schritt="tag" data-konfig={JSON.stringify(konfig)}>
-  <ol class="fortschritt" aria-label="Fortschritt der Buchung">
-    <li data-fuer="tag" aria-current="step"><span>1</span>Tag</li>
-    <li data-fuer="zeit"><span>2</span>Uhrzeit</li>
-    <li data-fuer="daten"><span>3</span>Angaben</li>
-  </ol>
-
   <div class="bereich">
     {umbuchenGueltig && (
       <p class="hinweis hinweis--akzent umbuchen-hinweis">
@@ -351,21 +345,8 @@ const absaetze = (terminart.beschreibung ?? '')
   .kontakt { font-size: var(--text-xs); color: var(--farbe-text-2); border-top: 1px solid var(--farbe-rahmen); padding-top: var(--raum-4); }
   .kontakt a[href^='tel'] { white-space: nowrap; }
 
-  /* Nur mobil sichtbar: Fortschritt, Rückweg zum Tag, Übersicht im letzten Schritt */
-  .fortschritt, .nur-mobil { display: none; }
-  .fortschritt { list-style: none; margin: 0; padding: var(--raum-4) var(--raum-6) 0; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--raum-2); order: -2; background: var(--farbe-papier); }
-  .fortschritt li {
-    display: flex; align-items: center; gap: var(--raum-2); padding-top: var(--raum-2); border-top: 3px solid var(--n-200);
-    font-size: var(--text-sm); font-weight: 600; color: var(--farbe-text-leise);
-  }
-  .fortschritt span {
-    display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font-size: 0.75rem;
-    background: var(--n-100); color: var(--n-700);
-  }
-  .fortschritt li.erledigt { border-top-color: var(--n-900); color: var(--n-900); }
-  .fortschritt li.erledigt span { background: var(--n-900); color: var(--farbe-papier); }
-  .fortschritt li[aria-current='step'] { border-top-color: var(--farbe-akzent); color: var(--n-900); }
-  .fortschritt li[aria-current='step'] span { background: var(--farbe-akzent); color: var(--n-900); }
+  /* Nur mobil sichtbar: Rückweg zum Tag, Hinweis bei den Zeiten, Übersicht im letzten Schritt */
+  .nur-mobil { display: none; }
   .zeiten-info { color: var(--farbe-text-2); font-size: var(--text-sm); margin: calc(var(--raum-2) * -1) 0 var(--raum-4); }
   .zusammenfassung {
     gap: var(--raum-3); padding: var(--raum-4); margin: calc(var(--raum-2) * -1) 0 var(--raum-6);
@@ -380,7 +361,6 @@ const absaetze = (terminart.beschreibung ?? '')
     .info { order: -1; border-right: 0; border-bottom: 1px solid var(--farbe-rahmen); }
   }
   @media (max-width: 860px) {
-    .fortschritt { display: grid; }
     .nur-mobil { display: inline-flex; }
     .zusammenfassung { display: grid; }
     .zeiten-info { display: block; }
@@ -406,7 +386,6 @@ const absaetze = (terminart.beschreibung ?? '')
   }
   @media (max-width: 420px) {
     .bereich, .info { padding: var(--raum-4); }
-    .fortschritt { padding-inline: var(--raum-4); }
     .kal-tage :global(.tag) { min-height: 36px; }
   }
 </style>
