@@ -5,6 +5,7 @@
  * Außerhalb des Embed Modus liegt darüber ein Kopfbereich auf dem Bürofoto.
  * Mobil (bis 860px) läuft die Buchung in drei Schritten ohne sichtbare Schrittanzeige (data-schritt am Wurzelelement):
  * tag (Infos und Kalender), zeit (nur die Zeiten des Tages), daten (Übersicht und Formular).
+ * Bis 1180px (Infos über dem Kalender) ist die Beschreibung auf drei Zeilen gekürzt („Mehr anzeigen“), damit der Kalender früh sichtbar ist.
  */
 import { env } from 'cloudflare:workers';
 import Icon from './ui/Icon.astro';
@@ -171,11 +172,11 @@ const absaetze = (terminart.beschreibung ?? '')
           <p class="fehlertext" id="fehler-datenschutz"></p>
         </div>
 
-        {konfig.turnstile && <div id="turnstile" class="turnstile"></div>}
-
-        <p class="hinweis hinweis--fehler" id="formular-fehler" role="alert" hidden></p>
-
-        <button type="submit" class="knopf knopf--orange knopf--breit" id="absenden">{umbuchenGueltig ? 'Termin umbuchen' : 'Termin buchen'}</button>
+        <div class="abschluss">
+          {konfig.turnstile && <div id="turnstile-feld" class="turnstile"></div>}
+          <p class="hinweis hinweis--fehler" id="formular-fehler" role="alert" hidden></p>
+          <button type="submit" class="knopf knopf--orange knopf--breit" id="absenden">{umbuchenGueltig ? 'Termin umbuchen' : 'Termin buchen'}</button>
+        </div>
       </form>
     </section>
   </div>
@@ -192,7 +193,7 @@ const absaetze = (terminart.beschreibung ?? '')
           <li class="auswahl-zeile" id="zone-zeile" hidden><Icon name="globus" /><span id="zone-text"></span></li>
         </ul>
         {absaetze.length > 0 && (
-          <div class="beschreibung">
+          <div class="beschreibung" id="beschreibung">
             {absaetze.map((a) => a.liste ? (
               <>
                 {a.titel && <p class="liste-titel">{a.titel}</p>}
@@ -200,6 +201,11 @@ const absaetze = (terminart.beschreibung ?? '')
               </>
             ) : <p>{a.text}</p>)}
           </div>
+        )}
+        {absaetze.length > 0 && (
+          <button type="button" class="mehr" id="mehr-zeigen" aria-expanded="false" aria-controls="beschreibung">
+            <span class="mehr-text">Mehr anzeigen</span><Icon name="runter" groesse={16} />
+          </button>
         )}
       </div>
 
@@ -316,7 +322,10 @@ const absaetze = (terminart.beschreibung ?? '')
   #formular { display: grid; gap: var(--raum-6); max-width: 560px; }
   .vorab-hinweis { margin: calc(var(--raum-2) * -1) 0 var(--raum-6); }
   .honig { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
-  .turnstile { min-height: 65px; }
+  /* Turnstile erscheint nur, wenn Cloudflare eine Rückfrage braucht. Ohne Rückfrage entsteht keine Lücke vor dem Knopf */
+  .abschluss { display: grid; }
+  .turnstile:not(.sichtbar) { height: 0; overflow: hidden; }
+  .turnstile.sichtbar, .abschluss .hinweis { margin-bottom: var(--raum-4); }
 
   /* Rechte Spalte */
   .info {
@@ -344,6 +353,14 @@ const absaetze = (terminart.beschreibung ?? '')
   .beschreibung li :global(svg) { flex-shrink: 0; margin-top: 3px; color: var(--farbe-akzent); }
   .kontakt { font-size: var(--text-xs); color: var(--farbe-text-2); border-top: 1px solid var(--farbe-rahmen); padding-top: var(--raum-4); }
   .kontakt a[href^='tel'] { white-space: nowrap; }
+  .mehr {
+    display: none; align-items: center; gap: 6px; justify-self: start; min-height: 44px; padding: 0;
+    margin-top: calc(var(--raum-2) * -1); border: 0; background: none; cursor: pointer;
+    font-family: var(--schrift-label); font-weight: 500; font-size: 0.875rem; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--n-900);
+  }
+  .mehr :global(svg) { transition: transform var(--dauer-normal) var(--kurve); }
+  .mehr[aria-expanded='true'] :global(svg) { transform: rotate(180deg); }
 
   /* Nur mobil sichtbar: Rückweg zum Tag, Hinweis bei den Zeiten, Übersicht im letzten Schritt */
   .nur-mobil { display: none; }
@@ -359,6 +376,14 @@ const absaetze = (terminart.beschreibung ?? '')
     .buchung { grid-template-columns: 1fr; }
     /* Infos stehen über dem Kalender */
     .info { order: -1; border-right: 0; border-bottom: 1px solid var(--farbe-rahmen); }
+    /* Lange Beschreibung auf drei Zeilen kürzen, Rest über „Mehr anzeigen“ (Klasse kurz setzt buchung.ts) */
+    .info.kurz .mehr { display: inline-flex; }
+    .info.kurz:not(.offen) .beschreibung {
+      max-height: calc(1.55em * 3); overflow: hidden;
+      -webkit-mask-image: linear-gradient(180deg, #000 50%, transparent);
+      mask-image: linear-gradient(180deg, #000 50%, transparent);
+    }
+    .info.kurz:not(.offen) .kontakt { display: none; }
   }
   @media (max-width: 860px) {
     .nur-mobil { display: inline-flex; }
@@ -376,10 +401,15 @@ const absaetze = (terminart.beschreibung ?? '')
     .zeiten-liste :global(.zeit) { min-height: 52px; font-size: var(--text-base); }
   }
   @media (max-width: 860px) {
-    .held { margin-bottom: var(--raum-4); gap: var(--raum-2); }
-    .held h1 { font-size: clamp(2rem, 1.2rem + 4vw, 2.75rem); }
-    .unterzeile { font-size: var(--text-sm); }
+    .held { margin-bottom: var(--raum-4); gap: var(--raum-1); }
+    .held h1 { font-size: clamp(1.75rem, 1.1rem + 3.5vw, 2.5rem); }
+    .unterzeile { font-size: var(--text-sm); line-height: 1.45; }
     .bereich, .info { padding: var(--raum-6); }
+    .info { gap: var(--raum-4); }
+    .info-block { gap: var(--raum-2); }
+    .info-titel { font-size: clamp(1.375rem, 1rem + 2vw, 1.75rem); }
+    .info .meta { display: flex; flex-wrap: wrap; gap: var(--raum-2) var(--raum-6); }
+    .schritt h2 { font-size: var(--text-lg); margin-bottom: var(--raum-3); }
     .kal-layout:has(.zeiten:not([hidden])) { grid-template-columns: 1fr; }
     .kalender { max-width: none; }
     .zeiten-liste { max-height: none; }
