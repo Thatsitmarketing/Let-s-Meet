@@ -60,17 +60,11 @@ export function starteBuchung() {
   const mitVerlauf = !k.embed;
   let schritt: Schritt = 'tag';
 
-  /** Setzt den Schritt für die mobile Ansicht und den Fortschritt. Auf dem Desktop wirkt das nur auf die Leiste, die dort ausgeblendet ist. */
+  /** Setzt den Schritt für die mobile Ansicht. Auf dem Desktop hat data-schritt keine sichtbare Wirkung. */
   function schrittSetzen(neu: Schritt, verlauf = true) {
     const vorher = schritt;
     schritt = neu;
     wurzel.dataset.schritt = neu;
-    const nr = REIHENFOLGE.indexOf(neu);
-    wurzel.querySelectorAll<HTMLElement>('.fortschritt li').forEach((li, i) => {
-      li.classList.toggle('erledigt', i < nr);
-      if (i === nr) li.setAttribute('aria-current', 'step');
-      else li.removeAttribute('aria-current');
-    });
     if (!mobil.matches || vorher === neu) return;
     if (verlauf && mitVerlauf) {
       // Vorwärts neuer Eintrag, rückwärts den vorhandenen ersetzen, damit die Zurück Geste nicht hin und her springt
