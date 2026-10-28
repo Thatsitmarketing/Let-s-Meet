@@ -1,0 +1,271 @@
+---
+/**
+ * Termin aus dem Google Kalender des Büros: live aus Google gelesen, im Backoffice ansehen,
+ * bearbeiten und löschen. Änderungen gehen direkt an Google und sofort in google_termine.
+ */
+import App from '../../../../layouts/App.astro';
+import Icon from '../../../../components/ui/Icon.astro';
+import { trimmen } from '../../../../lib/eingabe';
+import { googleAktiv, googleTerminAendern, googleTerminEntfernen, googleTerminLesen, type GoogleDetail } from '../../../../lib/google';
+import { meldungAusUrl } from '../../../../lib/meldungen';
+import { addTage, datumInZone, formatDatumLang, formatSpanne, teileInZone, zeitZuMin, zoneZuUtc } from '../../../../lib/zeit';
+
+const nutzer = Astro.locals.gastgeber!;
+const tz = nutzer.zeitzone;
+const eventId = Astro.params.id ?? '';
+if (!/^[A-Za-z0-9_\-@.]{1,1024}$/.test(eventId) || !googleAktiv() || !nutzer.google_refresh_token) return Astro.redirect('/app/termine');
+
+const zweistellig = (n: number) => String(n).padStart(2, '0');
+const uhrzeit = (ms: number) => {
+  const t = teileInZone(new Date(ms), tz);
+  return `${zweistellig(t.stunde)}:${zweistellig(t.minute)}`;
+};
+const datumOk = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d));
+
+let termin: GoogleDetail | null = null;
+let ladeFehler = '';
+const fehler: Record<string, string> = {};
+let werte: Record<string, string> | null = null;
+
+try {
+  termin = await googleTerminLesen(nutzer, eventId);
+} catch (f) {
+  ladeFehler = f instanceof Error ? f.message : 'Google ist gerade nicht erreichbar.';
+}
+
+if (termin && Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const aktion = String(form.get('aktion') ?? '');
+  const benachrichtigen = form.get('benachrichtigen') === 'on';
+  try {
+    if (aktion === 'loeschen') {
+      await googleTerminEntfernen(nutzer, eventId, benachrichtigen);
+      return Astro.redirect(`/app/termine?ok=google_geloescht&datum=${datumInZone(new Date(termin.start), tz)}`);
+    }
+    if (aktion === 'speichern' && termin.bearbeitbar) {
+      werte = {
+        titel: trimmen(form.get('titel'), 300),
+        ort: trimmen(form.get('ort'), 300),
+        // Browser schicken Zeilenumbrüche als \r\n, Google liefert \n
+        beschreibung: trimmen(String(form.get('beschreibung') ?? '').replace(/\r\n?/g, '\n'), 8000),
+        start_datum: trimmen(form.get('start_datum'), 10),
+        ende_datum: trimmen(form.get('ende_datum'), 10),
+        beginn: trimmen(form.get('beginn'), 5),
+        ende: trimmen(form.get('ende'), 5),
+        frei: form.get('frei') === 'on' ? '1' : '',
+      };
+      if (!werte.titel) fehler.titel = 'Bitte gib einen Titel an.';
+      if (!datumOk(werte.start_datum)) fehler.start_datum = 'Bitte ein gültiges Datum wählen.';
+      if (!datumOk(werte.ende_datum)) fehler.ende_datum = 'Bitte ein gültiges Datum wählen.';
+      // Beschreibung nur senden, wenn sie wirklich geändert wurde, sonst bliebe von HTML aus Google nur Text übrig
+      const beschreibung = werte.beschreibung === termin.beschreibung.replace(/\r\n?/g, '\n').trim().slice(0, 8000) ? null : werte.beschreibung;
+      if (termin.ganztaegig) {
+        if (!fehler.start_datum && !fehler.ende_datum && werte.ende_datum < werte.start_datum) fehler.ende_datum = 'Das Ende liegt vor dem Beginn.';
+        if (!Object.keys(fehler).length) {
+          await googleTerminAendern(nutzer, eventId, {
+            titel: werte.titel, ort: werte.ort, beschreibung, ganztaegig: true, frei: Boolean(werte.frei),
+            startDatum: werte.start_datum, endeDatumExklusiv: addTage(werte.ende_datum, 1),
+          }, benachrichtigen);
+          return Astro.redirect(`/app/termine/google/${encodeURIComponent(eventId)}?ok=gespeichert`);
+        }
+      } else {
+        const b = /^\d{2}:\d{2}$/.test(werte.beginn) ? zeitZuMin(werte.beginn) : NaN;
+        const e = /^\d{2}:\d{2}$/.test(werte.ende) ? zeitZuMin(werte.ende) : NaN;
+        if (!Number.isFinite(b)) fehler.beginn = 'Bitte eine Uhrzeit wählen.';
+        if (!Number.isFinite(e)) fehler.ende = 'Bitte eine Uhrzeit wählen.';
+        if (!Object.keys(fehler).length) {
+          const start = zoneZuUtc(werte.start_datum, b, tz).getTime();
+          const ende = zoneZuUtc(werte.ende_datum, e, tz).getTime();
+          if (ende <= start) fehler.ende = 'Das Ende muss nach dem Beginn liegen.';
+          else {
+            await googleTerminAendern(nutzer, eventId, {
+              titel: werte.titel, ort: werte.ort, beschreibung, ganztaegig: false, frei: Boolean(werte.frei), start, ende,
+            }, benachrichtigen);
+            return Astro.redirect(`/app/termine/google/${encodeURIComponent(eventId)}?ok=gespeichert`);
+          }
+        }
+      }
+    }
+  } catch (f) {
+    fehler.allgemein = f instanceof Error ? f.message : 'Google hat die Änderung nicht angenommen.';
+  }
+}
+
+// Formularwerte: nach einem Fehler die Eingaben, sonst der Stand aus Google
+const w = werte ?? (termin
+  ? {
+      titel: termin.titel === '(Ohne Titel)' ? '' : termin.titel,
+      ort: termin.ort ?? '',
+      beschreibung: termin.beschreibung,
+      start_datum: datumInZone(new Date(termin.start), tz),
+      // Ganztägig: Google speichert das Ende exklusiv, im Formular steht der letzte Tag
+      ende_datum: termin.ganztaegig ? addTage(datumInZone(new Date(termin.ende), tz), -1) : datumInZone(new Date(termin.ende), tz),
+      beginn: uhrzeit(termin.start),
+      ende: uhrzeit(termin.ende),
+      frei: termin.frei ? '1' : '',
+    }
+  : null);
+
+const zeitText = termin
+  ? termin.ganztaegig
+    ? (() => {
+        const letzter = addTage(datumInZone(new Date(termin.ende), tz), -1);
+        const erster = datumInZone(new Date(termin.start), tz);
+        return erster === letzter ? 'Ganztägig' : `Ganztägig bis ${formatDatumLang(zoneZuUtc(letzter, 12 * 60, tz), tz)}`;
+      })()
+    : formatSpanne(new Date(termin.start).toISOString(), new Date(termin.ende).toISOString(), tz)
+  : '';
+const ANTWORT: Record<string, string> = { accepted: 'Zugesagt', declined: 'Abgesagt', tentative: 'Vielleicht', needsAction: 'Offen' };
+const mitGaesten = Boolean(termin?.teilnehmer.some((t) => !t.organisator));
+const meldung = fehler.allgemein ? { art: 'fehler' as const, text: fehler.allgemein } : meldungAusUrl(Astro.url);
+---
+<App titel={termin?.titel ?? 'Google Termin'} eyebrow="Google Kalender" meldung={meldung}>
+  <Fragment slot="aktionen">
+    <a class="knopf knopf--leise" href={termin ? `/app/termine?datum=${datumInZone(new Date(termin.start), tz)}#kalender` : '/app/termine'}><Icon name="zurueck" />Zum Kalender</a>
+  </Fragment>
+
+  {!termin ? (
+    <section class="karte block">
+      {ladeFehler
+        ? <p class="hinweis hinweis--fehler"><Icon name="warnung" /><span>{ladeFehler}</span></p>
+        : <p class="hinweis"><Icon name="info" /><span>Diesen Termin gibt es im Google Kalender nicht mehr. Er wurde dort gelöscht oder abgesagt und ist jetzt auch hier entfernt.</span></p>}
+      <a class="knopf knopf--rahmen" href="/app/termine">Zu den Terminen</a>
+    </section>
+  ) : (
+    <div class="raster">
+      <div class="haupt">
+        <section class="karte block" aria-labelledby="g-wann">
+          <div class="status-zeile">
+            <span class="pille">Google Kalender</span>
+            {termin.blockiert ? <span class="pille pille--erfolg">Sperrt Buchungszeiten</span> : <span class="pille">Sperrt nichts</span>}
+            {termin.wiederkehrend && <span class="pille">Wiederkehrend</span>}
+            {termin.ende < Date.now() && <span class="pille">Vorbei</span>}
+          </div>
+          <h2 id="g-wann">{formatDatumLang(new Date(termin.start), tz)}</h2>
+          <p class="gross">{zeitText}</p>
+          <dl class="liste">
+            {termin.ort && <div><dt>Ort</dt><dd>{/^https:\/\//.test(termin.ort) ? <a href={termin.ort} target="_blank" rel="noopener">{termin.ort}</a> : termin.ort}</dd></div>}
+            {termin.meetUrl && <div><dt>Google Meet</dt><dd><a href={termin.meetUrl} target="_blank" rel="noopener">{termin.meetUrl}</a></dd></div>}
+            {termin.organisator && <div><dt>Organisiert von</dt><dd>{termin.organisator}</dd></div>}
+            {termin.teilnehmer.length > 0 && (
+              <div>
+                <dt>Teilnehmende</dt>
+                <dd>
+                  <ul class="teilnehmer" role="list">
+                    {termin.teilnehmer.map((t) => (
+                      <li><span>{t.name || t.email}{t.name && <span class="leise"> {t.email}</span>}{t.organisator && <span class="leise"> (Organisation)</span>}</span><span class:list={['antwort', t.antwort]}>{ANTWORT[t.antwort] ?? t.antwort}</span></li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+            )}
+            {termin.beschreibung && <div><dt>Beschreibung</dt><dd class="vor">{termin.beschreibung}</dd></div>}
+          </dl>
+        </section>
+
+        {termin.bearbeitbar && w ? (
+          <section class="karte block" aria-labelledby="g-bearbeiten">
+            <h2 id="g-bearbeiten" class="klein-titel">Bearbeiten</h2>
+            {termin.wiederkehrend && <p class="hinweis"><Icon name="info" /><span>Wiederkehrender Termin: Änderungen gelten nur für diesen einen Termin, die Serie bleibt unverändert.</span></p>}
+            <form method="post" class="formular" novalidate>
+              <input type="hidden" name="aktion" value="speichern" />
+              <div class="feld breit">
+                <label for="titel">Titel</label>
+                <input id="titel" name="titel" class="eingabe" maxlength="300" required value={w.titel} aria-invalid={fehler.titel ? 'true' : undefined} />
+                {fehler.titel && <p class="fehlertext">{fehler.titel}</p>}
+              </div>
+              <div class="feld">
+                <label for="start_datum">{termin.ganztaegig ? 'Erster Tag' : 'Datum Beginn'}</label>
+                <input id="start_datum" name="start_datum" type="date" class="eingabe" required value={w.start_datum} aria-invalid={fehler.start_datum ? 'true' : undefined} />
+                {fehler.start_datum && <p class="fehlertext">{fehler.start_datum}</p>}
+              </div>
+              {!termin.ganztaegig && (
+                <div class="feld">
+                  <label for="beginn">Beginn</label>
+                  <input id="beginn" name="beginn" type="time" step="300" class="eingabe" required value={w.beginn} aria-invalid={fehler.beginn ? 'true' : undefined} />
+                  {fehler.beginn && <p class="fehlertext">{fehler.beginn}</p>}
+                </div>
+              )}
+              <div class="feld">
+                <label for="ende_datum">{termin.ganztaegig ? 'Letzter Tag' : 'Datum Ende'}</label>
+                <input id="ende_datum" name="ende_datum" type="date" class="eingabe" required value={w.ende_datum} aria-invalid={fehler.ende_datum ? 'true' : undefined} />
+                {fehler.ende_datum && <p class="fehlertext">{fehler.ende_datum}</p>}
+              </div>
+              {!termin.ganztaegig && (
+                <div class="feld">
+                  <label for="ende">Ende</label>
+                  <input id="ende" name="ende" type="time" step="300" class="eingabe" required value={w.ende} aria-invalid={fehler.ende ? 'true' : undefined} />
+                  {fehler.ende && <p class="fehlertext">{fehler.ende}</p>}
+                </div>
+              )}
+              <div class="feld breit">
+                <label for="ort">Ort oder Link</label>
+                <input id="ort" name="ort" class="eingabe" maxlength="300" value={w.ort} />
+              </div>
+              <div class="feld breit">
+                <label for="beschreibung">Beschreibung</label>
+                <textarea id="beschreibung" name="beschreibung" class="textfeld" maxlength="8000">{w.beschreibung}</textarea>
+                <p class="hilfe">Formatierungen aus Google (fett, Listen) bleiben nur erhalten, solange du die Beschreibung nicht änderst.</p>
+              </div>
+              <label class="schalter breit"><input type="checkbox" name="frei" checked={Boolean(w.frei)} />Als „Verfügbar“ markieren, dann sperrt der Termin keine Buchungszeiten</label>
+              {mitGaesten && <label class="schalter breit"><input type="checkbox" name="benachrichtigen" checked />Teilnehmende per Mail über die Änderung informieren</label>}
+              <div class="breit knoepfe">
+                <button class="knopf knopf--orange" type="submit"><Icon name="check" />In Google speichern</button>
+              </div>
+            </form>
+          </section>
+        ) : (
+          <p class="hinweis"><Icon name="info" /><span>Diesen Termin hat {termin.organisator ?? 'jemand anderes'} angelegt. Titel und Zeiten kann nur die Organisation ändern. Du kannst ihn hier ansehen oder aus dem Kalender des Büros entfernen.</span></p>
+        )}
+      </div>
+
+      <aside class="seite">
+        <section class="karte block" aria-labelledby="g-aktionen">
+          <h2 id="g-aktionen" class="klein-titel">Aktionen</h2>
+          {termin.meetUrl && termin.ende > Date.now() && <a class="knopf knopf--orange knopf--breit" href={termin.meetUrl} target="_blank" rel="noopener"><Icon name="video" />Meeting starten</a>}
+          {termin.link && <a class="knopf knopf--rahmen knopf--breit" href={termin.link} target="_blank" rel="noopener"><Icon name="extern" />In Google Kalender öffnen</a>}
+        </section>
+        <section class="karte block loeschen" aria-labelledby="g-loeschen">
+          <h2 id="g-loeschen" class="klein-titel">{termin.bearbeitbar ? 'Termin löschen' : 'Aus dem Kalender entfernen'}</h2>
+          <form method="post" data-rueckfrage={termin.wiederkehrend ? 'Diesen einen Termin der Serie wirklich im Google Kalender löschen?' : 'Termin wirklich im Google Kalender löschen?'}>
+            <input type="hidden" name="aktion" value="loeschen" />
+            {mitGaesten && termin.bearbeitbar && <label class="schalter"><input type="checkbox" name="benachrichtigen" checked />Teilnehmende informieren</label>}
+            <button class="knopf knopf--gefahr knopf--breit" type="submit"><Icon name="loeschen" />{termin.bearbeitbar ? 'In Google löschen' : 'Entfernen'}</button>
+          </form>
+        </section>
+      </aside>
+    </div>
+  )}
+</App>
+
+<style>
+  .raster { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--raum-6); align-items: start; }
+  .haupt, .seite { display: grid; gap: var(--raum-6); }
+  .block { padding: var(--raum-6); display: grid; gap: var(--raum-4); }
+  .status-zeile { display: flex; gap: var(--raum-2); flex-wrap: wrap; }
+  .block h2 { font-size: var(--text-h3); }
+  .gross { font-size: var(--text-lg); font-weight: 600; margin-top: calc(var(--raum-2) * -1); }
+  .klein-titel { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-h4) !important; letter-spacing: 0; }
+  .liste { margin: 0; display: grid; border-top: 1px solid var(--farbe-rahmen); }
+  .liste > div { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: var(--raum-4); padding: var(--raum-3) 0; border-bottom: 1px solid var(--farbe-rahmen); }
+  .liste dt { color: var(--farbe-text-leise); font-size: var(--text-sm); }
+  .liste dd { margin: 0; overflow-wrap: anywhere; }
+  .vor { white-space: pre-wrap; }
+  .teilnehmer { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-2); }
+  .teilnehmer li { display: flex; justify-content: space-between; gap: var(--raum-3); flex-wrap: wrap; }
+  .antwort { font-size: var(--text-sm); font-weight: 600; color: var(--farbe-text-2); }
+  .antwort.accepted { color: var(--farbe-erfolg); }
+  .antwort.declined { color: var(--farbe-fehler); }
+  .formular { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--raum-4); align-items: start; }
+  .formular .breit { grid-column: 1 / -1; }
+  .formular textarea { min-height: 160px; }
+  .knoepfe { display: flex; gap: var(--raum-3); }
+  .loeschen form { display: grid; gap: var(--raum-4); }
+  @media (max-width: 960px) {
+    .raster { grid-template-columns: 1fr; }
+    .liste > div { grid-template-columns: 1fr; gap: 2px; }
+  }
+  @media (max-width: 560px) {
+    .formular { grid-template-columns: 1fr; }
+  }
+</style>

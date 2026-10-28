@@ -29,6 +29,7 @@ export interface KalTermin extends KalSpanne {
 
 /** Termin aus dem Google Kalender (abgeglichen per Cron) */
 export interface KalGoogle extends KalSpanne {
+  eventId: string;
   titel: string;
   zeit: string;
   ort: string | null;
@@ -52,7 +53,7 @@ export interface KalTag {
   /** Google Termine mit Uhrzeit */
   google: KalGoogle[];
   /** Ganztägige Google Einträge */
-  ganztags: { titel: string; link: string | null }[];
+  ganztags: { eventId: string; titel: string; link: string | null }[];
   /** Nicht buchbar wegen Google Terminen, inklusive Puffer */
   belegt: KalSpanne[];
 }
@@ -268,6 +269,7 @@ export async function kalenderLaden({ nutzer, ansicht, anker, team = false }: Op
         const start = minutenImTag(g.start, tagStart, tagEnde, tz);
         const ende = Math.min(1440, Math.max(start + 15, minutenImTag(g.ende, tagStart, tagEnde, tz)));
         return {
+          eventId: g.event_id,
           start,
           ende,
           titel: g.titel,
@@ -286,7 +288,7 @@ export async function kalenderLaden({ nutzer, ansicht, anker, team = false }: Op
     googleTag.sort((a, b) => a.start - b.start);
     const ganztags = googleTermine
       .filter((g) => g.ganztaegig && g.start < tagEnde && g.ende > tagStart)
-      .map((g) => ({ titel: g.titel, link: g.link }));
+      .map((g) => ({ eventId: g.event_id, titel: g.titel, link: g.link }));
 
     const belegt = fremdBelegt
       .filter((x) => x.start < tagEnde && x.ende > tagStart)

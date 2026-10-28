@@ -185,6 +185,28 @@ export interface GoogleTermin {
   link: string | null;
 }
 
+/** Macht aus einem Google Ereignis einen Termin für Kalender und Slots, null bei abgesagten oder kaputten Einträgen. */
+function ereignisZuTermin(e: GoogleEreignis, tz: string): GoogleTermin | null {
+  if (!e.id || e.status === 'cancelled') return null;
+  const ganztaegig = !e.start?.dateTime;
+  const start = ganztaegig ? (e.start?.date ? zoneZuUtc(e.start.date, 0, tz).getTime() : NaN) : Date.parse(e.start!.dateTime!);
+  const ende = ganztaegig ? (e.end?.date ? zoneZuUtc(e.end.date, 0, tz).getTime() : NaN) : Date.parse(e.end?.dateTime ?? '');
+  if (!Number.isFinite(start) || !Number.isFinite(ende) || ende <= start) return null;
+  const titel = (e.summary ?? '').trim().slice(0, 300) || '(Ohne Titel)';
+  const abgelehnt = Boolean(e.attendees?.some((a) => a.self && a.responseStatus === 'declined'));
+  const ignoriert = IGNORIEREN.some((w) => titel.toLowerCase().includes(w));
+  return {
+    eventId: e.id,
+    titel,
+    start,
+    ende,
+    ganztaegig,
+    blockiert: !ganztaegig && !abgelehnt && !ignoriert && e.transparency !== 'transparent',
+    ort: e.location?.trim().slice(0, 300) || null,
+    link: e.htmlLink?.startsWith('https://') ? e.htmlLink : null,
+  };
+}
+
 /**
  * Liest alle Termine im Zeitraum aus dem Google Kalender. Wirft bei Fehlern.
  * Nicht blockierend sind ganztägige Einträge, abgelehnte Termine, Einträge mit Status „Verfügbar“
@@ -216,26 +238,8 @@ async function googleTermineLaden(nutzer: Nutzer, vonUtc: Date, bisUtc: Date): P
     }
     const daten = (await res.json()) as { items?: GoogleEreignis[]; nextPageToken?: string };
     for (const e of daten.items ?? []) {
-      if (!e.id || e.status === 'cancelled') continue;
-      const ganztaegig = !e.start?.dateTime;
-      const start = ganztaegig ? (e.start?.date ? zoneZuUtc(e.start.date, 0, nutzer.zeitzone).getTime() : NaN) : Date.parse(e.start!.dateTime!);
-      const ende = ganztaegig
-        ? (e.end?.date ? zoneZuUtc(e.end.date, 0, nutzer.zeitzone).getTime() : NaN)
-        : Date.parse(e.end?.dateTime ?? '');
-      if (!Number.isFinite(start) || !Number.isFinite(ende) || ende <= start) continue;
-      const titel = (e.summary ?? '').trim().slice(0, 300) || '(Ohne Titel)';
-      const abgelehnt = Boolean(e.attendees?.some((a) => a.self && a.responseStatus === 'declined'));
-      const ignoriert = IGNORIEREN.some((w) => titel.toLowerCase().includes(w));
-      termine.push({
-        eventId: e.id,
-        titel,
-        start,
-        ende,
-        ganztaegig,
-        blockiert: !ganztaegig && !abgelehnt && !ignoriert && e.transparency !== 'transparent',
-        ort: e.location?.trim().slice(0, 300) || null,
-        link: e.htmlLink?.startsWith('https://') ? e.htmlLink : null,
-      });
+      const t = ereignisZuTermin(e, nutzer.zeitzone);
+      if (t) termine.push(t);
     }
     seite = daten.nextPageToken;
     if (!seite) break;
@@ -329,6 +333,138 @@ export async function googleAbgleichBuero() {
 export async function googleTermineEntfernen(nutzerId: string) {
   await ausfuehren('DELETE FROM google_termine WHERE nutzer_id = ?', nutzerId);
   await ausfuehren('UPDATE nutzer SET google_abgleich_am = NULL, google_abgleich_fehler = NULL WHERE id = ?', nutzerId);
+}
+
+/** Vollständiger Google Termin für die Detailseite im Backoffice */
+export interface GoogleDetail extends GoogleTermin {
+  beschreibung: string;
+  /** Beschreibung so, wie Google sie liefert (kann HTML enthalten) */
+  beschreibungRoh: string;
+  meetUrl: string | null;
+  wiederkehrend: boolean;
+  /** Nur der Organisator darf Titel und Zeiten ändern */
+  bearbeitbar: boolean;
+  organisator: string | null;
+  frei: boolean;
+  teilnehmer: { name: string; email: string; antwort: string; organisator: boolean }[];
+}
+
+interface GoogleEreignisVoll extends GoogleEreignis {
+  description?: string;
+  hangoutLink?: string;
+  recurringEventId?: string;
+  organizer?: { email?: string; displayName?: string; self?: boolean };
+  attendees?: { self?: boolean; responseStatus?: string; email?: string; displayName?: string; organizer?: boolean }[];
+}
+
+/** Macht aus der HTML Beschreibung von Google lesbaren Text (Zeilenumbrüche bleiben, Links als Adresse). */
+export function htmlZuText(html: string) {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li)>/gi, '\n')
+    .replace(/<a\s[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, (_m, url: string, text: string) => (text && text !== url ? `${text} (${url})` : url))
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+async function einzelAnfrage(nutzer: Nutzer, eventId: string, methode: 'GET' | 'PATCH' | 'DELETE', abfrage = '', koerper?: unknown) {
+  const token = await zugriffstoken(nutzer);
+  if (!token) throw new Error(letzterTokenFehler ?? 'Kein gültiger Google Zugang, bitte unter Integrationen neu verbinden.');
+  const kalender = encodeURIComponent(nutzer.google_kalender_id || 'primary');
+  const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${kalender}/events/${encodeURIComponent(eventId)}${abfrage}`, {
+    method: methode,
+    headers: { authorization: `Bearer ${token}`, ...(koerper ? { 'content-type': 'application/json' } : {}) },
+    body: koerper ? JSON.stringify(koerper) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    console.error('Google Termin', methode, res.status, text);
+    // Termin gibt es nicht mehr: beim Lesen null, beim Löschen ist das Ziel erreicht
+    if (methode !== 'PATCH' && (res.status === 404 || res.status === 410)) return null;
+    throw new Error(googleApiFehler(res.status, text));
+  }
+  return methode === 'DELETE' ? null : ((await res.json()) as GoogleEreignisVoll);
+}
+
+function zuDetail(e: GoogleEreignisVoll, tz: string): GoogleDetail | null {
+  const t = ereignisZuTermin(e, tz);
+  if (!t) return null;
+  const roh = e.description ?? '';
+  return {
+    ...t,
+    beschreibungRoh: roh,
+    beschreibung: /<[a-z][\s\S]*>/i.test(roh) ? htmlZuText(roh) : roh.trim(),
+    meetUrl: e.hangoutLink?.startsWith('https://') ? e.hangoutLink : null,
+    wiederkehrend: Boolean(e.recurringEventId),
+    // Ohne Angabe zum Organisator ist es ein eigener Termin
+    bearbeitbar: e.organizer ? e.organizer.self === true : true,
+    organisator: e.organizer?.self ? null : e.organizer?.displayName || e.organizer?.email || null,
+    frei: e.transparency === 'transparent',
+    teilnehmer: (e.attendees ?? []).map((a) => ({
+      name: a.displayName ?? '',
+      email: a.email ?? '',
+      antwort: a.responseStatus ?? 'needsAction',
+      organisator: Boolean(a.organizer),
+    })),
+  };
+}
+
+/** Speichert einen einzelnen Termin in google_termine, damit Kalender und Liste sofort stimmen. */
+async function terminZeileSpeichern(nutzerId: string, t: GoogleTermin) {
+  await ausfuehren(
+    `INSERT OR REPLACE INTO google_termine (nutzer_id, event_id, titel, start_utc, ende_utc, ganztaegig, blockiert, ort, link, aktualisiert_am)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    nutzerId, t.eventId, t.titel, new Date(t.start).toISOString(), new Date(t.ende).toISOString(),
+    t.ganztaegig ? 1 : 0, t.blockiert ? 1 : 0, t.ort, t.link, new Date().toISOString(),
+  );
+}
+
+/** Liest einen Termin live aus Google. null, wenn es ihn nicht (mehr) gibt. Wirft bei anderen Fehlern. */
+export async function googleTerminLesen(nutzer: Nutzer, eventId: string): Promise<GoogleDetail | null> {
+  const e = await einzelAnfrage(nutzer, eventId, 'GET');
+  const d = e ? zuDetail(e, nutzer.zeitzone) : null;
+  // In Google gelöscht oder abgesagt: auch aus dem Kalender im Backoffice entfernen
+  if (!d) await ausfuehren('DELETE FROM google_termine WHERE nutzer_id = ? AND event_id = ?', nutzer.id, eventId);
+  else await terminZeileSpeichern(nutzer.id, d);
+  return d;
+}
+
+export interface GoogleAenderung {
+  titel: string;
+  ort: string;
+  /** null: Beschreibung bleibt unverändert */
+  beschreibung: string | null;
+  ganztaegig: boolean;
+  /** ganztägig: Datum YYYY-MM-DD, sonst Zeitpunkt in ms */
+  startDatum?: string;
+  endeDatumExklusiv?: string;
+  start?: number;
+  ende?: number;
+  frei: boolean;
+}
+
+/** Ändert einen Termin in Google und übernimmt das Ergebnis direkt in die D1. */
+export async function googleTerminAendern(nutzer: Nutzer, eventId: string, a: GoogleAenderung, benachrichtigen: boolean) {
+  const koerper: Record<string, unknown> = {
+    summary: a.titel,
+    location: a.ort,
+    transparency: a.frei ? 'transparent' : 'opaque',
+    // Die Art (ganztägig oder mit Uhrzeit) bleibt immer gleich, daher reicht das passende Feld
+    start: a.ganztaegig ? { date: a.startDatum } : { dateTime: new Date(a.start!).toISOString(), timeZone: nutzer.zeitzone },
+    end: a.ganztaegig ? { date: a.endeDatumExklusiv } : { dateTime: new Date(a.ende!).toISOString(), timeZone: nutzer.zeitzone },
+  };
+  if (a.beschreibung !== null) koerper.description = a.beschreibung;
+  const e = await einzelAnfrage(nutzer, eventId, 'PATCH', `?sendUpdates=${benachrichtigen ? 'all' : 'none'}`, koerper);
+  const t = e ? ereignisZuTermin(e, nutzer.zeitzone) : null;
+  if (t) await terminZeileSpeichern(nutzer.id, t);
+}
+
+/** Löscht einen Termin in Google (bei Fremdterminen: entfernt ihn aus dem Kalender des Büros) und aus der D1. */
+export async function googleTerminEntfernen(nutzer: Nutzer, eventId: string, benachrichtigen: boolean) {
+  await einzelAnfrage(nutzer, eventId, 'DELETE', `?sendUpdates=${benachrichtigen ? 'all' : 'none'}`);
+  await ausfuehren('DELETE FROM google_termine WHERE nutzer_id = ? AND event_id = ?', nutzer.id, eventId);
 }
 
 export async function googleTerminAnlegen(
