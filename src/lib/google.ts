@@ -109,25 +109,61 @@ async function zugriffstoken(nutzer: Nutzer): Promise<string | null> {
   return daten.access_token;
 }
 
-/** Belegte Zeiten aus dem Google Kalender. Bei Fehlern leer, damit Buchungen weiter möglich sind. */
+/** Puffer vor und nach jedem Termin im Google Kalender */
+export const GOOGLE_PUFFER_MIN = 30;
+
+/** Termine mit diesen Wörtern im Titel blockieren nichts (Kleinschreibung, Teilwort reicht) */
+const IGNORIEREN = ['briefkasten'];
+
+interface GoogleEreignis {
+  status?: string;
+  summary?: string;
+  transparency?: string;
+  start?: { dateTime?: string; date?: string };
+  end?: { dateTime?: string; date?: string };
+  attendees?: { self?: boolean; responseStatus?: string }[];
+}
+
+/**
+ * Belegte Zeiten aus dem Google Kalender: alle Termine mit Uhrzeit, je mit 30 Minuten Puffer davor und danach.
+ * Ignoriert werden ganztägige Einträge, abgesagte oder abgelehnte Termine, Einträge mit Status „Verfügbar“
+ * und Titel aus IGNORIEREN. Bei Fehlern leer, damit Buchungen weiter möglich sind.
+ */
 export async function googleBelegt(nutzer: Nutzer, vonUtc: Date, bisUtc: Date): Promise<{ start: number; ende: number }[]> {
   const token = await zugriffstoken(nutzer);
   if (!token) return [];
+  const puffer = GOOGLE_PUFFER_MIN * 60_000;
+  const kalender = encodeURIComponent(nutzer.google_kalender_id || 'primary');
   try {
-    const res = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        timeMin: vonUtc.toISOString(),
-        timeMax: bisUtc.toISOString(),
-        items: [{ id: nutzer.google_kalender_id || 'primary' }],
-      }),
-    });
-    if (!res.ok) throw new Error(`freeBusy ${res.status}`);
-    const daten = (await res.json()) as { calendars: Record<string, { busy: { start: string; end: string }[] }> };
-    return Object.values(daten.calendars ?? {}).flatMap((k) =>
-      (k.busy ?? []).map((b) => ({ start: Date.parse(b.start), ende: Date.parse(b.end) })),
-    );
+    const spannen: { start: number; ende: number }[] = [];
+    let seite: string | undefined;
+    for (let i = 0; i < 10; i++) {
+      const p = new URLSearchParams({
+        timeMin: new Date(vonUtc.getTime() - puffer).toISOString(),
+        timeMax: new Date(bisUtc.getTime() + puffer).toISOString(),
+        singleEvents: 'true',
+        orderBy: 'startTime',
+        maxResults: '250',
+        fields: 'nextPageToken,items(status,summary,transparency,start,end,attendees(self,responseStatus))',
+      });
+      if (seite) p.set('pageToken', seite);
+      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${kalender}/events?${p}`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`events ${res.status}`);
+      const daten = (await res.json()) as { items?: GoogleEreignis[]; nextPageToken?: string };
+      for (const e of daten.items ?? []) {
+        if (e.status === 'cancelled' || e.transparency === 'transparent') continue;
+        if (!e.start?.dateTime || !e.end?.dateTime) continue; // ganztägig
+        if (e.attendees?.some((a) => a.self && a.responseStatus === 'declined')) continue;
+        const titel = (e.summary ?? '').toLowerCase();
+        if (IGNORIEREN.some((w) => titel.includes(w))) continue;
+        spannen.push({ start: Date.parse(e.start.dateTime) - puffer, ende: Date.parse(e.end.dateTime) + puffer });
+      }
+      seite = daten.nextPageToken;
+      if (!seite) break;
+    }
+    return spannen;
   } catch (fehler) {
     console.error('Google Belegtzeiten nicht abrufbar', fehler);
     return [];

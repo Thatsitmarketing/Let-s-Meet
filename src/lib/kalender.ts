@@ -3,7 +3,7 @@
  * Alle Minutenangaben beziehen sich auf die Zone des angemeldeten Nutzers.
  */
 import { alle } from './db';
-import { googleBelegt } from './google';
+import { GOOGLE_PUFFER_MIN, googleBelegt } from './google';
 import type { Ausnahme, Nutzer, Regel } from './typen';
 import { addTage, datumInZone, teileInZone, wochentagVon, zoneZuUtc } from './zeit';
 
@@ -180,7 +180,9 @@ export async function kalenderLaden({ nutzer, ansicht, anker, team = false }: Op
   ]);
 
   const google = Boolean(nutzer.google_refresh_token) && !team;
-  const eigene = buchungen.filter((x) => x.nutzer_id === nutzer.id).map((x) => ({ start: Date.parse(x.start_utc), ende: Date.parse(x.ende_utc) }));
+  // Eigene Buchungen stehen als Google Termin samt Puffer im Kalender, der Puffer wird hier mit abgezogen
+  const puffer = GOOGLE_PUFFER_MIN * 60_000;
+  const eigene = buchungen.filter((x) => x.nutzer_id === nutzer.id).map((x) => ({ start: Date.parse(x.start_utc) - puffer, ende: Date.parse(x.ende_utc) + puffer }));
   const fremdBelegt = google ? abziehen(await googleBelegt(nutzer, vonUtc, bisUtc), eigene) : [];
 
   const ausnahmenNachTag = new Map<string, Ausnahme[]>();
