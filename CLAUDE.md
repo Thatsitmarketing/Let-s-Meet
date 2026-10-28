@@ -85,7 +85,7 @@ Backoffice (`/app`, geschützt durch Middleware, `noindex`, `X-Frame-Options: DE
 | Pfad | Zweck |
 | --- | --- |
 | `/app/login`, `/app/setup`, `/app/abmelden` | Anmeldung, Ersteinrichtung, Abmelden |
-| `/app/terminarten` | Übersicht als Karten, aktiv schalten, Link kopieren, duplizieren, löschen |
+| `/app/terminarten` | Übersicht als Karten in 4 Spalten (ab 1200px, ab 700px 2, darunter 1) mit Kurztext aus der Beschreibung (3 Zeilen), aktiv schalten, Link kopieren, duplizieren, löschen |
 | `/app/terminarten/neu`, `/app/terminarten/{id}` | Editor: Titel, Link, Dauer, Farbe, Ort, Unterlagen zur Vorbereitung, Planung, Fragen, Mails, Sichtbarkeit |
 | `/app/termine` | Standard Tab Kalender (Woche oder Monat, daneben „Als Nächstes“), dazu Listen Anstehend, Vergangen, Abgesagt mit Suche und Zeitraum, Team Ansicht für Admins, CSV Export. Parameter: `ansicht`, `kal=woche\|monat`, `datum`, `wer=team` |
 | `/app/termine/{id}` | Details, interne Notiz, nicht erschienen, Absagen, Umbuchungslink |
@@ -222,3 +222,4 @@ Der vierstufige Kontakt Funnel der Homepage (`Thatsitmarketing/thatsit_homepage_
 * 2026-10-27: Adminportal überarbeitet: Dienstkarten gleich hoch mit Logo Kachel, Status und Aktionen am Kartenende, mehr Abstand zwischen Abschnitten, Gesprächstabelle wird unter 900px zu Karten, Werkzeuge mit Logos je Eintrag und Gruppenüberschriften. Neue Komponente `Marke.astro`. Build ohne Fehler, nicht im Browser angesehen (Typprüfung lokal nicht möglich, Node 22.22)
 * 2026-10-27: Adminportal in die Einstellungen verschoben (Menüpunkt entfällt, `/app/werkzeuge` leitet weiter), darunter Vorschau der Buchungsseite. Dienststatus mit Logos jetzt oben unter Integrationen. Einbetten nur noch Inline Widget. Verfügbarkeit mit mehr Abstand. Build ohne Fehler, nicht im Browser angesehen
 * 2026-10-27: Orangene Punkte hinter Überschriften sind jetzt Quadrate wie im Logo (`.punkt` in `global.css` als Quadrat, auch im Mailkopf). Buchungskarte getauscht: links der Block mit Text („Dein Termin“, Titel, Dauer, Ort, Beschreibung), rechts Kalender, Zeiten und Formular (unter 1180px weiter Kalender zuerst). Label „Dein Termin“ in Montserrat statt Barlow Condensed. Typprüfung und Build lokal nicht ausgeführt (node_modules fehlen), nicht im Browser angesehen
+* 2026-10-28: Terminarten Übersicht im Backoffice in 4 statt 5 Spalten, dazu kurzer Beschreibungstext (auf 3 Zeilen gekürzt) je Karte. Typprüfung und Build lokal nicht ausgeführt, nicht im Browser angesehen
