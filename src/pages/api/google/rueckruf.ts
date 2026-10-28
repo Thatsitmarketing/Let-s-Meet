@@ -21,6 +21,10 @@ export const GET: APIRoute = async ({ url }) => {
   try {
     const t = await googleCodeTauschen(code, `${url.origin}/api/google/rueckruf`);
     if (!t.refresh_token) return weiterleiten('/app/integrationen?google_fehler=kein_refresh');
+    // Bei Google lassen sich einzelne Berechtigungen abwählen, ohne Kalender geht nichts
+    if (t.scope && !t.scope.includes('https://www.googleapis.com/auth/calendar.events')) {
+      return weiterleiten('/app/integrationen?google_fehler=scope');
+    }
     const ergebnis = await ausfuehren(
       `UPDATE nutzer SET google_email = ?, google_refresh_token = ?, google_access_token = ?, google_token_ablauf = ?, aktualisiert_am = ? WHERE id = ?`,
       t.email, t.refresh_token, t.access_token, Date.now() + t.expires_in * 1000, jetztIso(), id,

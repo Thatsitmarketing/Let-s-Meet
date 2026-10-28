@@ -8,6 +8,7 @@ const TEXTE: Record<string, string> = {
   willkommen: 'Willkommen bei Let\'s Meet. Deine erste Terminart ist schon angelegt.',
   google: 'Google Kalender verbunden. Die Termine sind übernommen.',
   abgeglichen: 'Google Kalender abgeglichen.',
+  google_geloescht: 'Termin im Google Kalender gelöscht.',
   getrennt: 'Verbindung getrennt.',
   passwort: 'Passwort geändert.',
 };

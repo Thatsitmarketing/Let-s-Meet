@@ -37,20 +37,21 @@ const [zeilen, gesamt, kalender, naechste] = await Promise.all([
         `SELECT b.*, t.titel, t.farbe, n.name AS gastgeber FROM buchungen b
          JOIN terminarten t ON t.id = b.terminart_id JOIN nutzer n ON n.id = b.nutzer_id
          WHERE b.status = 'bestaetigt' AND b.ende_utc >= ? ${f.team ? '' : 'AND b.nutzer_id = ?'}
-         ORDER BY b.start_utc ASC LIMIT 8`,
+         ORDER BY b.start_utc ASC LIMIT 6`,
         ...(f.team ? [new Date().toISOString()] : [new Date().toISOString(), nutzer.id]),
       )
     : Promise.resolve([] as Zeile[]),
 ]);
 
-// Google Termine (abgeglichen per Cron) stehen mit in „Als Nächstes“, eigene Buchungen nicht doppelt
+// Google Termine (abgeglichen per Cron) stehen mit in „Als Nächstes“, eigene Buchungen nicht doppelt,
+// nicht blockierende wie „Briefkasten“ oder „Verfügbar“ fehlen dort (im Kalender bleiben sie gestrichelt sichtbar)
 type GoogleZeile = { event_id: string; titel: string; start_utc: string; ende_utc: string; ort: string | null; link: string | null };
 const googleNaechste = kalModus && !f.team && nutzer.google_refresh_token
   ? await alle<GoogleZeile>(
       `SELECT event_id, titel, start_utc, ende_utc, ort, link FROM google_termine g
-       WHERE g.nutzer_id = ? AND g.ganztaegig = 0 AND g.ende_utc >= ?
+       WHERE g.nutzer_id = ? AND g.ganztaegig = 0 AND g.blockiert = 1 AND g.ende_utc >= ?
          AND NOT EXISTS (SELECT 1 FROM buchungen b WHERE b.nutzer_id = g.nutzer_id AND b.google_event_id = g.event_id)
-       ORDER BY g.start_utc ASC LIMIT 8`,
+       ORDER BY g.start_utc ASC LIMIT 6`,
       nutzer.id, new Date().toISOString(),
     ).catch(() => [] as GoogleZeile[])
   : [];
@@ -58,7 +59,7 @@ type Naechster = { art: 'buchung'; start: string; b: Zeile } | { art: 'google'; 
 const naechsteListe: Naechster[] = [
   ...naechste.map((b) => ({ art: 'buchung' as const, start: b.start_utc, b })),
   ...googleNaechste.map((g) => ({ art: 'google' as const, start: g.start_utc, g })),
-].sort((a, b) => a.start.localeCompare(b.start)).slice(0, 8);
+].sort((a, b) => a.start.localeCompare(b.start)).slice(0, 6);
 
 const gruppen = new Map<string, Zeile[]>();
 for (const z of zeilen) {
@@ -133,7 +134,7 @@ const tabs = [
                 </li>
               ) : (
                 <li>
-                  <a class="n-google" href={e.g.link ?? '#kalender'} {...(e.g.link ? { target: '_blank', rel: 'noopener' } : {})} title="Termin im Google Kalender öffnen">
+                  <a class="n-google" href={`/app/termine/google/${encodeURIComponent(e.g.event_id)}`}>
                     {wann}
                     <strong>{e.g.titel}</strong>
                     <span class="leise klein">Google Kalender{e.g.ort && ` · ${e.g.ort}`}</span>

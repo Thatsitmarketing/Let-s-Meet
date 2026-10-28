@@ -47,6 +47,8 @@ const monatsEintraege = (t: KalDaten['tage'][number]): Eintrag[] =>
     ...t.termine.map((b) => ({ art: 'termin' as const, start: b.start, b })),
     ...t.google.map((g) => ({ art: 'google' as const, start: g.start, g })),
   ].sort((a, b) => a.start - b.start);
+// Google Termine öffnen sich im Backoffice, dort gibt es auch den Link zu Google
+const googleHref = (eventId: string) => `/app/termine/google/${encodeURIComponent(eventId)}`;
 const googleTitel = (g: KalDaten['tage'][number]['google'][number]) =>
   `${g.zeit}: ${g.titel} (Google Kalender${g.blockiert ? '' : ', blockiert nicht'})${g.ort ? `, ${g.ort}` : ''}`;
 ---
@@ -95,11 +97,7 @@ const googleTitel = (g: KalDaten['tage'][number]['google'][number]) =>
               <ul class="kw-ganz" role="list" aria-label={`Ganztägig am ${tagNr(t.datum)}.`}>
                 {t.ganztags.map((g) => (
                   <li>
-                    {g.link ? (
-                      <a href={g.link} target="_blank" rel="noopener" title={`${g.titel} (ganztägig, Google Kalender)`}>{g.titel}</a>
-                    ) : (
-                      <span title={`${g.titel} (ganztägig, Google Kalender)`}>{g.titel}</span>
-                    )}
+                    <a href={googleHref(g.eventId)} title={`${g.titel} (ganztägig, Google Kalender)`}>{g.titel}</a>
                   </li>
                 ))}
               </ul>
@@ -131,11 +129,7 @@ const googleTitel = (g: KalDaten['tage'][number]['google'][number]) =>
                   <span class="kw-t-art">Google Kalender{g.ort && ` · ${g.ort}`}</span>
                 </>
               );
-              return g.link ? (
-                <a class:list={klassen} style={stil} href={g.link} target="_blank" rel="noopener" title={googleTitel(g)}>{inhalt}</a>
-              ) : (
-                <div class:list={klassen} style={stil} title={googleTitel(g)}>{inhalt}</div>
-              );
+              return <a class:list={klassen} style={stil} href={googleHref(g.eventId)} title={googleTitel(g)}>{inhalt}</a>;
             })}
             {t.termine.map((b) => (
               <a
@@ -182,7 +176,7 @@ const googleTitel = (g: KalDaten['tage'][number]['google'][number]) =>
                         <span class="km-zeit">{hhmm(e.b.start)}</span><span class="km-gast">{e.b.gast}</span>
                       </a>
                     ) : (
-                      <a href={e.g.link ?? link({ kal: 'woche', datum: t.datum })} {...(e.g.link ? { target: '_blank', rel: 'noopener' } : {})} class:list={['km-google', { vergangen: e.g.vergangen, frei: !e.g.blockiert }]} title={googleTitel(e.g)}>
+                      <a href={googleHref(e.g.eventId)} class:list={['km-google', { vergangen: e.g.vergangen, frei: !e.g.blockiert }]} title={googleTitel(e.g)}>
                         <span class="km-zeit">{hhmm(e.g.start)}</span><span class="km-gast">{e.g.titel}</span>
                       </a>
                     )}
