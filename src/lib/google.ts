@@ -29,6 +29,37 @@ export class GoogleTokenFehler extends Error {
   }
 }
 
+/**
+ * Übersetzt eine Fehlerantwort der Google Calendar API in einen verständlichen Grund.
+ * Google liefert bei 403 sehr verschiedene Ursachen, der Statuscode allein hilft nicht weiter.
+ */
+export function googleApiFehler(status: number, text: string) {
+  let gruende: string[] = [];
+  let nachricht = '';
+  try {
+    const f = (JSON.parse(text) as { error?: { message?: string; status?: string; errors?: { reason?: string }[]; details?: { reason?: string }[] } }).error;
+    nachricht = f?.message ?? '';
+    gruende = [f?.status, ...(f?.errors ?? []).map((e) => e.reason), ...(f?.details ?? []).map((d) => d.reason)].filter((g): g is string => Boolean(g));
+  } catch {
+    nachricht = text.slice(0, 200);
+  }
+  const hat = (...namen: string[]) => namen.some((n) => gruende.includes(n));
+  if (hat('accessNotConfigured', 'SERVICE_DISABLED')) {
+    return 'Die Google Calendar API ist im Google Cloud Projekt nicht aktiviert. In der Cloud Console unter APIs und Dienste, Bibliothek „Google Calendar API“ öffnen und aktivieren, danach einige Minuten warten und neu abgleichen.';
+  }
+  if (hat('insufficientPermissions', 'ACCESS_TOKEN_SCOPE_INSUFFICIENT')) {
+    return 'Google hat keinen Zugriff auf den Kalender freigegeben (beim Verbinden fehlte das Häkchen für den Kalender). Verbindung trennen, neu verbinden und bei Google alle Häkchen setzen.';
+  }
+  if (hat('rateLimitExceeded', 'userRateLimitExceeded', 'quotaExceeded', 'RATE_LIMIT_EXCEEDED')) {
+    return 'Google bremst gerade die Anfragen (Kontingent erreicht). Der nächste Abgleich versucht es automatisch erneut.';
+  }
+  if (status === 404 || hat('notFound')) {
+    return 'Den Kalender gibt es unter dieser Kalender ID nicht oder das verbundene Konto hat keinen Zugriff. Kalender ID prüfen, „primary“ ist der Hauptkalender.';
+  }
+  if (status === 401) return 'Der Google Zugang ist abgelaufen oder wurde widerrufen. Bitte neu verbinden.';
+  return `Google Kalender antwortet mit ${status}${nachricht ? `: ${nachricht.slice(0, 200)}` : ''}`;
+}
+
 export function googleAuthUrl(redirectUri: string, state: string) {
   const p = new URLSearchParams({
     client_id: clientId(),
@@ -65,7 +96,7 @@ export async function googleCodeTauschen(code: string, redirectUri: string) {
     }
     throw new GoogleTokenFehler(code, `Google Token ${res.status}: ${text}`);
   }
-  const daten = (await res.json()) as { access_token: string; refresh_token?: string; expires_in: number; id_token?: string };
+  const daten = (await res.json()) as { access_token: string; refresh_token?: string; expires_in: number; id_token?: string; scope?: string };
   let email: string | null = null;
   if (daten.id_token) {
     try {
@@ -77,6 +108,8 @@ export async function googleCodeTauschen(code: string, redirectUri: string) {
   }
   return { ...daten, email };
 }
+
+let letzterTokenFehler: string | null = null;
 
 async function zugriffstoken(nutzer: Nutzer): Promise<string | null> {
   if (!googleAktiv() || !nutzer.google_refresh_token) return null;
@@ -94,9 +127,16 @@ async function zugriffstoken(nutzer: Nutzer): Promise<string | null> {
     }),
   });
   if (!res.ok) {
-    console.error('Google Token Erneuerung fehlgeschlagen', res.status, await res.text());
+    const text = await res.text();
+    console.error('Google Token Erneuerung fehlgeschlagen', res.status, text);
+    letzterTokenFehler = text.includes('invalid_grant')
+      ? 'Google hat den gespeicherten Zugang abgelehnt (abgelaufen oder widerrufen). Steht die App in der Cloud Console unter Zielgruppe auf „Testen“, läuft der Zugang nach 7 Tagen ab: Status auf „In Produktion“ stellen, dann Verbindung trennen und neu verbinden.'
+      : text.includes('invalid_client')
+        ? 'Google kennt GOOGLE_CLIENT_ID oder GOOGLE_CLIENT_SECRET nicht. Secrets in Cloudflare prüfen.'
+        : `Google Token Erneuerung fehlgeschlagen (${res.status}).`;
     return null;
   }
+  letzterTokenFehler = null;
   const daten = (await res.json()) as { access_token: string; expires_in: number };
   const ablauf = Date.now() + daten.expires_in * 1000;
   await ausfuehren(
@@ -152,7 +192,7 @@ export interface GoogleTermin {
  */
 async function googleTermineLaden(nutzer: Nutzer, vonUtc: Date, bisUtc: Date): Promise<GoogleTermin[]> {
   const token = await zugriffstoken(nutzer);
-  if (!token) throw new Error('Kein gültiger Google Zugang, bitte unter Integrationen neu verbinden');
+  if (!token) throw new Error(letzterTokenFehler ?? 'Kein gültiger Google Zugang, bitte unter Integrationen neu verbinden.');
   const kalender = encodeURIComponent(nutzer.google_kalender_id || 'primary');
   const termine: GoogleTermin[] = [];
   let seite: string | undefined;
@@ -169,7 +209,11 @@ async function googleTermineLaden(nutzer: Nutzer, vonUtc: Date, bisUtc: Date): P
     const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${kalender}/events?${p}`, {
       headers: { authorization: `Bearer ${token}` },
     });
-    if (!res.ok) throw new Error(`Google Kalender antwortet mit ${res.status}`);
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('Google Kalender Fehler', res.status, text);
+      throw new Error(googleApiFehler(res.status, text));
+    }
     const daten = (await res.json()) as { items?: GoogleEreignis[]; nextPageToken?: string };
     for (const e of daten.items ?? []) {
       if (!e.id || e.status === 'cancelled') continue;
