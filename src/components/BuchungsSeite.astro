@@ -251,7 +251,7 @@ const absaetze = (terminart.beschreibung ?? '')
   .buchung.embed { box-shadow: none; border: 1px solid var(--farbe-rahmen); }
   .buchung.ohne-details { grid-template-columns: 1fr; }
 
-  .bereich { padding: var(--raum-6) var(--raum-8); min-width: 0; }
+  .bereich { padding: var(--raum-6) var(--raum-8); min-width: 0; display: flex; flex-direction: column; justify-content: center; }
   .arten { display: flex; flex-wrap: wrap; gap: var(--raum-2); margin-bottom: var(--raum-6); }
   .art-tab {
     display: inline-flex; align-items: baseline; gap: var(--raum-2); min-height: 44px; padding: var(--raum-2) var(--raum-4);

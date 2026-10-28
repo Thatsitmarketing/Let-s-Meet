@@ -2,7 +2,7 @@
 import App from '../../../layouts/App.astro';
 import Icon from '../../../components/ui/Icon.astro';
 import TerminartFormular from '../../../components/TerminartFormular.astro';
-import { eins } from '../../../lib/db';
+import { ausfuehren, eins } from '../../../lib/db';
 import { meldungAusUrl } from '../../../lib/meldungen';
 import { terminartAusFormular, terminartSpeichern, type TerminartWerte } from '../../../lib/terminart-formular';
 import type { Terminart } from '../../../lib/typen';
@@ -15,7 +15,20 @@ let werte: TerminartWerte = ta;
 let fehler: Record<string, string> = {};
 
 if (Astro.request.method === 'POST') {
-  const ergebnis = await terminartAusFormular(await Astro.request.formData(), nutzer.id, ta.id);
+  const form = await Astro.request.formData();
+  if (form.get('aktion') === 'loeschen') {
+    const offen = await eins<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM buchungen WHERE terminart_id = ? AND status = 'bestaetigt' AND start_utc > ?",
+      ta.id,
+      new Date().toISOString(),
+    );
+    if (offen?.n) {
+      return Astro.redirect(`/app/terminarten/${ta.id}?fehler=${encodeURIComponent(`Es gibt noch ${offen.n} anstehende Termine dieser Art. Deaktiviere sie stattdessen oder sag die Termine vorher ab.`)}`);
+    }
+    await ausfuehren('DELETE FROM terminarten WHERE id = ?', ta.id);
+    return Astro.redirect('/app/terminarten?ok=geloescht');
+  }
+  const ergebnis = await terminartAusFormular(form, nutzer.id, ta.id);
   werte = ergebnis.werte;
   fehler = ergebnis.fehler;
   if (!Object.keys(fehler).length) {
@@ -31,4 +44,17 @@ const link = `${Astro.url.origin}/${ta.slug}`;
     <a class="knopf knopf--rahmen" href={link} target="_blank" rel="noopener"><Icon name="auge" />Ansehen</a>
   </Fragment>
   <TerminartFormular werte={werte} fehler={fehler} neu={false} />
+
+  <section class="gefahr-bereich karte" aria-labelledby="loeschen-titel">
+    <h2 id="loeschen-titel">Terminart löschen</h2>
+    <p class="leise">Die Terminart und ihr Link sind danach weg. Gebuchte Termine bleiben erhalten, solange keine mehr ansteht. Willst du sie nur pausieren, schalte sie stattdessen auf „Aus“.</p>
+    <form method="post" data-rueckfrage={`Terminart „${ta.titel}“ wirklich löschen?`}>
+      <button class="knopf knopf--gefahr" name="aktion" value="loeschen"><Icon name="loeschen" />Terminart löschen</button>
+    </form>
+  </section>
 </App>
+
+<style>
+  .gefahr-bereich { display: grid; gap: var(--raum-3); justify-items: start; padding: var(--raum-6); margin-top: var(--raum-8); }
+  .gefahr-bereich h2 { font-size: var(--text-h3); }
+</style>
