@@ -46,8 +46,8 @@ const dienste: Dienst[] = [
   },
   {
     marke: 'cloudflare',
-    name: 'Cron (Erinnerungen, Löschfristen)',
-    text: 'Läuft alle 10 Minuten als Cloudflare Cron Trigger. Manueller Aufruf über /api/cron.',
+    name: 'Cron (Erinnerungen, Löschfristen, Google Abgleich)',
+    text: 'Läuft alle 10 Minuten als Cloudflare Cron Trigger und übernimmt dabei die Termine aus dem Google Kalender. Manueller Aufruf über /api/cron.',
     ok: Boolean(E.CRON_SECRET),
     status: E.CRON_SECRET ? ['Geschützt', ''] : ['Kein Secret', 'CRON_SECRET fehlt'],
     extern: { href: 'https://dash.cloudflare.com/?to=/:account/workers/services/view/let-s-meet/production/settings', text: 'Worker Einstellungen' },

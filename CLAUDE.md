@@ -21,7 +21,7 @@ Eigene Terminbuchung von That's it. Marketing nach dem Vorbild von Calendly: ein
 | Mail | Resend über die HTTP API |
 | Spamschutz | Cloudflare Turnstile, Honigtopf, Mindestzeit |
 | Kalender | Google Calendar API (OAuth, freeBusy, Termine mit Meet Link) |
-| Cron | Cloudflare Cron Trigger alle 10 Minuten (Erinnerungen, Löschfristen) |
+| Cron | Cloudflare Cron Trigger alle 10 Minuten (Erinnerungen, Löschfristen, Abgleich Google Kalender) |
 | Runtime | Node 24, pnpm 10 (`.nvmrc`, `engines`, `packageManager`) |
 
 ```bash
@@ -35,6 +35,8 @@ pnpm db:migrate:remote     # Migrationen auf die echte D1 anwenden
 pnpm deploy                # build, Migrationen remote, wrangler deploy
 pnpm deploy:cloudflare     # Deploybefehl für Cloudflare Workers Builds (nach pnpm build)
 ```
+
+**Arbeitsregel Migrationen:** Neue Migrationen immer direkt selbst auf der D1 `terminethatsitmarketing` ausführen (Cloudflare MCP `d1_database_query`, Anweisung für Anweisung) und danach in `d1_migrations` vermerken (`INSERT INTO d1_migrations (name, applied_at) VALUES ('000X_name.sql', CURRENT_TIMESTAMP)`), damit der Deploybefehl sie nicht doppelt ausführt. Nicht auf den Merge oder den Deploy warten. Vorher mit `SELECT name FROM d1_migrations` prüfen, was schon eingespielt ist.
 
 Lokale Geheimnisse liegen in `.dev.vars` (nicht eingecheckt). Vorlage mit allen Namen: `.env.example`.
 
@@ -87,11 +89,11 @@ Backoffice (`/app`, geschützt durch Middleware, `noindex`, `X-Frame-Options: DE
 | `/app/login`, `/app/setup`, `/app/abmelden` | Anmeldung, Ersteinrichtung, Abmelden |
 | `/app/terminarten` | Übersicht als Karten in 4 Spalten (ab 1200px, ab 700px 2, darunter 1) mit Kurztext aus der Beschreibung (3 Zeilen), aktiv schalten, Link kopieren, duplizieren, löschen |
 | `/app/terminarten/neu`, `/app/terminarten/{id}` | Editor: Titel, Link, Dauer, Farbe, Ort, Unterlagen zur Vorbereitung, Planung, Fragen, Mails, Sichtbarkeit |
-| `/app/termine` | Standard Tab Kalender (Woche oder Monat, daneben „Als Nächstes“), dazu Listen Anstehend, Vergangen, Abgesagt mit Suche und Zeitraum, Team Ansicht für Admins, CSV Export. Parameter: `ansicht`, `kal=woche\|monat`, `datum`, `wer=team` |
+| `/app/termine` | Standard Tab Kalender (Woche oder Monat, daneben „Als Nächstes“ mit Buchungen und Google Terminen), dazu Listen Anstehend, Vergangen, Abgesagt mit Suche und Zeitraum, Team Ansicht für Admins, CSV Export. Parameter: `ansicht`, `kal=woche\|monat`, `datum`, `wer=team` |
 | `/app/termine/{id}` | Details, interne Notiz, nicht erschienen, Absagen, Umbuchungslink |
 | `/app/verfuegbarkeit` | Wochenzeiten mit mehreren Zeiträumen pro Tag, Zeitzone, Kalender mit Live Vorschau ungespeicherter Wochenzeiten, Ausnahmen für Tage oder Zeiträume (Klick auf einen Tag im Kalender trägt das Datum ein, `?ausnahme=`) |
 | `/app/einbetten` | Codegenerator nur für das Inline Widget, mit Live Vorschau |
-| `/app/integrationen` | Oben Status aller Dienste mit Logos (Google, Resend, Turnstile, Webhook, Cron, `DiensteStatus.astro`), darunter Einrichtung von Google Kalender und Webhook mit HMAC Signatur |
+| `/app/integrationen` | Oben Status aller Dienste mit Logos (Google, Resend, Turnstile, Webhook, Cron, `DiensteStatus.astro`), darunter Einrichtung von Google Kalender (Stand des letzten Abgleichs, Fehlergrund, Knopf „Jetzt abgleichen“) und Webhook mit HMAC Signatur |
 | `/app/einstellungen` | Admins: zentrale Buchungsseite (Name des Büros als Gastgeber, Text unter „Lass uns reden.“). Alle: eigenes Profil und Passwort. Admins zusätzlich unten das Adminportal (`Adminportal.astro`: alle Gespräche mit Homepage Zuordnung `HOMEPAGE`, Verweise auf Werkzeuge) und ganz unten die Vorschau der Buchungsseite (iframe `/?embed=1`) |
 | `/app/werkzeuge` | Leitet per 301 auf `/app/einstellungen` (Adminportal ist dort eingebaut) |
 | `/app/team` | Nur Admins: Mitglieder anlegen, Rolle, deaktivieren, Passwort setzen. Das Büro steht oben mit Badge „Büro, zentrale Buchung“ und lässt sich nicht deaktivieren |
@@ -125,14 +127,14 @@ Alle Werte in `src/styles/tokens.css`, abgeleitet aus dem Branding Guide.
 | `src/components/BuchungsSeite.astro` | Öffentliche Buchung: mittig zentrierter Kopf auf dem Bürofoto (Eyebrow, „Lass uns reden.“, Text darunter), darunter mittig die Karte (max. 1240px) mit Kalender (Tage 42px hoch), Zeiten und Formular rechts. Links „Dein Termin“ mit Logo That's it., Dauer, Ort, Beschreibung (Zeilen nach einer Zeile mit Doppelpunkt werden Hakenliste) und Kontaktzeile. Seite bis 1440px breit, ab 1180px zweispaltig |
 | `src/lib/marke.ts` | Kontakt (info@, Telefon), Standardtext unter „Lass uns reden.“ |
 | `src/components/TerminartFormular.astro` | Editor der Terminarten inklusive Fragenliste und Unterlagenliste (Titel, Link, Kurzinfo, Vorschaubild), ab 1400px zweispaltig |
-| `src/components/Kalender.astro` | Backoffice Kalender, Woche und Monat: Verfügbarkeit weiß, nicht buchbar schraffiert, Termine als Blöcke in Terminartfarbe, Google Belegtzeiten gestrichelt, orangene Jetzt Linie. Navigation über URL (`kal`, `datum`), Anker `#kalender` |
+| `src/components/Kalender.astro` | Backoffice Kalender, Woche und Monat: Verfügbarkeit weiß, nicht buchbar schraffiert, Termine als Blöcke in Terminartfarbe, Google Termine mit Titel als graue Blöcke (Klick öffnet den Termin in Google, nicht blockierende gestrichelt), dahinter schraffiert die gesperrte Zeit samt Puffer, ganztägige Google Einträge in einer eigenen Zeile über dem Raster, Stand des Abgleichs in der Legende, orangene Jetzt Linie. Navigation über URL (`kal`, `datum`), Anker `#kalender` |
 | `src/components/ui/Marke.astro` | Logos der Dienste (Google, Kalender, Resend, Cloudflare, GitHub, Close, That's it.) als Kachel, Props `marke`, `name`, `groesse`. Genutzt in Adminportal und Integrationen |
 | `src/components/ui/Logo.astro` | Let's Meet Logo, Props `variante` (`schwarz`, `weiss`), `form` (`voll`, `kompakt`), `hoehe`, `href`, `klasse`. Genutzt im öffentlichen Kopf (44px), in der Seitenleiste (44px, mobil 150px breit) und groß auf Login und Einrichtung |
 | `src/components/Avatar.astro`, `OrtIcon.astro`, `ui/Icon.astro` | Kleinteile |
 | `src/scripts/buchung.ts` | Kalender, Zeitzonen, Slotwahl und Formularversand im Browser |
 | `public/embed.js` | Widget ohne Abhängigkeiten, API `LetsMeet.initInlineWidget`, `initBadgeWidget`, `showPopupWidget`, `closePopupWidget`, Ereignis `letsmeet:gebucht` |
 
-Logik in `src/lib/`: `abfragen.ts` (unter anderem `buero()`, `LOGIN_KONTO`, `unterlagenLesen`), `slots.ts` (freie Zeiten), `kalender.ts` (Kalenderdaten je Tag: Verfügbarkeit, Termine mit Spaltenverteilung bei Überschneidung, Google freeBusy ohne die eigenen Buchungen), `zeit.ts` (Zeitzonen ohne Bibliothek), `buchungen.ts` (anlegen, absagen, umbuchen, Mails, Webhook, Cron), `google.ts`, `mail.ts` (Vorlagen), `ics.ts`, `auth.ts`, `konten.ts`, `terminart-formular.ts`, `termin-filter.ts`.
+Logik in `src/lib/`: `abfragen.ts` (unter anderem `buero()`, `LOGIN_KONTO`, `unterlagenLesen`), `slots.ts` (freie Zeiten), `kalender.ts` (Kalenderdaten je Tag: Verfügbarkeit, Buchungen und Google Termine aus `google_termine` mit gemeinsamer Spaltenverteilung bei Überschneidung, eigene Buchungen nicht doppelt), `zeit.ts` (Zeitzonen ohne Bibliothek), `buchungen.ts` (anlegen, absagen, umbuchen, Mails, Webhook, Cron), `google.ts` (OAuth, `googleBelegt` live für Slots, `googleAbgleich` in die D1), `mail.ts` (Vorlagen), `ics.ts`, `auth.ts`, `konten.ts`, `terminart-formular.ts`, `termin-filter.ts`.
 
 ## Formulare und Datenfluss
 
@@ -144,7 +146,9 @@ Buchung (`POST /api/buchen`, JSON):
 5. Speichern in D1, danach Doppelbuchungsschutz über die rowid Reihenfolge
 6. Google Termin mit Meet Link, danach im Hintergrund Mails an Gast und Gastgeber mit ICS Anhang und Webhook
 
-Slotberechnung: Wochenregeln oder Tagesausnahme in der Zone des Gastgebers, Raster, Dauer, Puffer davor und danach, Mindestvorlauf, Buchbarkeit in Tagen, Tageslimit pro Terminart, alle bestätigten Buchungen des Gastgebers, Google freeBusy.
+Slotberechnung: Wochenregeln oder Tagesausnahme in der Zone des Gastgebers, Raster, Dauer, Puffer davor und danach, Mindestvorlauf, Buchbarkeit in Tagen, Tageslimit pro Terminart, alle bestätigten Buchungen des Gastgebers, Google Termine (live über `events.list`, je 30 Minuten Puffer; ist Google nicht erreichbar, gilt der letzte Abgleich aus `google_termine`).
+
+Abgleich Google Kalender (`googleAbgleich` in `google.ts`): Der Cron holt alle 10 Minuten die Termine des Büros von 14 Tagen zurück bis 120 Tage voraus und ersetzt sie in `google_termine` (Titel, Zeit, ganztägig, blockiert, Ort, Link zu Google). Einträge älter als 30 Tage fallen weg. Zusätzlich sofort nach dem Verbinden, beim Wechsel der Kalender ID, per Knopf unter Integrationen und beim Öffnen des Kalenders, wenn der letzte Stand älter als 15 Minuten ist. Stand und Fehlergrund stehen in `nutzer.google_abgleich_am` und `google_abgleich_fehler`. Beim Trennen werden alle abgeglichenen Termine gelöscht. Blockierend sind Termine mit Uhrzeit, nicht blockierend ganztägige Einträge, abgelehnte Termine, Status „Verfügbar“ und Titel mit „Briefkasten“. Abgesagte Termine werden nicht übernommen.
 
 Umbuchen: Gast öffnet die Buchungsseite mit `?umbuchen={id}`. Die alte Buchung zählt nicht als belegt, wird nach der neuen Buchung storniert (`storno_grund = Umgebucht`, Verweis `umgebucht_zu`).
 
@@ -152,7 +156,7 @@ Anmeldung Backoffice: Passwort als PBKDF2 SHA256 (100.000 Iterationen), Sitzung 
 
 Webhook Ereignisse: `buchung.erstellt`, `buchung.umgebucht`, `buchung.storniert`, `test`. Header `x-letsmeet-signatur` = HMAC SHA256 des Rohkörpers mit dem Signaturschlüssel.
 
-Datenbank: `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `terminarten`, `verfuegbarkeit`, `ausnahmen`, `buchungen`. `migrations/0002_zentrales_buero.sql`: Spalten `nutzer.ist_buero` und `terminarten.unterlagen` (JSON `[{titel, url, info, bild}]`). Macht das Konto `info@thatsit.marketing` zum Büro (Name „That's it. Marketing“, Position „Büro Gelsenkirchen“) oder legt es ohne Anmeldung an (`passwort_hash = '!'`), ergänzt Standardverfügbarkeit Mo bis Fr 9 bis 17 Uhr und ein Erstgespräch, füllt dessen Beschreibung und Unterlagen (vier Playbooks, Referenzen), falls leer, und setzt persönliche Terminarten der übrigen Konten auf inaktiv (Daten bleiben). Login und Einrichtung zählen nur Konten mit echtem Passwort (`LOGIN_KONTO`). Neue Konten bekommen keine eigenen Terminarten mehr.
+Datenbank: `migrations/0006_google_termine.sql` legt `google_termine` und die Spalten `nutzer.google_abgleich_am`, `google_abgleich_fehler` an. `migrations/0001_grundschema.sql` mit den Tabellen `nutzer`, `terminarten`, `verfuegbarkeit`, `ausnahmen`, `buchungen`. `migrations/0002_zentrales_buero.sql`: Spalten `nutzer.ist_buero` und `terminarten.unterlagen` (JSON `[{titel, url, info, bild}]`). Macht das Konto `info@thatsit.marketing` zum Büro (Name „That's it. Marketing“, Position „Büro Gelsenkirchen“) oder legt es ohne Anmeldung an (`passwort_hash = '!'`), ergänzt Standardverfügbarkeit Mo bis Fr 9 bis 17 Uhr und ein Erstgespräch, füllt dessen Beschreibung und Unterlagen (vier Playbooks, Referenzen), falls leer, und setzt persönliche Terminarten der übrigen Konten auf inaktiv (Daten bleiben). Login und Einrichtung zählen nur Konten mit echtem Passwort (`LOGIN_KONTO`). Neue Konten bekommen keine eigenen Terminarten mehr.
 
 Unterlagen zur Vorbereitung: seit 2026-10-27 nicht mehr auf der Buchungsseite. Feld `terminarten.unterlagen` und die Liste im Terminart Editor bleiben bestehen (Daten: vier Playbooks, verlinkt auf `*-playbook.thatsit.marketing`), werden aber öffentlich nicht angezeigt. Der Filter nach Interesse (`src/lib/themen.ts`, `?thema=`) ist entfernt. Keine IP Adressen, keine User Agents. Löschfrist `loeschen_ab` 365 Tage nach Terminende, der Cron löscht.
 
@@ -186,7 +190,7 @@ Der vierstufige Kontakt Funnel der Homepage (`Thatsitmarketing/thatsit_homepage_
 * Worker `let-s-meet` läuft unter `let-s-meet.aged-brook-9137.workers.dev`. Pages Projekt `let-s-meet` kann gelöscht werden
 * Prüfen, ob Workers Builds nach dem Merge von PR #7 aus `main` deployt hat (Startseite zeigt „Lass uns reden.“ auf dem Bürofoto). Die D1 ist bereits auf Stand 0002
 * Das Konto info@thatsit.marketing heißt jetzt „That's it. Marketing“. Wer sich bisher persönlich damit angemeldet hat (bisher Name Tim Barela), bekommt unter Team ein eigenes Konto
-* Google Kalender unter Integrationen mit info@thatsit.marketing verbinden (bisher ist nur Mikes persönlicher Kalender verbunden, der zählt nicht mehr)
+* Google Kalender des Büros ist mit info@thatsit.marketing verbunden (Stand D1 2026-10-28)
 * Klären, ob die Liste „Unterlagen zur Vorbereitung“ im Terminart Editor ganz raus soll, seit sie auf der Buchungsseite nicht mehr erscheint
 * Branch `claude/affectionate-pasteur-q3ennq` (PR #8) ist veraltet (ein Commit nur an der CLAUDE.md, Inhalt hier übernommen). PR #8 schließen statt mergen, Branch danach löschen
 * Secrets in Cloudflare gesetzt: `PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `CRON_SECRET` (Stand 2026-10-28). Noch offen: Resend Domain verifizieren, `RESEND_API_KEY`
@@ -195,6 +199,8 @@ Der vierstufige Kontakt Funnel der Homepage (`Thatsitmarketing/thatsit_homepage_
 * Datenschutzerklärung auf thatsit.marketing um Let's Meet ergänzen (Zweck, Rechtsgrundlage, Speicherdauer 12 Monate, Empfänger Cloudflare, Resend, Google)
 * Recruiting Funnel der Homepage (`/api/lead`) ist noch nicht an Let's Meet angebunden
 * `pnpm db:migrate:remote` bzw. der Deploybefehl überspringen 0003, weil sie bereits auf der D1 eingespielt und vermerkt ist
+* Google Abgleich (Migration 0006 liegt auf der D1) ist noch nicht live getestet: nach dem Deploy unter Integrationen „Jetzt abgleichen“ drücken und unter Termine prüfen, ob die Termine der Woche mit Titel erscheinen
+* Das Konto mike@thatsit.marketing hat noch eine eigene Google Verbindung mit info@thatsit.marketing gespeichert. Sie wird nicht genutzt (nur das Büro zählt), kann aber unter Integrationen nicht mehr getrennt werden, weil dort immer das Büro steht. Bei Bedarf die Token in der D1 leeren
 * Optional später: Rundenverteilung im Team, mehrere Verfügbarkeitspläne pro Person, Zahlungen, Microsoft Kalender
 
 ## Änderungsverlauf mit Datum
@@ -226,3 +232,4 @@ Der vierstufige Kontakt Funnel der Homepage (`Thatsitmarketing/thatsit_homepage_
 * 2026-10-28: Google Kalender des Büros verbunden. Belegtzeiten kommen jetzt aus `events.list` statt `freeBusy` (`googleBelegt` in `google.ts`): alle Termine mit Uhrzeit blockieren, je 30 Minuten Puffer davor und danach (`GOOGLE_PUFFER_MIN`). Ignoriert werden ganztägige Einträge, abgesagte oder abgelehnte Termine, Einträge mit Status „Verfügbar“ und Titel mit „Briefkasten“ (Liste `IGNORIEREN`). Gilt für die Slotberechnung und die gestrichelten Blöcke im Backoffice Kalender (eigene Buchungen werden samt Puffer abgezogen). Nicht live getestet
 * 2026-10-27: Orangene Punkte hinter Überschriften sind jetzt Quadrate wie im Logo (`.punkt` in `global.css` als Quadrat, auch im Mailkopf). Buchungskarte getauscht: links der Block mit Text („Dein Termin“, Titel, Dauer, Ort, Beschreibung), rechts Kalender, Zeiten und Formular (unter 1180px weiter Kalender zuerst). Label „Dein Termin“ in Montserrat statt Barlow Condensed. Typprüfung und Build lokal nicht ausgeführt (node_modules fehlen), nicht im Browser angesehen
 * 2026-10-28: Terminarten Übersicht im Backoffice in 4 statt 5 Spalten, dazu kurzer Beschreibungstext (auf 3 Zeilen gekürzt) je Karte. Typprüfung und Build lokal nicht ausgeführt, nicht im Browser angesehen
+* 2026-10-28: Termine aus dem Google Kalender des Büros werden alle 10 Minuten in die D1 übernommen (Tabelle `google_termine`, Migration 0006, auf der D1 eingespielt und vermerkt) und erscheinen mit Titel im Backoffice Kalender (Woche und Monat, ganztägige Einträge in eigener Zeile) und in „Als Nächstes“. Slots prüfen weiter live gegen Google, bei einem Ausfall gilt der letzte Abgleich. Unter Integrationen Stand des Abgleichs, Fehlergrund und Knopf „Jetzt abgleichen“. Lokal geprüft: Typprüfung, Build, Kalender mit den Terminen aus KW 44 in 1600 und 390px ohne horizontales Scrollen, Fehlerfall ohne gültigen Zugang. Der echte Abruf bei Google ist nicht live getestet

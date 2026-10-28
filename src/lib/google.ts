@@ -1,10 +1,11 @@
 /**
- * Google Kalender: OAuth, Belegtzeiten (freeBusy) und Termine mit Google Meet Link.
+ * Google Kalender: OAuth, Belegtzeiten, Abgleich der Termine in die Datenbank und Termine mit Google Meet Link.
  * Alles über fetch, ohne SDK. Ohne GOOGLE_CLIENT_ID bleibt die Integration aus.
  */
 import { env } from 'cloudflare:workers';
-import { ausfuehren } from './db';
+import { alle, ausfuehren, db, eins } from './db';
 import type { Nutzer } from './typen';
+import { zoneZuUtc } from './zeit';
 
 const SCOPES = [
   'openid',
@@ -115,59 +116,175 @@ export const GOOGLE_PUFFER_MIN = 30;
 /** Termine mit diesen Wörtern im Titel blockieren nichts (Kleinschreibung, Teilwort reicht) */
 const IGNORIEREN = ['briefkasten'];
 
+/** Zeitraum, den der Abgleich in der Datenbank vorhält */
+export const ABGLEICH_TAGE_ZURUECK = 14;
+export const ABGLEICH_TAGE_VORAUS = 120;
+
 interface GoogleEreignis {
+  id?: string;
   status?: string;
   summary?: string;
+  location?: string;
+  htmlLink?: string;
   transparency?: string;
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
   attendees?: { self?: boolean; responseStatus?: string }[];
 }
 
+/** Ein Termin aus dem Google Kalender, Zeiten in Millisekunden UTC */
+export interface GoogleTermin {
+  eventId: string;
+  titel: string;
+  start: number;
+  ende: number;
+  ganztaegig: boolean;
+  /** Blockiert buchbare Zeiten (mit Puffer davor und danach) */
+  blockiert: boolean;
+  ort: string | null;
+  link: string | null;
+}
+
 /**
- * Belegte Zeiten aus dem Google Kalender: alle Termine mit Uhrzeit, je mit 30 Minuten Puffer davor und danach.
- * Ignoriert werden ganztägige Einträge, abgesagte oder abgelehnte Termine, Einträge mit Status „Verfügbar“
- * und Titel aus IGNORIEREN. Bei Fehlern leer, damit Buchungen weiter möglich sind.
+ * Liest alle Termine im Zeitraum aus dem Google Kalender. Wirft bei Fehlern.
+ * Nicht blockierend sind ganztägige Einträge, abgelehnte Termine, Einträge mit Status „Verfügbar“
+ * und Titel aus IGNORIEREN. Abgesagte Termine fehlen ganz.
+ */
+async function googleTermineLaden(nutzer: Nutzer, vonUtc: Date, bisUtc: Date): Promise<GoogleTermin[]> {
+  const token = await zugriffstoken(nutzer);
+  if (!token) throw new Error('Kein gültiger Google Zugang, bitte unter Integrationen neu verbinden');
+  const kalender = encodeURIComponent(nutzer.google_kalender_id || 'primary');
+  const termine: GoogleTermin[] = [];
+  let seite: string | undefined;
+  for (let i = 0; i < 20; i++) {
+    const p = new URLSearchParams({
+      timeMin: vonUtc.toISOString(),
+      timeMax: bisUtc.toISOString(),
+      singleEvents: 'true',
+      orderBy: 'startTime',
+      maxResults: '250',
+      fields: 'nextPageToken,items(id,status,summary,location,htmlLink,transparency,start,end,attendees(self,responseStatus))',
+    });
+    if (seite) p.set('pageToken', seite);
+    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${kalender}/events?${p}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`Google Kalender antwortet mit ${res.status}`);
+    const daten = (await res.json()) as { items?: GoogleEreignis[]; nextPageToken?: string };
+    for (const e of daten.items ?? []) {
+      if (!e.id || e.status === 'cancelled') continue;
+      const ganztaegig = !e.start?.dateTime;
+      const start = ganztaegig ? (e.start?.date ? zoneZuUtc(e.start.date, 0, nutzer.zeitzone).getTime() : NaN) : Date.parse(e.start!.dateTime!);
+      const ende = ganztaegig
+        ? (e.end?.date ? zoneZuUtc(e.end.date, 0, nutzer.zeitzone).getTime() : NaN)
+        : Date.parse(e.end?.dateTime ?? '');
+      if (!Number.isFinite(start) || !Number.isFinite(ende) || ende <= start) continue;
+      const titel = (e.summary ?? '').trim().slice(0, 300) || '(Ohne Titel)';
+      const abgelehnt = Boolean(e.attendees?.some((a) => a.self && a.responseStatus === 'declined'));
+      const ignoriert = IGNORIEREN.some((w) => titel.toLowerCase().includes(w));
+      termine.push({
+        eventId: e.id,
+        titel,
+        start,
+        ende,
+        ganztaegig,
+        blockiert: !ganztaegig && !abgelehnt && !ignoriert && e.transparency !== 'transparent',
+        ort: e.location?.trim().slice(0, 300) || null,
+        link: e.htmlLink?.startsWith('https://') ? e.htmlLink : null,
+      });
+    }
+    seite = daten.nextPageToken;
+    if (!seite) break;
+  }
+  return termine;
+}
+
+const mitPuffer = (t: { start: number; ende: number }) => ({
+  start: t.start - GOOGLE_PUFFER_MIN * 60_000,
+  ende: t.ende + GOOGLE_PUFFER_MIN * 60_000,
+});
+
+/**
+ * Belegte Zeiten aus dem Google Kalender: alle blockierenden Termine, je mit 30 Minuten Puffer davor und danach.
+ * Live abgefragt, damit eine Buchung nie auf veralteten Daten beruht. Ist Google nicht erreichbar,
+ * gilt der letzte Abgleich aus der Datenbank.
  */
 export async function googleBelegt(nutzer: Nutzer, vonUtc: Date, bisUtc: Date): Promise<{ start: number; ende: number }[]> {
-  const token = await zugriffstoken(nutzer);
-  if (!token) return [];
+  if (!googleAktiv() || !nutzer.google_refresh_token) return [];
   const puffer = GOOGLE_PUFFER_MIN * 60_000;
-  const kalender = encodeURIComponent(nutzer.google_kalender_id || 'primary');
   try {
-    const spannen: { start: number; ende: number }[] = [];
-    let seite: string | undefined;
-    for (let i = 0; i < 10; i++) {
-      const p = new URLSearchParams({
-        timeMin: new Date(vonUtc.getTime() - puffer).toISOString(),
-        timeMax: new Date(bisUtc.getTime() + puffer).toISOString(),
-        singleEvents: 'true',
-        orderBy: 'startTime',
-        maxResults: '250',
-        fields: 'nextPageToken,items(status,summary,transparency,start,end,attendees(self,responseStatus))',
-      });
-      if (seite) p.set('pageToken', seite);
-      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${kalender}/events?${p}`, {
-        headers: { authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`events ${res.status}`);
-      const daten = (await res.json()) as { items?: GoogleEreignis[]; nextPageToken?: string };
-      for (const e of daten.items ?? []) {
-        if (e.status === 'cancelled' || e.transparency === 'transparent') continue;
-        if (!e.start?.dateTime || !e.end?.dateTime) continue; // ganztägig
-        if (e.attendees?.some((a) => a.self && a.responseStatus === 'declined')) continue;
-        const titel = (e.summary ?? '').toLowerCase();
-        if (IGNORIEREN.some((w) => titel.includes(w))) continue;
-        spannen.push({ start: Date.parse(e.start.dateTime) - puffer, ende: Date.parse(e.end.dateTime) + puffer });
-      }
-      seite = daten.nextPageToken;
-      if (!seite) break;
-    }
-    return spannen;
+    const termine = await googleTermineLaden(nutzer, new Date(vonUtc.getTime() - puffer), new Date(bisUtc.getTime() + puffer));
+    return termine.filter((t) => t.blockiert).map(mitPuffer);
   } catch (fehler) {
-    console.error('Google Belegtzeiten nicht abrufbar', fehler);
-    return [];
+    console.error('Google Belegtzeiten nicht abrufbar, nutze letzten Abgleich', fehler);
+    const zeilen = await alle<{ start_utc: string; ende_utc: string }>(
+      'SELECT start_utc, ende_utc FROM google_termine WHERE nutzer_id = ? AND blockiert = 1 AND start_utc < ? AND ende_utc > ?',
+      nutzer.id,
+      new Date(bisUtc.getTime() + puffer).toISOString(),
+      new Date(vonUtc.getTime() - puffer).toISOString(),
+    ).catch(() => []);
+    return zeilen.map((z) => mitPuffer({ start: Date.parse(z.start_utc), ende: Date.parse(z.ende_utc) }));
   }
+}
+
+/**
+ * Übernimmt die Termine des Google Kalenders in die Tabelle google_termine
+ * (14 Tage zurück bis 120 Tage voraus). Läuft per Cron alle zehn Minuten und auf Knopfdruck.
+ * Gibt die Anzahl der Termine zurück oder null bei einem Fehler (Grund steht in nutzer.google_abgleich_fehler).
+ */
+export async function googleAbgleich(nutzer: Nutzer): Promise<number | null> {
+  if (!googleAktiv() || !nutzer.google_refresh_token) return null;
+  const jetzt = Date.now();
+  const von = new Date(jetzt - ABGLEICH_TAGE_ZURUECK * 86_400_000);
+  const bis = new Date(jetzt + ABGLEICH_TAGE_VORAUS * 86_400_000);
+  const stand = new Date(jetzt).toISOString();
+  try {
+    const termine = await googleTermineLaden(nutzer, von, bis);
+    const d = db();
+    const befehle = [
+      // Alles im Abgleichzeitraum wird ersetzt, ältere Einträge nach 30 Tagen entfernt
+      d.prepare('DELETE FROM google_termine WHERE nutzer_id = ? AND ((ende_utc > ? AND start_utc < ?) OR ende_utc < ?)')
+        .bind(nutzer.id, von.toISOString(), bis.toISOString(), new Date(jetzt - 30 * 86_400_000).toISOString()),
+    ];
+    // D1 erlaubt höchstens 100 Parameter je Befehl, also 8 Zeilen mit je 10 Werten
+    for (let i = 0; i < termine.length; i += 8) {
+      const teil = termine.slice(i, i + 8);
+      befehle.push(
+        d.prepare(
+          `INSERT OR REPLACE INTO google_termine (nutzer_id, event_id, titel, start_utc, ende_utc, ganztaegig, blockiert, ort, link, aktualisiert_am)
+           VALUES ${teil.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+        ).bind(
+          ...teil.flatMap((t) => [
+            nutzer.id, t.eventId, t.titel, new Date(t.start).toISOString(), new Date(t.ende).toISOString(),
+            t.ganztaegig ? 1 : 0, t.blockiert ? 1 : 0, t.ort, t.link, stand,
+          ]),
+        ),
+      );
+    }
+    befehle.push(d.prepare('UPDATE nutzer SET google_abgleich_am = ?, google_abgleich_fehler = NULL WHERE id = ?').bind(stand, nutzer.id));
+    await d.batch(befehle);
+    nutzer.google_abgleich_am = stand;
+    nutzer.google_abgleich_fehler = null;
+    return termine.length;
+  } catch (fehler) {
+    console.error('Google Abgleich fehlgeschlagen', fehler);
+    const grund = (fehler instanceof Error ? fehler.message : String(fehler)).slice(0, 300);
+    await ausfuehren('UPDATE nutzer SET google_abgleich_fehler = ? WHERE id = ?', grund, nutzer.id).catch(() => null);
+    nutzer.google_abgleich_fehler = grund;
+    return null;
+  }
+}
+
+/** Gleicht den Google Kalender des Büros ab (für den Cron). */
+export async function googleAbgleichBuero() {
+  const buero = await eins<Nutzer>('SELECT * FROM nutzer WHERE ist_buero = 1 AND google_refresh_token IS NOT NULL LIMIT 1');
+  return buero ? googleAbgleich(buero) : null;
+}
+
+/** Entfernt alle abgeglichenen Termine, etwa beim Trennen oder bei einem anderen Kalender. */
+export async function googleTermineEntfernen(nutzerId: string) {
+  await ausfuehren('DELETE FROM google_termine WHERE nutzer_id = ?', nutzerId);
+  await ausfuehren('UPDATE nutzer SET google_abgleich_am = NULL, google_abgleich_fehler = NULL WHERE id = ?', nutzerId);
 }
 
 export async function googleTerminAnlegen(

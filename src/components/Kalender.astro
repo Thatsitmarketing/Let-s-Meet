@@ -1,6 +1,7 @@
 ---
 /**
- * Kalender für das Backoffice: Verfügbarkeit als Fläche, Termine als Blöcke, Google Belegtzeiten schraffiert.
+ * Kalender für das Backoffice: Verfügbarkeit als Fläche, Termine als Blöcke, Google Termine mit Titel (grau),
+ * dahinter schraffiert die Zeit, die sie samt Puffer blockieren. Ganztägige Google Einträge stehen über dem Raster.
  * Wird auf „Termine“ und „Verfügbarkeit“ genutzt, Navigation läuft über die URL (kal, datum).
  */
 import Icon from './ui/Icon.astro';
@@ -34,6 +35,20 @@ const tagNr = (datum: string) => Number(datum.slice(8, 10));
 const zeitenText = (t: KalDaten['tage'][number]) =>
   t.verfuegbar.length ? t.verfuegbar.map((s) => `${hhmm(s.start)} bis ${hhmm(s.ende)}`).join(', ') : 'Nicht verfügbar';
 const MAX_MONAT = 3;
+const mitGanztags = woche && daten.tage.some((t) => t.ganztags.length > 0);
+const standText = (() => {
+  if (!daten.googleStand) return 'noch nicht abgeglichen';
+  const min = Math.round((Date.now() - Date.parse(daten.googleStand)) / 60_000);
+  return min < 1 ? 'gerade abgeglichen' : min < 60 ? `abgeglichen vor ${min} Min.` : `abgeglichen ${new Intl.DateTimeFormat('de-DE', { timeZone: daten.tz, day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(daten.googleStand))} Uhr`;
+})();
+type Eintrag = { art: 'termin'; start: number; b: KalDaten['tage'][number]['termine'][number] } | { art: 'google'; start: number; g: KalDaten['tage'][number]['google'][number] };
+const monatsEintraege = (t: KalDaten['tage'][number]): Eintrag[] =>
+  [
+    ...t.termine.map((b) => ({ art: 'termin' as const, start: b.start, b })),
+    ...t.google.map((g) => ({ art: 'google' as const, start: g.start, g })),
+  ].sort((a, b) => a.start - b.start);
+const googleTitel = (g: KalDaten['tage'][number]['google'][number]) =>
+  `${g.zeit}: ${g.titel} (Google Kalender${g.blockiert ? '' : ', blockiert nicht'})${g.ort ? `, ${g.ort}` : ''}`;
 ---
 <section class="kal karte" id="kalender" aria-labelledby="kal-titel" data-ansicht={daten.ansicht}>
   <header class="kal-kopf">
@@ -56,7 +71,7 @@ const MAX_MONAT = 3;
 
   {woche ? (
     <div class="kal-scroll">
-      <div class="kw" style={`--v:${daten.vonMin}; --stunden:${stunden.length}`} data-von-min={daten.vonMin} data-bis-min={daten.bisMin}>
+      <div class:list={['kw', { 'mit-ganztags': mitGanztags }]} style={`--v:${daten.vonMin}; --stunden:${stunden.length}`} data-von-min={daten.vonMin} data-bis-min={daten.bisMin}>
         <div class="kw-ecke" aria-hidden="true"></div>
         {daten.tage.map((t) => {
           const inhalt = (
@@ -73,6 +88,24 @@ const MAX_MONAT = 3;
             <div class:list={['kw-tagkopf', { heute: t.heute, vergangen: t.vergangen }]}>{inhalt}</div>
           );
         })}
+        {mitGanztags && (
+          <>
+            <div class="kw-ganz-ecke">Ganztägig</div>
+            {daten.tage.map((t) => (
+              <ul class="kw-ganz" role="list" aria-label={`Ganztägig am ${tagNr(t.datum)}.`}>
+                {t.ganztags.map((g) => (
+                  <li>
+                    {g.link ? (
+                      <a href={g.link} target="_blank" rel="noopener" title={`${g.titel} (ganztägig, Google Kalender)`}>{g.titel}</a>
+                    ) : (
+                      <span title={`${g.titel} (ganztägig, Google Kalender)`}>{g.titel}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ))}
+          </>
+        )}
         <div class="kw-achse" aria-hidden="true">
           {stunden.map((m) => <span style={`--a:${m}`}>{hhmm(m)}</span>)}
         </div>
@@ -86,10 +119,24 @@ const MAX_MONAT = 3;
           >
             {t.verfuegbar.map((s) => <div class="kw-frei" style={`--a:${s.start}; --d:${s.ende - s.start}`}></div>)}
             {t.belegt.map((s) => (
-              <div class="kw-belegt" style={`--a:${s.start}; --d:${s.ende - s.start}`} title={`Belegt im Google Kalender, ${hhmm(s.start)} bis ${hhmm(s.ende)}`}>
-                {s.ende - s.start >= 30 && <span>Belegt</span>}
-              </div>
+              <div class="kw-belegt" style={`--a:${s.start}; --d:${s.ende - s.start}`} title={`Nicht buchbar wegen Google Termin (inklusive ${30} Min. Puffer), ${hhmm(s.start)} bis ${hhmm(s.ende)}`}></div>
             ))}
+            {t.google.map((g) => {
+              const klassen = ['kw-termin', 'kw-google', { kurz: g.ende - g.start <= 30, mittel: g.ende - g.start < 60, eng: g.spalten > 1, vergangen: g.vergangen, frei: !g.blockiert }];
+              const stil = `--a:${g.start}; --d:${g.ende - g.start}; --sp:${g.spalte}; --sps:${g.spalten}`;
+              const inhalt = (
+                <>
+                  <span class="kw-t-zeit">{g.zeit.split(' bis ')[0]}<span class="kw-t-bis"> bis {g.zeit.split(' bis ')[1]}</span></span>
+                  <strong class="kw-t-gast">{g.titel}</strong>
+                  <span class="kw-t-art">Google Kalender{g.ort && ` · ${g.ort}`}</span>
+                </>
+              );
+              return g.link ? (
+                <a class:list={klassen} style={stil} href={g.link} target="_blank" rel="noopener" title={googleTitel(g)}>{inhalt}</a>
+              ) : (
+                <div class:list={klassen} style={stil} title={googleTitel(g)}>{inhalt}</div>
+              );
+            })}
             {t.termine.map((b) => (
               <a
                 class:list={['kw-termin', { kurz: b.ende - b.start <= 30, mittel: b.ende - b.start < 60, eng: b.spalten > 1, vergangen: b.vergangen, fehlt: b.nichtErschienen }]}
@@ -123,21 +170,29 @@ const MAX_MONAT = 3;
               {t.ausnahme === 'zeiten' && <span class="kw-marke">Ausnahme</span>}
             </div>
             <p class="km-zeiten">{zeitenText(t)}</p>
-            {t.termine.length > 0 && (
+            {t.ganztags.length > 0 && (
+              <p class="km-ganz" title={t.ganztags.map((g) => g.titel).join(', ')}>{t.ganztags.map((g) => g.titel).join(', ')}</p>
+            )}
+            {monatsEintraege(t).length > 0 && (
               <ul class="km-termine" role="list">
-                {t.termine.slice(0, MAX_MONAT).map((b) => (
+                {monatsEintraege(t).slice(0, MAX_MONAT).map((e) => (
                   <li>
-                    <a href={`/app/termine/${b.id}`} class:list={{ vergangen: b.vergangen }} style={`--farbe:${b.farbe}`} title={`${b.zeit}: ${b.gast}, ${b.titel}`}>
-                      <span class="km-zeit">{hhmm(b.start)}</span><span class="km-gast">{b.gast}</span>
-                    </a>
+                    {e.art === 'termin' ? (
+                      <a href={`/app/termine/${e.b.id}`} class:list={{ vergangen: e.b.vergangen }} style={`--farbe:${e.b.farbe}`} title={`${e.b.zeit}: ${e.b.gast}, ${e.b.titel}`}>
+                        <span class="km-zeit">{hhmm(e.b.start)}</span><span class="km-gast">{e.b.gast}</span>
+                      </a>
+                    ) : (
+                      <a href={e.g.link ?? link({ kal: 'woche', datum: t.datum })} {...(e.g.link ? { target: '_blank', rel: 'noopener' } : {})} class:list={['km-google', { vergangen: e.g.vergangen, frei: !e.g.blockiert }]} title={googleTitel(e.g)}>
+                        <span class="km-zeit">{hhmm(e.g.start)}</span><span class="km-gast">{e.g.titel}</span>
+                      </a>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
-            {t.termine.length > MAX_MONAT && (
-              <a class="km-mehr" href={link({ kal: 'woche', datum: t.datum })}>+{t.termine.length - MAX_MONAT} weitere</a>
+            {monatsEintraege(t).length > MAX_MONAT && (
+              <a class="km-mehr" href={link({ kal: 'woche', datum: t.datum })}>+{monatsEintraege(t).length - MAX_MONAT} weitere</a>
             )}
-            {t.belegt.length > 0 && <p class="km-belegt">{t.belegt.length} x belegt in Google</p>}
             <span class="km-punkte" aria-hidden="true">
               {t.termine.slice(0, 4).map((b) => <i style={`--farbe:${b.farbe}`}></i>)}
             </span>
@@ -151,7 +206,14 @@ const MAX_MONAT = 3;
     <span><i class="lg lg-frei"></i>Buchbar</span>
     <span><i class="lg lg-zu"></i>Nicht buchbar</span>
     <span><i class="lg lg-termin"></i>Termin</span>
-    {daten.google && <span><i class="lg lg-belegt"></i>Belegt im Google Kalender</span>}
+    {daten.google && <span><i class="lg lg-google"></i>Google Kalender</span>}
+    {daten.google && <span><i class="lg lg-belegt"></i>Gesperrt durch Google Termin (mit 30 Min. Puffer)</span>}
+    {daten.google && (
+      <span class:list={['kal-stand', { fehler: daten.googleFehler }]} title={daten.googleFehler ?? undefined}>
+        <Icon name={daten.googleFehler ? 'info' : 'kalender'} groesse={16} />
+        Google {daten.googleFehler ? `nicht erreichbar, Stand: ${standText}` : standText}
+      </span>
+    )}
     {vorschau && <span class="kal-vorschau" hidden><Icon name="info" groesse={16} />Vorschau mit ungespeicherten Wochenzeiten</span>}
   </footer>
 </section>
@@ -188,6 +250,18 @@ const MAX_MONAT = 3;
     display: grid; grid-template-columns: 56px repeat(7, minmax(96px, 1fr)); grid-template-rows: auto calc(var(--stunden) * var(--h));
     min-width: 728px;
   }
+  .kw.mit-ganztags { grid-template-rows: auto auto calc(var(--stunden) * var(--h)); }
+  .kw-ganz-ecke {
+    font-size: 0.6875rem; color: var(--farbe-text-leise); text-align: right; padding: 6px var(--raum-2) 6px 0; border-bottom: 1px solid var(--farbe-rahmen);
+  }
+  .kw-ganz { list-style: none; margin: 0; padding: 4px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; align-content: start; overflow: hidden; border-left: 1px solid var(--farbe-rahmen); border-bottom: 1px solid var(--farbe-rahmen); min-width: 0; }
+  .kw-ganz a, .kw-ganz span {
+    display: block; padding: 1px 6px; background: var(--n-100); border-left: 3px solid var(--n-500); color: var(--n-800);
+    font-size: 0.75rem; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none;
+  }
+  .kw-ganz li { min-width: 0; }
+  main .kw-ganz a { padding: 1px 6px; }
+  .kw-ganz a:hover { background: var(--n-200); }
   .kw-ecke { border-bottom: 1px solid var(--farbe-rahmen); }
   .kw-tagkopf {
     display: flex; align-items: center; gap: var(--raum-2); flex-wrap: wrap; padding: var(--raum-3) var(--raum-3);
@@ -224,7 +298,6 @@ const MAX_MONAT = 3;
   .kw-belegt {
     left: 3px; right: 3px; height: calc(var(--d) * var(--h) / 60); z-index: 2;
     background: repeating-linear-gradient(135deg, var(--n-200) 0 4px, var(--n-100) 4px 8px); border: 1px dashed var(--n-400);
-    font-size: 0.75rem; color: var(--n-600); font-weight: 600; padding: 2px 6px; overflow: hidden;
   }
   .kw-termin {
     --breite: calc((100% - 8px) / var(--sps));
@@ -248,6 +321,11 @@ const MAX_MONAT = 3;
   .kw-termin.kurz > .kw-t-zeit { flex: none; overflow: visible; }
   .kw-termin.vergangen { box-shadow: none; opacity: 0.7; }
   .kw-termin.fehlt .kw-t-gast { text-decoration: line-through; }
+  /* Google Termine: grau mit dunkler Kante, damit sie sich von Buchungen in Terminartfarbe abheben */
+  .kw-google { --farbe: var(--n-600); background: var(--n-100); box-shadow: none; color: var(--n-800); }
+  .kw-google .kw-t-art { color: var(--n-600); }
+  .kw-google.frei { --farbe: var(--n-300); background: var(--farbe-papier); border-style: dashed; color: var(--n-600); }
+  a.kw-google:hover { background: var(--farbe-papier); }
   .kw-jetzt { left: 0; right: 0; height: 2px; background: var(--farbe-akzent); z-index: 4; }
   .kw-jetzt::before { content: ''; position: absolute; left: -1px; top: -4px; width: 10px; height: 10px; background: var(--farbe-akzent); }
 
@@ -274,17 +352,19 @@ const MAX_MONAT = 3;
   .km-tag.heute .km-nr { background: var(--n-900); color: var(--farbe-papier); }
   .km-tag.vergangen:not(.heute) .km-nr { color: var(--n-400); }
   .km-zeiten { font-size: 0.75rem; color: var(--farbe-text-leise); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .km-termine { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+  .km-termine { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; min-width: 0; }
   .km-termine a {
     display: flex; gap: var(--raum-2); align-items: baseline; padding: 2px 6px; border-left: 3px solid var(--farbe); background: var(--n-050);
     font-size: 0.75rem; text-decoration: none; min-width: 0;
   }
   .km-termine a:hover { background: var(--n-100); }
   .km-termine a.vergangen { opacity: 0.65; }
+  .km-termine a.km-google { --farbe: var(--n-500); background: var(--n-100); color: var(--n-800); }
+  .km-termine a.km-google.frei { --farbe: var(--n-300); background: transparent; color: var(--n-600); }
   .km-zeit { font-weight: 600; font-variant-numeric: tabular-nums; flex: none; }
   .km-gast { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .km-mehr { font-size: 0.75rem; font-weight: 600; }
-  .km-belegt { font-size: 0.75rem; color: var(--n-600); }
+  .km-ganz { font-size: 0.75rem; color: var(--n-700); background: var(--n-100); border-left: 3px solid var(--n-500); padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .km-punkte { display: none; gap: 3px; }
   .km-punkte i { width: 8px; height: 8px; background: var(--farbe); }
 
@@ -298,6 +378,9 @@ const MAX_MONAT = 3;
   .lg-frei { background: var(--farbe-papier); }
   .lg-zu { background: repeating-linear-gradient(135deg, var(--n-200) 0 3px, var(--n-050) 3px 6px); }
   .lg-termin { background: var(--farbe-papier); border-left: 4px solid var(--farbe-akzent); }
+  .lg-google { background: var(--n-100); border-color: var(--n-300); border-left: 3px solid var(--n-600); }
+  .kal-stand { margin-left: auto; color: var(--farbe-text-leise); }
+  .kal-stand.fehler { color: var(--farbe-fehler); }
   .lg-belegt { background: repeating-linear-gradient(135deg, var(--n-300) 0 3px, var(--n-100) 3px 6px); border-style: dashed; border-color: var(--n-400); }
   .kal-vorschau { color: var(--n-900); font-weight: 600; }
   .kal-vorschau :global(svg) { color: var(--farbe-akzent); }
@@ -306,7 +389,7 @@ const MAX_MONAT = 3;
     .kal-kopf, .kal-legende { padding-inline: var(--raum-4); }
     .km-tag { min-height: 72px; padding: var(--raum-1) var(--raum-1) var(--raum-2); align-items: center; }
     .km-kopf { justify-content: center; }
-    .km-kopf .kw-marke, .km-zeiten, .km-termine, .km-mehr, .km-belegt { display: none; }
+    .km-kopf .kw-marke, .km-zeiten, .km-termine, .km-mehr, .km-ganz { display: none; }
     .km-punkte { display: flex; flex-wrap: wrap; justify-content: center; }
     .km-kopfzeile span { padding: var(--raum-2) 0; text-align: center; letter-spacing: 0.1em; }
   }

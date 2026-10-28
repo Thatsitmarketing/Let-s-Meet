@@ -17,6 +17,8 @@ export interface Nutzer {
   google_access_token: string | null;
   google_token_ablauf: number | null;
   google_kalender_id: string;
+  google_abgleich_am: string | null;
+  google_abgleich_fehler: string | null;
   webhook_url: string | null;
   webhook_secret: string | null;
   ist_buero: number;

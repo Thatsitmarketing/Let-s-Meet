@@ -6,7 +6,8 @@ const TEXTE: Record<string, string> = {
   dupliziert: 'Kopie angelegt.',
   abgesagt: 'Termin abgesagt. Der Gast wurde per Mail informiert.',
   willkommen: 'Willkommen bei Let\'s Meet. Deine erste Terminart ist schon angelegt.',
-  google: 'Google Kalender verbunden.',
+  google: 'Google Kalender verbunden. Die Termine sind übernommen.',
+  abgeglichen: 'Google Kalender abgeglichen.',
   getrennt: 'Verbindung getrennt.',
   passwort: 'Passwort geändert.',
 };

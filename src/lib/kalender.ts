@@ -1,9 +1,9 @@
 /**
- * Daten für den Backoffice Kalender: Verfügbarkeit, Termine und Google Belegtzeiten je Tag.
+ * Daten für den Backoffice Kalender: Verfügbarkeit, Termine, Google Termine und Belegtzeiten je Tag.
  * Alle Minutenangaben beziehen sich auf die Zone des angemeldeten Nutzers.
  */
 import { alle } from './db';
-import { GOOGLE_PUFFER_MIN, googleBelegt } from './google';
+import { GOOGLE_PUFFER_MIN, googleAbgleich } from './google';
 import type { Ausnahme, Nutzer, Regel } from './typen';
 import { addTage, datumInZone, teileInZone, wochentagVon, zoneZuUtc } from './zeit';
 
@@ -27,6 +27,18 @@ export interface KalTermin extends KalSpanne {
   spalten: number;
 }
 
+/** Termin aus dem Google Kalender (abgeglichen per Cron) */
+export interface KalGoogle extends KalSpanne {
+  titel: string;
+  zeit: string;
+  ort: string | null;
+  link: string | null;
+  blockiert: boolean;
+  vergangen: boolean;
+  spalte: number;
+  spalten: number;
+}
+
 export interface KalTag {
   datum: string;
   wochentag: number;
@@ -37,6 +49,11 @@ export interface KalTag {
   ausnahme: 'keine' | 'frei' | 'zeiten';
   verfuegbar: KalSpanne[];
   termine: KalTermin[];
+  /** Google Termine mit Uhrzeit */
+  google: KalGoogle[];
+  /** Ganztägige Google Einträge */
+  ganztags: { titel: string; link: string | null }[];
+  /** Nicht buchbar wegen Google Terminen, inklusive Puffer */
   belegt: KalSpanne[];
 }
 
@@ -54,6 +71,9 @@ export interface KalDaten {
   bisMin: number;
   jetztMin: number | null;
   google: boolean;
+  /** Zeitpunkt des letzten Google Abgleichs (ISO) und Fehler, falls der letzte Versuch scheiterte */
+  googleStand: string | null;
+  googleFehler: string | null;
   team: boolean;
 }
 
@@ -129,9 +149,9 @@ function abziehen(spannen: { start: number; ende: number }[], weg: { start: numb
 }
 
 /** Verteilt überlappende Termine nebeneinander. */
-function spaltenVerteilen(termine: KalTermin[]) {
+function spaltenVerteilen(termine: { start: number; ende: number; spalte: number; spalten: number }[]) {
   termine.sort((a, b) => a.start - b.start || b.ende - a.ende);
-  let gruppe: KalTermin[] = [];
+  let gruppe: typeof termine = [];
   let gruppenEnde = -1;
   const abschliessen = () => {
     const n = Math.max(1, ...gruppe.map((t) => t.spalte + 1));
@@ -170,8 +190,8 @@ export async function kalenderLaden({ nutzer, ansicht, anker, team = false }: Op
   const [regeln, ausnahmen, buchungen] = await Promise.all([
     alle<Regel>('SELECT wochentag, start_min, ende_min FROM verfuegbarkeit WHERE nutzer_id = ? ORDER BY start_min', nutzer.id),
     alle<Ausnahme>('SELECT id, datum, start_min, ende_min FROM ausnahmen WHERE nutzer_id = ? AND datum BETWEEN ? AND ? ORDER BY start_min', nutzer.id, b.von, letzterTag),
-    alle<{ id: string; nutzer_id: string; start_utc: string; ende_utc: string; gast_name: string; nicht_erschienen: number; titel: string; farbe: string; gastgeber: string }>(
-      `SELECT b.id, b.nutzer_id, b.start_utc, b.ende_utc, b.gast_name, b.nicht_erschienen, t.titel, t.farbe, n.name AS gastgeber
+    alle<{ id: string; nutzer_id: string; start_utc: string; ende_utc: string; gast_name: string; nicht_erschienen: number; titel: string; farbe: string; gastgeber: string; google_event_id: string | null }>(
+      `SELECT b.id, b.nutzer_id, b.start_utc, b.ende_utc, b.gast_name, b.nicht_erschienen, b.google_event_id, t.titel, t.farbe, n.name AS gastgeber
        FROM buchungen b JOIN terminarten t ON t.id = b.terminart_id JOIN nutzer n ON n.id = b.nutzer_id
        WHERE b.status = 'bestaetigt' AND b.start_utc < ? AND b.ende_utc > ? ${team ? '' : 'AND b.nutzer_id = ?'}
        ORDER BY b.start_utc`,
@@ -180,10 +200,31 @@ export async function kalenderLaden({ nutzer, ansicht, anker, team = false }: Op
   ]);
 
   const google = Boolean(nutzer.google_refresh_token) && !team;
+  // Fällt der Cron aus, gleicht der Kalender selbst ab, sobald der letzte Stand älter als 15 Minuten ist
+  if (google && (!nutzer.google_abgleich_am || Date.parse(nutzer.google_abgleich_am) < jetzt.getTime() - 15 * 60_000)) {
+    await googleAbgleich(nutzer);
+  }
+  const eigeneEvents = new Set(buchungen.filter((x) => x.nutzer_id === nutzer.id && x.google_event_id).map((x) => x.google_event_id!));
+  const googleTermine = google
+    ? (
+        await alle<{ event_id: string; titel: string; start_utc: string; ende_utc: string; ganztaegig: number; blockiert: number; ort: string | null; link: string | null }>(
+          `SELECT event_id, titel, start_utc, ende_utc, ganztaegig, blockiert, ort, link FROM google_termine
+           WHERE nutzer_id = ? AND start_utc < ? AND ende_utc > ? ORDER BY start_utc`,
+          nutzer.id, bisUtc.toISOString(), vonUtc.toISOString(),
+        ).catch(() => [])
+      )
+        // Eigene Buchungen stehen schon als Termin im Kalender
+        .filter((g) => !eigeneEvents.has(g.event_id))
+        .map((g) => ({ ...g, start: Date.parse(g.start_utc), ende: Date.parse(g.ende_utc) }))
+    : [];
+
   // Eigene Buchungen stehen als Google Termin samt Puffer im Kalender, der Puffer wird hier mit abgezogen
   const puffer = GOOGLE_PUFFER_MIN * 60_000;
   const eigene = buchungen.filter((x) => x.nutzer_id === nutzer.id).map((x) => ({ start: Date.parse(x.start_utc) - puffer, ende: Date.parse(x.ende_utc) + puffer }));
-  const fremdBelegt = google ? abziehen(await googleBelegt(nutzer, vonUtc, bisUtc), eigene) : [];
+  const fremdBelegt = abziehen(
+    googleTermine.filter((g) => g.blockiert && !g.ganztaegig).map((g) => ({ start: g.start - puffer, ende: g.ende + puffer })),
+    eigene,
+  );
 
   const ausnahmenNachTag = new Map<string, Ausnahme[]>();
   for (const a of ausnahmen) ausnahmenNachTag.set(a.datum, [...(ausnahmenNachTag.get(a.datum) ?? []), a]);
@@ -221,7 +262,31 @@ export async function kalenderLaden({ nutzer, ansicht, anker, team = false }: Op
           spalten: 1,
         };
       });
-    spaltenVerteilen(termine);
+    const googleTag: KalGoogle[] = googleTermine
+      .filter((g) => !g.ganztaegig && g.start < tagEnde && g.ende > tagStart && (g.start >= tagStart || i === 0))
+      .map((g) => {
+        const start = minutenImTag(g.start, tagStart, tagEnde, tz);
+        const ende = Math.min(1440, Math.max(start + 15, minutenImTag(g.ende, tagStart, tagEnde, tz)));
+        return {
+          start,
+          ende,
+          titel: g.titel,
+          zeit: `${hhmm(start)} bis ${hhmm(ende)}`,
+          ort: g.ort,
+          link: g.link,
+          blockiert: Boolean(g.blockiert),
+          vergangen: g.ende < jetzt.getTime(),
+          spalte: 0,
+          spalten: 1,
+        };
+      });
+    // Buchungen und Google Termine teilen sich die Breite, wenn sie sich überschneiden
+    spaltenVerteilen([...termine, ...googleTag]);
+    termine.sort((a, b) => a.start - b.start);
+    googleTag.sort((a, b) => a.start - b.start);
+    const ganztags = googleTermine
+      .filter((g) => g.ganztaegig && g.start < tagEnde && g.ende > tagStart)
+      .map((g) => ({ titel: g.titel, link: g.link }));
 
     const belegt = fremdBelegt
       .filter((x) => x.start < tagEnde && x.ende > tagStart)
@@ -237,6 +302,8 @@ export async function kalenderLaden({ nutzer, ansicht, anker, team = false }: Op
       ausnahme: !abweichung ? 'keine' : verfuegbar.length ? 'zeiten' : 'frei',
       verfuegbar,
       termine,
+      google: googleTag,
+      ganztags,
       belegt,
     });
   }
@@ -245,7 +312,7 @@ export async function kalenderLaden({ nutzer, ansicht, anker, team = false }: Op
   let vonMin = 8 * 60;
   let bisMin = 18 * 60;
   for (const t of tage) {
-    for (const s of [...t.verfuegbar, ...t.termine, ...t.belegt]) {
+    for (const s of [...t.verfuegbar, ...t.termine, ...t.google, ...t.belegt]) {
       vonMin = Math.min(vonMin, Math.floor(s.start / 60) * 60);
       bisMin = Math.max(bisMin, Math.ceil(s.ende / 60) * 60);
     }
@@ -261,5 +328,10 @@ export async function kalenderLaden({ nutzer, ansicht, anker, team = false }: Op
   const teileJetzt = teileInZone(jetzt, tz);
   const jetztMin = tage.some((t) => t.heute) ? teileJetzt.stunde * 60 + teileJetzt.minute : null;
 
-  return { ansicht, anker, tz, tage, titel: b.titel, zurueck: b.zurueck, weiter: b.weiter, heute, vonMin, bisMin, jetztMin, google, team };
+  return {
+    ansicht, anker, tz, tage, titel: b.titel, zurueck: b.zurueck, weiter: b.weiter, heute, vonMin, bisMin, jetztMin, google,
+    googleStand: google ? nutzer.google_abgleich_am : null,
+    googleFehler: google ? nutzer.google_abgleich_fehler : null,
+    team,
+  };
 }
