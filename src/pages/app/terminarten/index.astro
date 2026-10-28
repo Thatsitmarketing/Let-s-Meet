@@ -54,6 +54,7 @@ if (Astro.request.method === 'POST') {
 
 const arten = await terminartenVon(nutzer.id);
 const basis = Astro.url.origin;
+const kurztext = (t: string | null) => (t ?? '').replace(/\s+/g, ' ').trim();
 ---
 <App titel="Terminarten" eyebrow={`${basis.replace(/^https?:\/\//, '')}`} meldung={meldungAusUrl(Astro.url)}>
   <Fragment slot="aktionen">
@@ -88,6 +89,7 @@ const basis = Astro.url.origin;
             <span><Icon name="uhr" groesse={16} />{ta.dauer_min} Min</span>
             <span><OrtIcon typ={ta.ort_typ} groesse={16} />{ORT_LABEL[ta.ort_typ]}</span>
           </p>
+          {kurztext(ta.beschreibung) ? <p class="art-text">{kurztext(ta.beschreibung)}</p> : null}
           <a class="art-link leise klein" href={`/${ta.slug}`} target="_blank" rel="noopener">/{ta.slug}</a>
           <div class="art-fuss">
             <button type="button" class="knopf knopf--rahmen knopf--klein" data-kopieren={`${basis}/${ta.slug}`}><Icon name="kopieren" />Link kopieren</button>
@@ -111,7 +113,9 @@ const basis = Astro.url.origin;
 
 <style>
   .leer { padding: var(--raum-12); display: grid; gap: var(--raum-4); justify-items: start; }
-  .raster { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: var(--raum-4); }
+  .raster { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: var(--raum-4); }
+  @media (min-width: 700px) { .raster { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1200px) { .raster { grid-template-columns: repeat(4, 1fr); } }
   .art { display: flex; flex-direction: column; gap: var(--raum-3); padding: var(--raum-6); border-top: 4px solid var(--farbe); }
   .art.inaktiv { opacity: 0.6; border-top-color: var(--n-300); }
   .art-kopf { display: flex; justify-content: space-between; align-items: center; gap: var(--raum-2); }
@@ -119,6 +123,7 @@ const basis = Astro.url.origin;
   .art-titel:hover { text-decoration: underline; text-decoration-color: var(--farbe-akzent); }
   .art-meta { display: flex; flex-wrap: wrap; gap: var(--raum-2) var(--raum-4); font-size: var(--text-sm); color: var(--farbe-text-2); }
   .art-meta span { display: inline-flex; align-items: center; gap: 6px; }
+  .art-text { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--farbe-text-2); display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .art-link { overflow-wrap: anywhere; }
   .art-fuss { margin-top: auto; padding-top: var(--raum-4); border-top: 1px solid var(--farbe-rahmen); display: flex; justify-content: space-between; align-items: center; gap: var(--raum-2); }
   .art-mehr { display: flex; gap: 2px; }
