@@ -36,18 +36,6 @@ if (Astro.request.method === 'POST') {
         .run();
       return Astro.redirect('/app/terminarten?ok=dupliziert');
     }
-    if (aktion === 'loeschen') {
-      const offen = await eins<{ n: number }>(
-        "SELECT COUNT(*) AS n FROM buchungen WHERE terminart_id = ? AND status = 'bestaetigt' AND start_utc > ?",
-        id,
-        jetztIso(),
-      );
-      if (offen?.n) {
-        return Astro.redirect(`/app/terminarten?fehler=${encodeURIComponent(`Es gibt noch ${offen.n} anstehende Termine dieser Art. Deaktiviere sie stattdessen oder sag die Termine vorher ab.`)}`);
-      }
-      await ausfuehren('DELETE FROM terminarten WHERE id = ?', id);
-      return Astro.redirect('/app/terminarten?ok=geloescht');
-    }
   }
   return Astro.redirect('/app/terminarten');
 }
@@ -98,10 +86,6 @@ const kurztext = (t: string | null) => (t ?? '').replace(/\s+/g, ' ').trim();
               <form method="post">
                 <input type="hidden" name="id" value={ta.id} />
                 <button class="symbol" name="aktion" value="duplizieren" title="Duplizieren"><Icon name="kopieren" /><span class="sr-only">{ta.titel} duplizieren</span></button>
-              </form>
-              <form method="post" data-rueckfrage={`Terminart „${ta.titel}“ wirklich löschen?`}>
-                <input type="hidden" name="id" value={ta.id} />
-                <button class="symbol gefahr" name="aktion" value="loeschen" title="Löschen"><Icon name="loeschen" /><span class="sr-only">{ta.titel} löschen</span></button>
               </form>
             </div>
           </div>
