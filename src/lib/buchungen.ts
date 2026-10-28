@@ -4,7 +4,7 @@
  */
 import { env } from 'cloudflare:workers';
 import { alle, ausfuehren, eins, jetztIso, neueId } from './db';
-import { googleTerminAnlegen, googleTerminLoeschen } from './google';
+import { googleAbgleichBuero, googleTerminAnlegen, googleTerminLoeschen } from './google';
 import { icsDatei } from './ics';
 import { base64Utf8, mailErinnerung, mailGastBestaetigung, mailGastgeberNeu, mailSenden, mailStorno, type TerminDetails } from './mail';
 import { ORT_LABEL, type Buchung, type Nutzer, type Terminart } from './typen';
@@ -299,7 +299,7 @@ export async function buchungAbsagen(e: {
   );
 }
 
-/** Erinnerungen versenden und abgelaufene Daten löschen. Läuft per Cron alle zehn Minuten. */
+/** Erinnerungen versenden, abgelaufene Daten löschen und den Google Kalender abgleichen. Läuft per Cron alle zehn Minuten. */
 export async function cronLauf() {
   const basis = basisUrl();
   const jetzt = Date.now();
@@ -343,5 +343,9 @@ export async function cronLauf() {
     }
   }
   const geloescht = await ausfuehren('DELETE FROM buchungen WHERE loeschen_ab < ?', new Date(jetzt).toISOString());
-  return { erinnerungen: versendet, geloescht: geloescht.meta?.changes ?? 0 };
+  const google = await googleAbgleichBuero().catch((fehler) => {
+    console.error('Google Abgleich im Cron fehlgeschlagen', fehler);
+    return null;
+  });
+  return { erinnerungen: versendet, geloescht: geloescht.meta?.changes ?? 0, googleTermine: google };
 }

@@ -43,6 +43,23 @@ const [zeilen, gesamt, kalender, naechste] = await Promise.all([
     : Promise.resolve([] as Zeile[]),
 ]);
 
+// Google Termine (abgeglichen per Cron) stehen mit in „Als Nächstes“, eigene Buchungen nicht doppelt
+type GoogleZeile = { event_id: string; titel: string; start_utc: string; ende_utc: string; ort: string | null; link: string | null };
+const googleNaechste = kalModus && !f.team && nutzer.google_refresh_token
+  ? await alle<GoogleZeile>(
+      `SELECT event_id, titel, start_utc, ende_utc, ort, link FROM google_termine g
+       WHERE g.nutzer_id = ? AND g.ganztaegig = 0 AND g.ende_utc >= ?
+         AND NOT EXISTS (SELECT 1 FROM buchungen b WHERE b.nutzer_id = g.nutzer_id AND b.google_event_id = g.event_id)
+       ORDER BY g.start_utc ASC LIMIT 8`,
+      nutzer.id, new Date().toISOString(),
+    ).catch(() => [] as GoogleZeile[])
+  : [];
+type Naechster = { art: 'buchung'; start: string; b: Zeile } | { art: 'google'; start: string; g: GoogleZeile };
+const naechsteListe: Naechster[] = [
+  ...naechste.map((b) => ({ art: 'buchung' as const, start: b.start_utc, b })),
+  ...googleNaechste.map((g) => ({ art: 'google' as const, start: g.start_utc, g })),
+].sort((a, b) => a.start.localeCompare(b.start)).slice(0, 8);
+
 const gruppen = new Map<string, Zeile[]>();
 for (const z of zeilen) {
   const tag = datumInZone(new Date(z.start_utc), tz);
@@ -93,22 +110,37 @@ const tabs = [
       <Kalender daten={kalender} tagLink={tagLink} tagLinkLabel="Termine an diesem Tag als Liste" />
       <aside class="karte naechste" aria-labelledby="n-titel">
         <h2 id="n-titel">Als Nächstes</h2>
-        {naechste.length === 0 ? (
+        {naechsteListe.length === 0 ? (
           <p class="leise klein">Keine anstehenden Termine. Teil deinen Link, dann füllt sich der Kalender.</p>
         ) : (
           <ol class="naechste-liste" role="list">
-            {naechste.map((b) => (
-              <li>
-                <a href={`/app/termine/${b.id}`} style={`--farbe:${b.farbe}`}>
-                  <span class="n-wann">
-                    {datumInZone(new Date(b.start_utc), tz) === heute ? <span class="badge badge--orange">Heute</span> : <span>{formatDatumKurz(b.start_utc, tz)}</span>}
-                    <span>{formatZeit(b.start_utc, tz)} bis {formatZeit(b.ende_utc, tz)}</span>
-                  </span>
-                  <strong>{b.gast_name}</strong>
-                  <span class="leise klein">{b.titel}{f.team && ` · ${b.gastgeber}`}</span>
-                </a>
-              </li>
-            ))}
+            {naechsteListe.map((e) => {
+              const start = e.art === 'buchung' ? e.b.start_utc : e.g.start_utc;
+              const ende = e.art === 'buchung' ? e.b.ende_utc : e.g.ende_utc;
+              const wann = (
+                <span class="n-wann">
+                  {datumInZone(new Date(start), tz) === heute ? <span class="badge badge--orange">Heute</span> : <span>{formatDatumKurz(start, tz)}</span>}
+                  <span>{formatZeit(start, tz)} bis {formatZeit(ende, tz)}</span>
+                </span>
+              );
+              return e.art === 'buchung' ? (
+                <li>
+                  <a href={`/app/termine/${e.b.id}`} style={`--farbe:${e.b.farbe}`}>
+                    {wann}
+                    <strong>{e.b.gast_name}</strong>
+                    <span class="leise klein">{e.b.titel}{f.team && ` · ${e.b.gastgeber}`}</span>
+                  </a>
+                </li>
+              ) : (
+                <li>
+                  <a class="n-google" href={e.g.link ?? '#kalender'} {...(e.g.link ? { target: '_blank', rel: 'noopener' } : {})} title="Termin im Google Kalender öffnen">
+                    {wann}
+                    <strong>{e.g.titel}</strong>
+                    <span class="leise klein">Google Kalender{e.g.ort && ` · ${e.g.ort}`}</span>
+                  </a>
+                </li>
+              );
+            })}
           </ol>
         )}
         <a class="knopf knopf--rahmen knopf--klein" href={link({ ansicht: 'bevorstehend', kal: null, datum: null })}>Alle anstehenden<Icon name="rechts" /></a>
@@ -228,6 +260,7 @@ const tabs = [
     display: grid; gap: 2px; padding: var(--raum-3) var(--raum-3) var(--raum-3) var(--raum-4); border: 1px solid var(--farbe-rahmen); border-left: 4px solid var(--farbe);
     text-decoration: none; min-width: 0;
   }
+  .naechste-liste a.n-google { --farbe: var(--n-500); background: var(--n-050); }
   .naechste-liste a:hover { border-color: var(--n-900); border-left-color: var(--farbe); background: var(--n-050); }
   .naechste-liste a > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .n-wann { display: flex; gap: var(--raum-2); align-items: center; font-size: var(--text-sm); font-weight: 600; color: var(--farbe-text-2); }

@@ -1,6 +1,6 @@
 /**
  * Eigener Worker Einstieg: Astro beantwortet alle Anfragen,
- * zusätzlich läuft der Cron für Erinnerungen und Löschfristen.
+ * zusätzlich läuft der Cron für Erinnerungen, Löschfristen und den Google Abgleich.
  */
 import { handle } from '@astrojs/cloudflare/handler';
 import { cronLauf } from './lib/buchungen';

@@ -4,9 +4,10 @@ import Icon from '../../components/ui/Icon.astro';
 import Marke from '../../components/ui/Marke.astro';
 import DiensteStatus from '../../components/DiensteStatus.astro';
 import { webhookSenden } from '../../lib/buchungen';
-import { ausfuehren, jetztIso, neueId } from '../../lib/db';
+import { ausfuehren, eins, jetztIso, neueId } from '../../lib/db';
 import { trimmen, urlGueltig } from '../../lib/eingabe';
-import { googleAktiv } from '../../lib/google';
+import { googleAbgleich, googleAktiv, googleTermineEntfernen } from '../../lib/google';
+import { formatDatumKurz, formatZeit } from '../../lib/zeit';
 import { meldungAusUrl } from '../../lib/meldungen';
 
 const nutzer = Astro.locals.gastgeber!;
@@ -23,12 +24,22 @@ if (Astro.request.method === 'POST') {
       'UPDATE nutzer SET google_email = NULL, google_refresh_token = NULL, google_access_token = NULL, google_token_ablauf = NULL, aktualisiert_am = ? WHERE id = ?',
       jetztIso(), nutzer.id,
     );
+    await googleTermineEntfernen(nutzer.id);
     return Astro.redirect('/app/integrationen?ok=getrennt');
   }
   if (aktion === 'google_kalender') {
     const kal = trimmen(form.get('kalender'), 200) || 'primary';
-    await ausfuehren('UPDATE nutzer SET google_kalender_id = ?, aktualisiert_am = ? WHERE id = ?', kal, jetztIso(), nutzer.id);
+    if (kal !== nutzer.google_kalender_id) {
+      await ausfuehren('UPDATE nutzer SET google_kalender_id = ?, aktualisiert_am = ? WHERE id = ?', kal, jetztIso(), nutzer.id);
+      await googleTermineEntfernen(nutzer.id);
+      nutzer.google_kalender_id = kal;
+      await googleAbgleich(nutzer);
+    }
     return Astro.redirect('/app/integrationen?ok=gespeichert');
+  }
+  if (aktion === 'google_abgleich') {
+    const anzahl = await googleAbgleich(nutzer);
+    return Astro.redirect(anzahl === null ? '/app/integrationen?fehler=Abgleich+mit+Google+fehlgeschlagen,+Grund+steht+in+der+Google+Karte' : '/app/integrationen?ok=abgeglichen');
   }
   if (aktion === 'webhook') {
     const url = trimmen(form.get('webhook_url'), 500);
@@ -63,6 +74,9 @@ const googleFehler = Astro.url.searchParams.get('google_fehler');
 const googleFehlerText = googleFehler
   ? GOOGLE_FEHLER[googleFehler] ?? `Google hat die Verbindung nicht bestätigt (Code ${googleFehler.replace(/[^a-z_]/g, '').slice(0, 40)}). Bitte versuch es noch einmal.`
   : '';
+const googleAnzahl = nutzer.google_refresh_token
+  ? await eins<{ n: number }>('SELECT COUNT(*) AS n FROM google_termine WHERE nutzer_id = ? AND ende_utc > ?', nutzer.id, jetztIso()).catch(() => null)
+  : null;
 const meldung = fehler ? { art: 'fehler' as const, text: fehler } : googleFehlerText ? { art: 'fehler' as const, text: googleFehlerText } : meldungAusUrl(Astro.url);
 ---
 <App titel="Integrationen" eyebrow={`Verbindungen des Büros ${nutzer.email}`} meldung={meldung}>
@@ -74,7 +88,7 @@ const meldung = fehler ? { art: 'fehler' as const, text: fehler } : googleFehler
         <Marke marke="kalender" name="Google Kalender" groesse={48} />
         <div>
           <h2 id="g-titel">Google Kalender</h2>
-          <p class="leise klein">Belegte Zeiten blocken Slots automatisch. Neue Buchungen landen im zentralen Kalender, bei Google Meet inklusive Meetinglink. Melde dich bei Google mit <strong>info@thatsit.marketing</strong> an.</p>
+          <p class="leise klein">Termine im Google Kalender blocken Slots automatisch (mit 30 Minuten Puffer) und erscheinen alle 10 Minuten mit Titel im Backoffice Kalender unter Termine. Neue Buchungen landen im zentralen Kalender, bei Google Meet inklusive Meetinglink. Melde dich bei Google mit <strong>info@thatsit.marketing</strong> an.</p>
         </div>
         {nutzer.google_refresh_token ? <span class="pille pille--erfolg">Verbunden</span> : <span class="pille">Nicht verbunden</span>}
       </div>
@@ -83,6 +97,20 @@ const meldung = fehler ? { art: 'fehler' as const, text: fehler } : googleFehler
       ) : nutzer.google_refresh_token ? (
         <>
           <p>Verbunden mit <strong>{nutzer.google_email ?? 'Google Konto'}</strong>.</p>
+          <div class="abgleich">
+            <p class="klein">
+              {nutzer.google_abgleich_am
+                ? <>Zuletzt abgeglichen am {formatDatumKurz(nutzer.google_abgleich_am, nutzer.zeitzone)} um {formatZeit(nutzer.google_abgleich_am, nutzer.zeitzone)} Uhr, {googleAnzahl?.n ?? 0} anstehende Termine übernommen. Der Abgleich läuft alle 10 Minuten.</>
+                : <>Noch nicht abgeglichen. Der Abgleich läuft alle 10 Minuten oder sofort per Knopf.</>}
+            </p>
+            {nutzer.google_abgleich_fehler && (
+              <p class="hinweis hinweis--fehler"><Icon name="info" /><span>Letzter Abgleich fehlgeschlagen: {nutzer.google_abgleich_fehler}</span></p>
+            )}
+            <form method="post">
+              <input type="hidden" name="aktion" value="google_abgleich" />
+              <button type="submit" class="knopf knopf--rahmen knopf--klein"><Icon name="kalender" />Jetzt abgleichen</button>
+            </form>
+          </div>
           <form method="post" class="reihe">
             <input type="hidden" name="aktion" value="google_kalender" />
             <div class="feld wachsen">
@@ -153,6 +181,7 @@ const meldung = fehler ? { art: 'fehler' as const, text: fehler } : googleFehler
   .logo-kachel { display: grid; place-items: center; width: 48px; height: 48px; background: var(--n-900); color: var(--farbe-akzent); }
   .reihe { display: flex; gap: var(--raum-3); align-items: flex-end; flex-wrap: wrap; }
   .wachsen { flex: 1; min-width: 220px; }
+  .abgleich { display: grid; gap: var(--raum-3); justify-items: start; padding: var(--raum-4); background: var(--n-050); border: 1px solid var(--farbe-rahmen); }
   .code { font-family: var(--schrift-mono); font-size: var(--text-sm); }
   code { font-family: var(--schrift-mono); font-size: 0.875rem; background: var(--n-100); padding: 1px 4px; }
   .beispiel summary { cursor: pointer; font-weight: 600; font-size: var(--text-sm); }

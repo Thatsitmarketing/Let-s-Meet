@@ -1,7 +1,8 @@
 import type { APIRoute } from 'astro';
 import { signaturPruefen } from '../../../lib/auth';
-import { ausfuehren, jetztIso } from '../../../lib/db';
-import { GoogleTokenFehler, googleCodeTauschen } from '../../../lib/google';
+import { ausfuehren, eins, jetztIso } from '../../../lib/db';
+import { GoogleTokenFehler, googleAbgleich, googleCodeTauschen, googleTermineEntfernen } from '../../../lib/google';
+import type { Nutzer } from '../../../lib/typen';
 
 /**
  * Rückruf von Google. Liegt bewusst außerhalb von /api/app, weil das Sitzungscookie
@@ -25,6 +26,12 @@ export const GET: APIRoute = async ({ url }) => {
       t.email, t.refresh_token, t.access_token, Date.now() + t.expires_in * 1000, jetztIso(), id,
     );
     if (!ergebnis.meta.changes) return weiterleiten('/app/integrationen?google_fehler=speichern');
+    // Termine sofort übernehmen, alte Einträge eines vorher verbundenen Kontos fallen weg
+    const nutzer = await eins<Nutzer>('SELECT * FROM nutzer WHERE id = ?', id);
+    if (nutzer) {
+      await googleTermineEntfernen(nutzer.id).catch(() => null);
+      await googleAbgleich(nutzer);
+    }
     return weiterleiten('/app/integrationen?ok=google');
   } catch (fehler) {
     console.error('Google Verbindung fehlgeschlagen', fehler);
