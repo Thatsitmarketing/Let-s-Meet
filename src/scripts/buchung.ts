@@ -1,6 +1,8 @@
 /**
  * Buchungsablauf im Browser: Monat laden, Tag wählen, Uhrzeit wählen, Formular senden.
  * Zeiten kommen in UTC vom Server und werden in der gewählten Zeitzone angezeigt.
+ * Mobil (bis 860px) ist jeder Teil ein eigener Schritt (tag, zeit, daten), die Zurück Geste
+ * des Browsers geht einen Schritt zurück.
  */
 import { addTage, datumInZone, teileInZone, wochentagVon, zoneZuUtc } from '../lib/zeit';
 
@@ -27,6 +29,9 @@ declare global {
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
+type Schritt = 'tag' | 'zeit' | 'daten';
+const REIHENFOLGE: Schritt[] = ['tag', 'zeit', 'daten'];
+
 const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 
 export function starteBuchung() {
@@ -50,6 +55,30 @@ export function starteBuchung() {
   const formFehler = $('formular-fehler');
   const gewaehltText = $('gewaehlt-text');
   const geladenUm = Date.now();
+  const mobil = window.matchMedia('(max-width: 860px)');
+  // Verlauf nur auf der eigenen Seite, im Widget würde er die einbindende Seite mitnehmen
+  const mitVerlauf = !k.embed;
+  let schritt: Schritt = 'tag';
+
+  /** Setzt den Schritt für die mobile Ansicht und den Fortschritt. Auf dem Desktop wirkt das nur auf die Leiste, die dort ausgeblendet ist. */
+  function schrittSetzen(neu: Schritt, verlauf = true) {
+    const vorher = schritt;
+    schritt = neu;
+    wurzel.dataset.schritt = neu;
+    const nr = REIHENFOLGE.indexOf(neu);
+    wurzel.querySelectorAll<HTMLElement>('.fortschritt li').forEach((li, i) => {
+      li.classList.toggle('erledigt', i < nr);
+      if (i === nr) li.setAttribute('aria-current', 'step');
+      else li.removeAttribute('aria-current');
+    });
+    if (!mobil.matches || vorher === neu) return;
+    if (verlauf && mitVerlauf) {
+      // Vorwärts neuer Eintrag, rückwärts den vorhandenen ersetzen, damit die Zurück Geste nicht hin und her springt
+      if (REIHENFOLGE.indexOf(neu) > REIHENFOLGE.indexOf(vorher)) history.pushState({ lmSchritt: neu }, '');
+      else history.replaceState({ lmSchritt: neu }, '');
+    }
+    if (!k.embed) wurzel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   // Vorbelegung aus dem Fragment der Adresse (#name=...&email=...&telefon=...&nachricht=...&quelle=...),
   // zum Beispiel vom Kontakt-Funnel der Homepage. Das Fragment erreicht nie den Server und
@@ -152,12 +181,14 @@ export function starteBuchung() {
       statusEl.textContent = anzahl === 0 ? 'In diesem Monat ist nichts mehr frei.' : `${anzahl} ${anzahl === 1 ? 'Tag' : 'Tage'} mit freien Terminen`;
       zeichneTage(erster, naechster);
       if (gewaehlterTag && slotsNachTag.has(gewaehlterTag)) zeigeZeiten(gewaehlterTag);
-      else if (autoTag && anzahl > 0) {
+      else if (autoTag && anzahl > 0 && !mobil.matches) {
         autoTag = false;
         zeigeZeiten([...slotsNachTag.keys()].sort()[0]!);
       } else {
         gewaehlterTag = null;
         zeitenEl.hidden = true;
+        // Mobil gibt es ohne Tag keine Zeiten zu zeigen
+        if (schritt === 'zeit') schrittSetzen('tag', false);
       }
     } catch {
       if (nr !== anfrageNr) return;
@@ -201,12 +232,14 @@ export function starteBuchung() {
     zeitenListe.querySelectorAll<HTMLButtonElement>('.zeit').forEach((z) => z.setAttribute('aria-pressed', 'false'));
     knopf.setAttribute('aria-pressed', 'true');
     gewaehlterSlot = knopf.dataset.slot!;
+    // Mobil ist der Tipp auf die Uhrzeit schon die Entscheidung, ohne extra Weiter Knopf
+    if (mobil.matches) return zumFormular();
     const weiter = document.createElement('button');
     weiter.type = 'button';
     weiter.className = 'knopf knopf--orange weiter';
     weiter.textContent = 'Weiter';
     weiter.setAttribute('aria-label', `Weiter mit ${fmtVoll(gewaehlterSlot)}`);
-    weiter.addEventListener('click', zumFormular);
+    weiter.addEventListener('click', () => zumFormular());
     knopf.after(weiter);
     weiter.focus();
   }
@@ -224,11 +257,14 @@ export function starteBuchung() {
     }
   }
 
-  function zumFormular() {
+  function zumFormular(verlauf = true) {
     if (!gewaehlterSlot) return;
     schrittKal.hidden = true;
     schrittForm.hidden = false;
     gewaehltText.textContent = `${fmtVoll(gewaehlterSlot)} (${zone.replace(/_/g, ' ')})`;
+    $('zf-wann').textContent = fmtVoll(gewaehlterSlot);
+    $('zf-zone').textContent = `Zeitzone ${zone.replace(/_/g, ' ')}`;
+    schrittSetzen('daten', verlauf);
     auswahlAnzeigen(true);
     turnstileLaden();
     const name = $<HTMLInputElement>('f-name');
@@ -241,16 +277,27 @@ export function starteBuchung() {
     if (!nachricht.value && vorab.nachricht) nachricht.value = vorab.nachricht;
     if (vorabHinweis) vorabHinweis.hidden = !(vorab.name || vorab.email);
     $('titel-formular').setAttribute('tabindex', '-1');
-    $('titel-formular').focus();
-    if (!k.embed) window.scrollTo({ top: 0, behavior: 'smooth' });
+    $('titel-formular').focus({ preventScroll: mobil.matches });
+    if (!k.embed && !mobil.matches) window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function zumKalender() {
+  /** Zurück aus dem Formular: Desktop zum Kalender mit Zeiten, mobil zu den Zeiten des gewählten Tages. */
+  function zumKalender(verlauf = true) {
     schrittForm.hidden = true;
     schrittKal.hidden = false;
     auswahlAnzeigen(false);
+    schrittSetzen(mobil.matches && gewaehlterTag ? 'zeit' : 'tag', verlauf);
     const aktiv = zeitenListe.querySelector<HTMLButtonElement>('.zeit[aria-pressed="true"]');
-    (aktiv ?? tageEl.querySelector<HTMLButtonElement>('.tag.frei'))?.focus();
+    (aktiv ?? tageEl.querySelector<HTMLButtonElement>('.tag.frei'))?.focus({ preventScroll: mobil.matches });
+  }
+
+  /** Mobil vom Zeitschritt zurück zum Kalender */
+  function zumTag(verlauf = true) {
+    schrittForm.hidden = true;
+    schrittKal.hidden = false;
+    auswahlAnzeigen(false);
+    schrittSetzen('tag', verlauf);
+    tageEl.querySelector<HTMLButtonElement>('.tag[aria-pressed="true"]')?.focus({ preventScroll: true });
   }
 
   function turnstileLaden() {
@@ -386,7 +433,13 @@ export function starteBuchung() {
 
   tageEl.addEventListener('click', (e) => {
     const knopf = (e.target as HTMLElement).closest<HTMLButtonElement>('.tag.frei');
-    if (knopf?.dataset.tag) zeigeZeiten(knopf.dataset.tag);
+    if (!knopf?.dataset.tag) return;
+    zeigeZeiten(knopf.dataset.tag);
+    if (mobil.matches) {
+      schrittSetzen('zeit');
+      tagTitel.setAttribute('tabindex', '-1');
+      tagTitel.focus({ preventScroll: true });
+    }
   });
   zeitenListe.addEventListener('click', (e) => {
     const knopf = (e.target as HTMLElement).closest<HTMLButtonElement>('.zeit');
@@ -399,7 +452,24 @@ export function starteBuchung() {
     gewaehlterSlot = null;
     monatLaden();
   });
-  $('zurueck-kalender').addEventListener('click', zumKalender);
+  $('zurueck-kalender').addEventListener('click', () => zumKalender());
+  $('zurueck-tag').addEventListener('click', () => zumTag());
+
+  // Zurück Geste des Browsers: einen Schritt zurück statt die Seite zu verlassen
+  if (mitVerlauf) {
+    history.replaceState({ ...(history.state ?? {}), lmSchritt: 'tag' }, '');
+    window.addEventListener('popstate', (e) => {
+      const ziel = (e.state?.lmSchritt as Schritt | undefined) ?? 'tag';
+      if (ziel === schritt) return;
+      if (ziel === 'daten' && gewaehlterSlot) zumFormular(false);
+      else if (ziel === 'zeit' && gewaehlterTag) zumKalender(false);
+      else zumTag(false);
+    });
+  }
+  // Wechsel von schmal auf breit (Tablet drehen): im Kalender stehen Tag und Zeiten wieder nebeneinander
+  mobil.addEventListener('change', () => {
+    if (!mobil.matches && schritt === 'zeit') schrittSetzen('tag', false);
+  });
 
   monatLaden();
 }
