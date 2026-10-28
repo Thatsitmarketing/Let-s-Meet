@@ -91,6 +91,27 @@ export function starteBuchung() {
   }
   const vorabHinweis = document.getElementById('vorab-hinweis');
 
+  // Bis 1180px (Infos über dem Kalender): lange Beschreibung auf drei Zeilen kürzen, damit der Kalender ohne viel Scrollen sichtbar ist.
+  // Gekürzt wird nur, wenn mindestens zwei Zeilen wegfallen würden, sonst lohnt sich der Knopf nicht.
+  const info = wurzel.querySelector<HTMLElement>('.info');
+  const beschreibung = document.getElementById('beschreibung');
+  const mehrBtn = document.getElementById('mehr-zeigen');
+  if (info && beschreibung && mehrBtn) {
+    const pruefenKurz = () => {
+      if (info.classList.contains('offen')) return;
+      info.classList.remove('kurz');
+      const zeile = parseFloat(getComputedStyle(beschreibung).lineHeight) || 22;
+      info.classList.toggle('kurz', beschreibung.scrollHeight > zeile * 5);
+    };
+    pruefenKurz();
+    window.matchMedia('(max-width: 1180px)').addEventListener('change', pruefenKurz);
+    mehrBtn.addEventListener('click', () => {
+      const offen = info.classList.toggle('offen');
+      mehrBtn.setAttribute('aria-expanded', String(offen));
+      mehrBtn.querySelector('.mehr-text')!.textContent = offen ? 'Weniger anzeigen' : 'Mehr anzeigen';
+    });
+  }
+
   // Zeitzone: Browserzone als Standard, Liste aller IANA Zonen
   const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone || k.zoneGastgeber;
   let zone = browserZone;
@@ -296,12 +317,30 @@ export function starteBuchung() {
 
   function turnstileLaden() {
     if (!k.turnstile || turnstileId) return;
-    const ziel = document.getElementById('turnstile');
+    const ziel = document.getElementById('turnstile-feld');
     if (!ziel) return;
+    // Prüfen auf render, nicht nur auf window.turnstile: ein Element mit der ID turnstile wäre sonst
+    // als window.turnstile sichtbar und das Skript würde nie geladen
+    const geladen = () => typeof window.turnstile?.render === 'function';
     const rendern = () => {
-      if (window.turnstile && !turnstileId) turnstileId = window.turnstile.render(ziel, { sitekey: k.turnstile, language: 'de', theme: 'light' });
+      const ts = window.turnstile;
+      if (!ts || !geladen() || turnstileId) return;
+      // interaction-only: das Widget bleibt unsichtbar und nimmt keinen Platz ein, solange Cloudflare keine Rückfrage braucht
+      const zeigen = () => ziel.classList.add('sichtbar');
+      turnstileId = ts.render(ziel, {
+        sitekey: k.turnstile,
+        language: 'de',
+        theme: 'light',
+        appearance: 'interaction-only',
+        'before-interactive-callback': zeigen,
+        'unsupported-callback': zeigen,
+        'error-callback': () => {
+          zeigen();
+          return false;
+        },
+      });
     };
-    if (window.turnstile) return rendern();
+    if (geladen()) return rendern();
     const s = document.createElement('script');
     s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
     s.async = true;
@@ -361,6 +400,12 @@ export function starteBuchung() {
     const antworten: Record<string, string> = {};
     form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-frage]').forEach((f) => (antworten[f.dataset.frage!] = f.value));
     const turnstileToken = (form.querySelector('[name="cf-turnstile-response"]') as HTMLInputElement | null)?.value ?? '';
+    if (k.turnstile && !turnstileToken) {
+      document.getElementById('turnstile-feld')?.classList.add('sichtbar');
+      formFehler.textContent = 'Die Sicherheitsprüfung läuft noch. Bitte warte einen Moment und tipp dann noch einmal auf „Termin buchen“.';
+      formFehler.hidden = false;
+      return;
+    }
     let quelle = '';
     try {
       quelle = vorab.quelle || (k.embed ? document.referrer || '' : '');
