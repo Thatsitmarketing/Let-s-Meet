@@ -36,6 +36,8 @@ pnpm deploy                # build, Migrationen remote, wrangler deploy
 pnpm deploy:cloudflare     # Deploybefehl für Cloudflare Workers Builds (nach pnpm build)
 ```
 
+**Arbeitsregel Migrationen:** Neue Migrationen immer direkt selbst auf der D1 `terminethatsitmarketing` ausführen (Cloudflare MCP `d1_database_query`, Anweisung für Anweisung) und danach in `d1_migrations` vermerken (`INSERT INTO d1_migrations (name, applied_at) VALUES ('000X_name.sql', CURRENT_TIMESTAMP)`), damit der Deploybefehl sie nicht doppelt ausführt. Nicht auf den Merge oder den Deploy warten. Vorher mit `SELECT name FROM d1_migrations` prüfen, was schon eingespielt ist.
+
 Lokale Geheimnisse liegen in `.dev.vars` (nicht eingecheckt). Vorlage mit allen Namen: `.env.example`.
 
 ### Deployment als Cloudflare Worker (nicht Pages)
