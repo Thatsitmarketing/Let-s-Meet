@@ -1,0 +1,31 @@
+---
+import App from '../../../layouts/App.astro';
+import KontaktFormular from '../../../components/KontaktFormular.astro';
+import { kontaktAusFormular, kontaktSpeichern, type KontaktWerte } from '../../../lib/kontakte';
+
+const nutzer = Astro.locals.gastgeber!;
+// Vorbelegung, etwa aus einem Google Termin: ?name=&email=
+const p = Astro.url.searchParams;
+let werte: KontaktWerte = { name: p.get('name')?.slice(0, 120) ?? '', email: p.get('email')?.slice(0, 180) ?? '', telefon: '', unternehmen: '', notiz: '' };
+let fehler: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const ergebnis = kontaktAusFormular(await Astro.request.formData());
+  werte = ergebnis.werte;
+  fehler = ergebnis.fehler;
+  if (!Object.keys(fehler).length) {
+    const gespeichert = await kontaktSpeichern(nutzer.id, werte);
+    if ('id' in gespeichert) return Astro.redirect(`/app/kontakte/${gespeichert.id}?ok=angelegt`);
+    fehler.doppelt = `Diese E Mail Adresse steht schon im Kontaktbuch. <a href="/app/kontakte/${gespeichert.doppelt}">Zum Kontakt</a>`;
+  }
+}
+---
+<App titel="Neuer Kontakt" eyebrow="Kontakte">
+  <section class="karte block">
+    <KontaktFormular werte={werte} fehler={fehler} neu abbrechen="/app/kontakte" />
+  </section>
+</App>
+
+<style>
+  .block { padding: var(--raum-6); max-width: 760px; }
+</style>

@@ -11,6 +11,7 @@ const TEXTE: Record<string, string> = {
   google_geloescht: 'Termin im Google Kalender gelöscht.',
   getrennt: 'Verbindung getrennt.',
   passwort: 'Passwort geändert.',
+  entfernt: 'Kontakt entfernt.',
 };
 
 export function meldungAusUrl(url: URL): { art: 'erfolg' | 'fehler'; text: string } | null {

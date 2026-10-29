@@ -118,6 +118,11 @@ export function formatDatumKurz(datum: Date | string, tz: string) {
   }).format(new Date(datum));
 }
 
+/** Kurz und lesbar wie „9. Okt. 2026“ */
+export function formatDatumMittel(datum: Date | string, tz: string) {
+  return new Intl.DateTimeFormat('de-DE', { timeZone: tz, day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(datum));
+}
+
 export function formatZeit(datum: Date | string, tz: string) {
   return new Intl.DateTimeFormat('de-DE', { timeZone: tz, hour: '2-digit', minute: '2-digit' }).format(new Date(datum));
 }

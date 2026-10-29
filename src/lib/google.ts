@@ -5,6 +5,7 @@
 import { env } from 'cloudflare:workers';
 import { alle, ausfuehren, db, eins } from './db';
 import type { Nutzer } from './typen';
+import { kontakteAusGoogle } from './kontakte';
 import { zoneZuUtc } from './zeit';
 
 const SCOPES = [
@@ -169,7 +170,13 @@ interface GoogleEreignis {
   transparency?: string;
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
-  attendees?: { self?: boolean; responseStatus?: string }[];
+  attendees?: { self?: boolean; responseStatus?: string; email?: string; displayName?: string; resource?: boolean; organizer?: boolean }[];
+}
+
+/** Gast eines Google Termins (ohne den eigenen Kalender, Räume und Absagen) */
+export interface GoogleGast {
+  email: string;
+  name: string;
 }
 
 /** Ein Termin aus dem Google Kalender, Zeiten in Millisekunden UTC */
@@ -183,6 +190,8 @@ export interface GoogleTermin {
   blockiert: boolean;
   ort: string | null;
   link: string | null;
+  /** Gäste für das Kontaktbuch, leer bei ganztägigen oder selbst abgelehnten Terminen */
+  gaeste: GoogleGast[];
 }
 
 /** Macht aus einem Google Ereignis einen Termin für Kalender und Slots, null bei abgesagten oder kaputten Einträgen. */
@@ -204,6 +213,12 @@ function ereignisZuTermin(e: GoogleEreignis, tz: string): GoogleTermin | null {
     blockiert: !ganztaegig && !abgelehnt && !ignoriert && e.transparency !== 'transparent',
     ort: e.location?.trim().slice(0, 300) || null,
     link: e.htmlLink?.startsWith('https://') ? e.htmlLink : null,
+    gaeste: ganztaegig || abgelehnt
+      ? []
+      : (e.attendees ?? [])
+          .filter((a) => a.email && !a.self && !a.resource && a.responseStatus !== 'declined' && !/calendar\.google\.com$/i.test(a.email))
+          .slice(0, 50)
+          .map((a) => ({ email: a.email!.trim().toLowerCase().slice(0, 180), name: (a.displayName ?? '').trim().slice(0, 120) })),
   };
 }
 
@@ -225,7 +240,7 @@ async function googleTermineLaden(nutzer: Nutzer, vonUtc: Date, bisUtc: Date): P
       singleEvents: 'true',
       orderBy: 'startTime',
       maxResults: '250',
-      fields: 'nextPageToken,items(id,status,summary,location,htmlLink,transparency,start,end,attendees(self,responseStatus))',
+      fields: 'nextPageToken,items(id,status,summary,location,htmlLink,transparency,start,end,attendees(self,responseStatus,email,displayName,resource,organizer))',
     });
     if (seite) p.set('pageToken', seite);
     const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${kalender}/events?${p}`, {
@@ -246,6 +261,8 @@ async function googleTermineLaden(nutzer: Nutzer, vonUtc: Date, bisUtc: Date): P
   }
   return termine;
 }
+
+const gaesteJson = (t: GoogleTermin) => (t.gaeste.length ? JSON.stringify(t.gaeste.map((g) => g.email)) : null);
 
 const mitPuffer = (t: { start: number; ende: number }) => ({
   start: t.start - GOOGLE_PUFFER_MIN * 60_000,
@@ -294,23 +311,25 @@ export async function googleAbgleich(nutzer: Nutzer): Promise<number | null> {
       d.prepare('DELETE FROM google_termine WHERE nutzer_id = ? AND ((ende_utc > ? AND start_utc < ?) OR ende_utc < ?)')
         .bind(nutzer.id, von.toISOString(), bis.toISOString(), new Date(jetzt - 30 * 86_400_000).toISOString()),
     ];
-    // D1 erlaubt höchstens 100 Parameter je Befehl, also 8 Zeilen mit je 10 Werten
+    // D1 erlaubt höchstens 100 Parameter je Befehl, also 8 Zeilen mit je 11 Werten
     for (let i = 0; i < termine.length; i += 8) {
       const teil = termine.slice(i, i + 8);
       befehle.push(
         d.prepare(
-          `INSERT OR REPLACE INTO google_termine (nutzer_id, event_id, titel, start_utc, ende_utc, ganztaegig, blockiert, ort, link, aktualisiert_am)
-           VALUES ${teil.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+          `INSERT OR REPLACE INTO google_termine (nutzer_id, event_id, titel, start_utc, ende_utc, ganztaegig, blockiert, ort, link, gaeste, aktualisiert_am)
+           VALUES ${teil.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
         ).bind(
           ...teil.flatMap((t) => [
             nutzer.id, t.eventId, t.titel, new Date(t.start).toISOString(), new Date(t.ende).toISOString(),
-            t.ganztaegig ? 1 : 0, t.blockiert ? 1 : 0, t.ort, t.link, stand,
+            t.ganztaegig ? 1 : 0, t.blockiert ? 1 : 0, t.ort, t.link, gaesteJson(t), stand,
           ]),
         ),
       );
     }
     befehle.push(d.prepare('UPDATE nutzer SET google_abgleich_am = ?, google_abgleich_fehler = NULL WHERE id = ?').bind(stand, nutzer.id));
     await d.batch(befehle);
+    // Gäste ins Kontaktbuch, ein Fehler dort darf den Abgleich nicht kippen
+    await kontakteAusGoogle(nutzer, termine).catch((fehler) => console.error('Kontakte aus Google fehlgeschlagen', fehler));
     nutzer.google_abgleich_am = stand;
     nutzer.google_abgleich_fehler = null;
     return termine.length;
@@ -354,7 +373,6 @@ interface GoogleEreignisVoll extends GoogleEreignis {
   hangoutLink?: string;
   recurringEventId?: string;
   organizer?: { email?: string; displayName?: string; self?: boolean };
-  attendees?: { self?: boolean; responseStatus?: string; email?: string; displayName?: string; organizer?: boolean }[];
 }
 
 /** Macht aus der HTML Beschreibung von Google lesbaren Text (Zeilenumbrüche bleiben, Links als Adresse). */
@@ -414,10 +432,10 @@ function zuDetail(e: GoogleEreignisVoll, tz: string): GoogleDetail | null {
 /** Speichert einen einzelnen Termin in google_termine, damit Kalender und Liste sofort stimmen. */
 async function terminZeileSpeichern(nutzerId: string, t: GoogleTermin) {
   await ausfuehren(
-    `INSERT OR REPLACE INTO google_termine (nutzer_id, event_id, titel, start_utc, ende_utc, ganztaegig, blockiert, ort, link, aktualisiert_am)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO google_termine (nutzer_id, event_id, titel, start_utc, ende_utc, ganztaegig, blockiert, ort, link, gaeste, aktualisiert_am)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     nutzerId, t.eventId, t.titel, new Date(t.start).toISOString(), new Date(t.ende).toISOString(),
-    t.ganztaegig ? 1 : 0, t.blockiert ? 1 : 0, t.ort, t.link, new Date().toISOString(),
+    t.ganztaegig ? 1 : 0, t.blockiert ? 1 : 0, t.ort, t.link, gaesteJson(t), new Date().toISOString(),
   );
 }
 

@@ -1,0 +1,141 @@
+---
+import App from '../../../layouts/App.astro';
+import Avatar from '../../../components/Avatar.astro';
+import KontaktFormular from '../../../components/KontaktFormular.astro';
+import Icon from '../../../components/ui/Icon.astro';
+import { kontaktAusFormular, kontaktEntfernen, kontaktMitMeetings, kontaktSpeichern, meetingsVon, type KontaktWerte } from '../../../lib/kontakte';
+import { meldungAusUrl } from '../../../lib/meldungen';
+import { formatDatumMittel, formatZeit } from '../../../lib/zeit';
+
+const nutzer = Astro.locals.gastgeber!;
+const id = Astro.params.id ?? '';
+const kontakt = await kontaktMitMeetings(nutzer.id, id);
+if (!kontakt) return Astro.redirect('/app/kontakte');
+
+let werte: KontaktWerte = {
+  name: kontakt.name,
+  email: kontakt.email ?? '',
+  telefon: kontakt.telefon ?? '',
+  unternehmen: kontakt.unternehmen ?? '',
+  notiz: kontakt.notiz ?? '',
+};
+let fehler: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  if (form.get('aktion') === 'entfernen') {
+    await kontaktEntfernen(nutzer.id, id);
+    return Astro.redirect('/app/kontakte?ok=entfernt');
+  }
+  const ergebnis = kontaktAusFormular(form);
+  werte = ergebnis.werte;
+  fehler = ergebnis.fehler;
+  if (!Object.keys(fehler).length) {
+    const gespeichert = await kontaktSpeichern(nutzer.id, werte, id);
+    if ('id' in gespeichert) return Astro.redirect(`/app/kontakte/${gespeichert.id}?ok=gespeichert`);
+    fehler.doppelt = `Diese E Mail Adresse gehört schon zu einem anderen Kontakt. <a href="/app/kontakte/${gespeichert.doppelt}">Zum Kontakt</a>`;
+  }
+}
+
+const tz = nutzer.zeitzone;
+const meetings = await meetingsVon(nutzer.id, kontakt.email);
+const jetzt = new Date().toISOString();
+const QUELLE: Record<string, string> = { buchung: 'Buchung über Let\'s Meet', google: 'Gast im Google Kalender', import: 'CSV Import', manuell: 'Von Hand angelegt' };
+
+// Termin für den Kontakt buchen: Buchungsseite mit vorausgefülltem Formular (Fragment geht an keinen Server)
+const vorbelegung = new URLSearchParams({ name: kontakt.name, ...(kontakt.email ? { email: kontakt.email } : {}), ...(kontakt.telefon ? { telefon: kontakt.telefon } : {}), quelle: 'backoffice' });
+const buchenLink = `/#${vorbelegung.toString()}`;
+const wann = (iso: string) => `${formatDatumMittel(iso, tz)}, ${formatZeit(iso, tz)} Uhr`;
+---
+<App titel={kontakt.name} eyebrow={kontakt.unternehmen || 'Kontakt'} meldung={meldungAusUrl(Astro.url)}>
+  <Fragment slot="aktionen">
+    <a class="knopf knopf--leise" href="/app/kontakte"><Icon name="zurueck" />Alle Kontakte</a>
+    <a class="knopf knopf--orange" href={buchenLink} target="_blank" rel="noopener"><Icon name="kalender" />Termin buchen</a>
+  </Fragment>
+
+  <div class="raster">
+    <div class="haupt">
+      <section class="karte block ueberblick" aria-label="Überblick">
+        <Avatar name={kontakt.name} groesse={56} />
+        <dl class="kennzahlen">
+          <div><dt>Letztes Meeting</dt><dd>{kontakt.letztes ? formatDatumMittel(kontakt.letztes, tz) : <span class="leise">Noch keins</span>}</dd></div>
+          <div><dt>Nächstes Meeting</dt><dd>{kontakt.naechstes ? wann(kontakt.naechstes) : <span class="leise">Keins geplant</span>}</dd></div>
+          <div><dt>Herkunft</dt><dd>{QUELLE[kontakt.quelle] ?? kontakt.quelle}</dd></div>
+        </dl>
+      </section>
+
+      <section class="karte block" aria-labelledby="k-daten">
+        <h2 id="k-daten" class="klein-titel">Kontaktdaten</h2>
+        <KontaktFormular werte={werte} fehler={fehler} abbrechen="/app/kontakte" />
+      </section>
+    </div>
+
+    <aside class="seite">
+      {(kontakt.email || kontakt.telefon) && (
+        <section class="karte block" aria-labelledby="k-direkt">
+          <h2 id="k-direkt" class="klein-titel">Direkt</h2>
+          {kontakt.email && <a class="knopf knopf--rahmen knopf--breit" href={`mailto:${kontakt.email}`}><Icon name="mail" />E Mail schreiben</a>}
+          {kontakt.telefon && <a class="knopf knopf--rahmen knopf--breit" href={`tel:${kontakt.telefon.replace(/[^\d+]/g, '')}`}><Icon name="telefon" />Anrufen</a>}
+        </section>
+      )}
+
+      <section class="karte block" aria-labelledby="k-meetings">
+        <h2 id="k-meetings" class="klein-titel">Meetings</h2>
+        {meetings.length === 0 ? (
+          <p class="leise klein">{kontakt.email ? 'Keine Termine in Let\'s Meet oder im abgeglichenen Google Kalender.' : 'Ohne E Mail Adresse lassen sich keine Termine zuordnen.'}</p>
+        ) : (
+          <ol class="meetings" role="list">
+            {meetings.map((m) => (
+              <li>
+                <a href={m.art === 'buchung' ? `/app/termine/${m.id}` : `/app/termine/google/${encodeURIComponent(m.id)}`} class:list={[{ google: m.art === 'google', vorbei: m.start < jetzt }]} style={m.art === 'buchung' ? `--farbe:${m.farbe}` : undefined}>
+                  <span class="m-wann">{wann(m.start)}{m.start >= jetzt && <span class="badge badge--orange">Anstehend</span>}</span>
+                  <strong>{m.titel}</strong>
+                  <span class="leise klein">
+                    {m.art === 'google' ? 'Google Kalender' : m.nichtErschienen ? 'Nicht erschienen' : m.status}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ol>
+        )}
+        {kontakt.letztes_meeting && !meetings.some((m) => m.start === kontakt.letztes_meeting) && (
+          <p class="leise klein">Ältere Meetings sind nicht mehr einzeln gespeichert, das letzte war am {formatDatumMittel(kontakt.letztes_meeting, tz)}.</p>
+        )}
+      </section>
+
+      <section class="karte block" aria-labelledby="k-entfernen">
+        <h2 id="k-entfernen" class="klein-titel">Kontakt entfernen</h2>
+        <p class="leise klein">Entfernt den Kontakt aus der Liste. Buchungen bleiben erhalten. Bucht die Person erneut, steht sie wieder im Kontaktbuch.</p>
+        <form method="post" data-rueckfrage={`${kontakt.name} wirklich aus dem Kontaktbuch entfernen?`}>
+          <input type="hidden" name="aktion" value="entfernen" />
+          <button class="knopf knopf--gefahr knopf--breit" type="submit"><Icon name="loeschen" />Entfernen</button>
+        </form>
+      </section>
+    </aside>
+  </div>
+</App>
+
+<style>
+  .raster { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: var(--raum-6); align-items: start; max-width: 1400px; }
+  .haupt, .seite { display: grid; gap: var(--raum-6); }
+  .block { padding: var(--raum-6); display: grid; gap: var(--raum-4); align-content: start; }
+  .klein-titel { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-h4); letter-spacing: 0; }
+  .ueberblick { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--raum-6); }
+  .kennzahlen { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--raum-4); }
+  .kennzahlen dt { color: var(--farbe-text-leise); font-size: var(--text-sm); }
+  .kennzahlen dd { margin: 2px 0 0; font-weight: 600; }
+  .meetings { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-2); }
+  .meetings a {
+    --farbe: var(--n-500);
+    display: grid; gap: 2px; padding: var(--raum-3) var(--raum-3) var(--raum-3) var(--raum-4); border: 1px solid var(--farbe-rahmen);
+    border-left: 4px solid var(--farbe); text-decoration: none; min-width: 0;
+  }
+  .meetings a.google { background: var(--n-050); }
+  .meetings a.vorbei { opacity: 0.75; }
+  .meetings a:hover { border-color: var(--n-900); border-left-color: var(--farbe); opacity: 1; }
+  .meetings a > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .m-wann { display: flex; gap: var(--raum-2); align-items: center; font-size: var(--text-sm); font-weight: 600; color: var(--farbe-text-2); }
+  .m-wann .badge { padding: 1px 8px; font-size: 0.75rem; }
+  @media (max-width: 1100px) { .raster { grid-template-columns: 1fr; } }
+  @media (max-width: 520px) { .ueberblick { grid-template-columns: 1fr; } }
+</style>
