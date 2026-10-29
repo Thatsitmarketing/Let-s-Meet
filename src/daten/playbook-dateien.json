@@ -12,5 +12,12 @@
     "hoehe": 900,
     "pdfBytes": 5367738,
     "stand": "2026-10-29"
+  },
+  "website": {
+    "seiten": 31,
+    "breite": 1132,
+    "hoehe": 1600,
+    "pdfBytes": 8591530,
+    "stand": "2026-10-29"
   }
 }

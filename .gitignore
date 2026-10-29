@@ -9,3 +9,6 @@ dist/
 .dev.vars.*
 .screenshots/
 .DS_Store
+
+# Rohdateien der Playbooks (nur lokal, verkleinert landen sie in public/playbook-dateien/)
+playbook-quelle/
