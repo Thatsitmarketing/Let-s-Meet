@@ -21,7 +21,7 @@ const bis = formatDatumMittel(zugang.gueltig_bis, 'Europe/Berlin');
 const restTage = Math.max(1, Math.ceil((Date.parse(zugang.gueltig_bis) - Date.now()) / 86_400_000));
 const mb = dateien?.pdfBytes ? (dateien.pdfBytes / 1_048_576).toLocaleString('de-DE', { maximumFractionDigits: 1 }) : null;
 ---
-<Oeffentlich titel={status === 'gueltig' ? pb.name : 'Link nicht mehr gültig'} breit markenlogo>
+<Oeffentlich titel={status === 'gueltig' ? pb.name : 'Link nicht mehr gültig'} breit marke="thatsit">
   {status === 'gueltig' ? (
     <article class="playbook">
       <header class="kopf-text">

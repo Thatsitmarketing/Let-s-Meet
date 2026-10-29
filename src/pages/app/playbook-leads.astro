@@ -3,6 +3,7 @@
  * Leadliste der Playbook Anfragen: eine Zeile je Anfrage über eine der vier Landingpages,
  * mit Playbook, Kontaktdaten und Stand (angefordert, geöffnet, PDF geladen).
  * Reiter je Playbook, Filter nach Stand, Suche, CSV Export. Name führt in den Kontakt.
+ * "Aktualisieren" holt die Seite im Hintergrund neu und tauscht nur die Liste aus.
  */
 import App from '../../layouts/App.astro';
 import Avatar from '../../components/Avatar.astro';
@@ -32,6 +33,7 @@ const link = (aenderung: Record<string, string | null>) => {
   return `/app/playbook-leads${s ? `?${s}` : ''}`;
 };
 const exportParams = new URLSearchParams({ ...(playbook ? { playbook } : {}), ...(stand !== 'alle' ? { stand } : {}), ...(suche ? { suche } : {}) });
+const standJetzt = formatZeit(new Date(), tz);
 const standChips: { wert: LeadStand; text: string }[] = [
   { wert: 'alle', text: 'Alle' },
   { wert: 'angefordert', text: 'Nur angefordert' },
@@ -41,9 +43,12 @@ const standChips: { wert: LeadStand; text: string }[] = [
 ---
 <App titel="Playbook Leads" eyebrow="Anfragen über die Landingpages">
   <Fragment slot="aktionen">
+    <span class="stand leise klein" data-lead-stand aria-live="polite">Stand {standJetzt} Uhr</span>
+    <a class="knopf knopf--rahmen" href={`${Astro.url.pathname}${Astro.url.search}`} data-lead-aktualisieren><Icon name="aktualisieren" />Aktualisieren</a>
     <a class="knopf knopf--rahmen" href={`/api/app/playbook-leads.csv${exportParams.size ? `?${exportParams}` : ''}`}><Icon name="download" />CSV Export</a>
   </Fragment>
 
+  <div data-lead-bereich>
   <nav class="reiter" aria-label="Nach Playbook">
     <a href={link({ playbook: null })} aria-current={!playbook ? 'page' : undefined}>Alle Playbooks <span class="zahl">{alleAnzahl}</span></a>
     {(Object.keys(PLAYBOOKS) as PlaybookSchluessel[]).map((s) => (
@@ -143,9 +148,69 @@ const standChips: { wert: LeadStand; text: string }[] = [
       {seite < seiten && <a class="knopf knopf--rahmen knopf--klein" href={link({ seite: String(seite + 1) })}>Weiter<Icon name="rechts" /></a>}
     </nav>
   )}
+  </div>
 </App>
 
+<script>
+  // Liste ohne Neuladen der Seite aktualisieren: Seite im Hintergrund holen und nur den Bereich der Liste tauschen.
+  // Zusätzlich beim Zurückkehren in den Tab, wenn der letzte Stand älter als eine Minute ist.
+  const knopf = document.querySelector<HTMLAnchorElement>('[data-lead-aktualisieren]');
+  const standText = document.querySelector<HTMLElement>('[data-lead-stand]');
+  let zuletzt = Date.now();
+  let laeuft = false;
+
+  async function aktualisieren() {
+    const bereich = document.querySelector<HTMLElement>('[data-lead-bereich]');
+    if (!knopf || !bereich || laeuft) return;
+    laeuft = true;
+    knopf.classList.add('dreht');
+    knopf.setAttribute('aria-busy', 'true');
+    try {
+      const antwort = await fetch(location.href, { cache: 'no-store', credentials: 'same-origin', headers: { accept: 'text/html' } });
+      // Sitzung abgelaufen: Middleware leitet zur Anmeldung, dann dorthin wechseln
+      if (antwort.redirected && new URL(antwort.url).pathname.startsWith('/app/login')) {
+        location.href = antwort.url;
+        return;
+      }
+      if (!antwort.ok) throw new Error(String(antwort.status));
+      const doc = new DOMParser().parseFromString(await antwort.text(), 'text/html');
+      const neu = doc.querySelector('[data-lead-bereich]');
+      if (!neu) throw new Error('Bereich fehlt');
+      // Eingabe in der Suche nicht überschreiben, solange jemand darin tippt
+      const suche = document.getElementById('suche') as HTMLInputElement | null;
+      const getippt = suche && document.activeElement === suche ? suche.value : null;
+      bereich.replaceChildren(...Array.from(neu.childNodes).map((n) => document.importNode(n, true)));
+      if (getippt !== null) {
+        const feld = document.getElementById('suche') as HTMLInputElement | null;
+        if (feld) { feld.value = getippt; feld.focus(); }
+      }
+      zuletzt = Date.now();
+      if (standText) standText.textContent = `Stand ${new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`;
+    } catch {
+      if (standText) standText.textContent = 'Aktualisieren fehlgeschlagen';
+    } finally {
+      laeuft = false;
+      knopf.classList.remove('dreht');
+      knopf.removeAttribute('aria-busy');
+    }
+  }
+
+  knopf?.addEventListener('click', (e) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    aktualisieren();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && Date.now() - zuletzt > 60_000) aktualisieren();
+  });
+</script>
+
 <style>
+  .stand { align-self: center; white-space: nowrap; }
+  [data-lead-aktualisieren] :global(svg) { transition: transform 0.2s; }
+  [data-lead-aktualisieren].dreht :global(svg) { animation: lead-dreht 0.8s linear infinite; }
+  @keyframes lead-dreht { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { [data-lead-aktualisieren].dreht :global(svg) { animation: none; } }
   .reiter { display: flex; flex-wrap: wrap; gap: 0 var(--raum-6); border-bottom: 1px solid var(--farbe-rahmen); margin-bottom: var(--raum-6); }
   .reiter a { display: inline-flex; align-items: center; gap: 8px; padding: var(--raum-3) 0; margin-bottom: -1px; border-bottom: 2px solid transparent; text-decoration: none; font-weight: 500; color: var(--farbe-text-2); white-space: nowrap; }
   .reiter a:hover { color: var(--n-900); }

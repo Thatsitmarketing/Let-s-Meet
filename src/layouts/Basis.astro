@@ -6,10 +6,13 @@ interface Props {
   beschreibung?: string;
   indexieren?: boolean;
   klasse?: string;
+  /** thatsit: Seiten ohne Let's Meet Bezug (Playbook Seite), Titel und Seitenname nur mit That's it. Marketing */
+  marke?: 'letsmeet' | 'thatsit';
 }
 
-const { titel, beschreibung = "Termin mit That's it. Marketing buchen. Direkt online, ohne Hin und Her per Mail.", indexieren = false, klasse } = Astro.props;
-const voll = titel.includes("Let's Meet") ? titel : `${titel} | Let's Meet`;
+const { titel, beschreibung = "Termin mit That's it. Marketing buchen. Direkt online, ohne Hin und Her per Mail.", indexieren = false, klasse, marke = 'letsmeet' } = Astro.props;
+const zusatz = marke === 'thatsit' ? "That's it. Marketing" : "Let's Meet";
+const voll = titel.includes(zusatz) ? titel : `${titel} | ${zusatz}`;
 ---
 <!doctype html>
 <html lang="de">
@@ -29,7 +32,7 @@ const voll = titel.includes("Let's Meet") ? titel : `${titel} | Let's Meet`;
     <meta property="og:title" content={voll} />
     <meta property="og:description" content={beschreibung} />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Let's Meet by That's it. Marketing" />
+    <meta property="og:site_name" content={marke === 'thatsit' ? "That's it. Marketing" : "Let's Meet by That's it. Marketing"} />
     <slot name="head" />
   </head>
   <body class={klasse}>
