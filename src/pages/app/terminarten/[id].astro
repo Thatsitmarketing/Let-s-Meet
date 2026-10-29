@@ -6,6 +6,7 @@ import { ausfuehren, eins } from '../../../lib/db';
 import { meldungAusUrl } from '../../../lib/meldungen';
 import { terminartAusFormular, terminartSpeichern, type TerminartWerte } from '../../../lib/terminart-formular';
 import type { Terminart } from '../../../lib/typen';
+import { ablaufWahl, zuordnungFuerTerminart } from '../../../lib/arbeitsablaeufe';
 
 const nutzer = Astro.locals.gastgeber!;
 const ta = await eins<Terminart>('SELECT * FROM terminarten WHERE id = ? AND nutzer_id = ?', Astro.params.id ?? '', nutzer.id);
@@ -13,6 +14,7 @@ if (!ta) return Astro.redirect('/app/terminarten');
 
 let werte: TerminartWerte = ta;
 let fehler: Record<string, string> = {};
+let gewaehlt: string[] | undefined;
 
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
@@ -25,25 +27,29 @@ if (Astro.request.method === 'POST') {
     if (offen?.n) {
       return Astro.redirect(`/app/terminarten/${ta.id}?fehler=${encodeURIComponent(`Es gibt noch ${offen.n} anstehende Termine dieser Art. Deaktiviere sie stattdessen oder sag die Termine vorher ab.`)}`);
     }
+    await ausfuehren('DELETE FROM arbeitsablauf_terminarten WHERE terminart_id = ?', ta.id);
     await ausfuehren('DELETE FROM terminarten WHERE id = ?', ta.id);
     return Astro.redirect('/app/terminarten?ok=geloescht');
   }
   const ergebnis = await terminartAusFormular(form, nutzer.id, ta.id);
   werte = ergebnis.werte;
   fehler = ergebnis.fehler;
+  if (form.get('ablaeufe_gesendet')) gewaehlt = form.getAll('ablaeufe').map(String);
   if (!Object.keys(fehler).length) {
     await terminartSpeichern(werte, nutzer.id, ta.id);
+    if (gewaehlt) await zuordnungFuerTerminart(nutzer.id, ta.id, gewaehlt);
     return Astro.redirect(`/app/terminarten/${ta.id}?ok=gespeichert`);
   }
 }
 const link = `${Astro.url.origin}/${ta.slug}`;
+const ablaeufe = await ablaufWahl(nutzer, ta.id, gewaehlt);
 ---
 <App titel={ta.titel} eyebrow="Terminart bearbeiten" meldung={meldungAusUrl(Astro.url)}>
   <Fragment slot="aktionen">
     <button type="button" class="knopf knopf--rahmen" data-kopieren={link}><Icon name="kopieren" />Link kopieren</button>
     <a class="knopf knopf--rahmen" href={link} target="_blank" rel="noopener"><Icon name="auge" />Ansehen</a>
   </Fragment>
-  <TerminartFormular werte={werte} fehler={fehler} neu={false} />
+  <TerminartFormular werte={werte} fehler={fehler} neu={false} ablaeufe={ablaeufe} terminartId={ta.id} />
 
   <section class="gefahr-bereich karte" aria-labelledby="loeschen-titel">
     <h2 id="loeschen-titel">Terminart löschen</h2>

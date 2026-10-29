@@ -8,6 +8,7 @@ import { trimmen } from '../../../lib/eingabe';
 import { meldungAusUrl } from '../../../lib/meldungen';
 import { formatDatumKurz, formatDatumLang, formatSpanne, formatZeit, zonenName } from '../../../lib/zeit';
 import { herkunft } from '../../../lib/herkunft';
+import { AKTIONEN, ablaeufeAusloesen, versandVonBuchung, wennText } from '../../../lib/arbeitsablaeufe';
 
 const ich = Astro.locals.nutzer!;
 const nutzer = Astro.locals.gastgeber!;
@@ -23,6 +24,11 @@ if (Astro.request.method === 'POST') {
   }
   if (aktion === 'erschienen') {
     await ausfuehren('UPDATE buchungen SET nicht_erschienen = ?, aktualisiert_am = ? WHERE id = ?', buchung.nicht_erschienen ? 0 : 1, jetztIso(), buchung.id);
+    // Arbeitsablauf „nicht erschienen“, etwa die Mail mit dem Angebot einer neuen Zeit
+    if (!buchung.nicht_erschienen) {
+      const [taX, nX] = await Promise.all([terminartNachId(buchung.terminart_id), nutzerNachId(buchung.nutzer_id)]);
+      if (taX && nX) Astro.locals.cfContext.waitUntil(ablaeufeAusloesen('nicht_erschienen', { ...buchung, nicht_erschienen: 1 }, taX, nX, basisUrl(Astro.url)));
+    }
     return Astro.redirect(`/app/termine/${buchung.id}?ok=gespeichert`);
   }
   if (aktion === 'absagen' && buchung.status === 'bestaetigt') {
@@ -46,6 +52,8 @@ try {
 } catch {
   antworten = [];
 }
+const versand = await versandVonBuchung(buchung.id);
+const VERSAND_STATUS: Record<string, string> = { gesendet: 'Gesendet', entfallen: 'Entfallen', fehler: 'Fehler' };
 const umbuchenLink = gastgeber && ta ? `${Astro.url.origin}/${ta.slug}?umbuchen=${buchung.id}` : '';
 ---
 <App titel={buchung.gast_name} eyebrow={ta?.titel ?? 'Termin'} meldung={meldungAusUrl(Astro.url)}>
@@ -88,6 +96,24 @@ const umbuchenLink = gastgeber && ta ? `${Astro.url.origin}/${ta.slug}?umbuchen=
           {buchung.nachricht && <div><dt>Nachricht</dt><dd class="vor">{buchung.nachricht}</dd></div>}
         </dl>
       </section>
+
+      {versand.length > 0 && (
+        <section class="karte block" aria-labelledby="t-ablaeufe">
+          <h2 id="t-ablaeufe" class="klein-titel">Arbeitsabläufe</h2>
+          <ul class="versand" role="list">
+            {versand.map((v) => (
+              <li>
+                <span class="versand-text"><strong>{v.name}</strong><span class="leise klein">{wennText(v)} · {AKTIONEN.find((x) => x.wert === v.aktion)?.text}</span></span>
+                <span class="versand-wann">
+                  <span class:list={['pille', { 'pille--erfolg': v.status === 'gesendet', 'pille--fehler': v.status === 'fehler' }]}>{VERSAND_STATUS[v.status] ?? v.status}</span>
+                  <span class="leise klein">{formatDatumKurz(v.gesendet_am, tz)}, {formatZeit(v.gesendet_am, tz)} Uhr</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p class="hilfe"><a href="/app/arbeitsablaeufe">Arbeitsabläufe verwalten</a></p>
+        </section>
+      )}
 
       <section class="karte block" aria-labelledby="t-notiz">
         <h2 id="t-notiz" class="klein-titel">Interne Notiz</h2>
@@ -146,6 +172,10 @@ const umbuchenLink = gastgeber && ta ? `${Astro.url.origin}/${ta.slug}?umbuchen=
   .liste dd { margin: 0; overflow-wrap: anywhere; }
   .vor { white-space: pre-wrap; }
   .umbruch { word-break: break-all; }
+  .versand { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--farbe-rahmen); }
+  .versand li { display: flex; justify-content: space-between; gap: var(--raum-4); padding: var(--raum-3) 0; border-bottom: 1px solid var(--farbe-rahmen); flex-wrap: wrap; }
+  .versand-text { display: grid; gap: 2px; min-width: 0; }
+  .versand-wann { display: flex; gap: var(--raum-2); align-items: center; flex-wrap: wrap; }
   .notiz { display: grid; gap: var(--raum-3); justify-items: start; }
   .absagen form { display: grid; gap: var(--raum-4); }
   @media (max-width: 960px) {

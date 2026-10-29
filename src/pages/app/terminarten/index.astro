@@ -24,6 +24,7 @@ if (Astro.request.method === 'POST') {
       let slug = `${ta.slug}-kopie`;
       for (let i = 2; slugs.has(slug); i++) slug = `${ta.slug}-kopie-${i}`;
       const jetzt = jetztIso();
+      const kopie = neueId();
       await db()
         .prepare(
           `INSERT INTO terminarten (id, nutzer_id, slug, titel, beschreibung, dauer_min, farbe, ort_typ, ort_wert, puffer_vor_min, puffer_nach_min,
@@ -32,8 +33,13 @@ if (Astro.request.method === 'POST') {
             vorlauf_min, max_tage_voraus, raster_min, max_pro_tag, fragen, unterlagen, erinnerung_std, erinnerungen, bestaetigung_text, weiterleitung_url, 0, geheim, reihenfolge + 1, ?, ?
            FROM terminarten WHERE id = ?`,
         )
-        .bind(neueId(), slug, jetzt, jetzt, id)
+        .bind(kopie, slug, jetzt, jetzt, id)
         .run();
+      // Arbeitsabläufe der Vorlage gelten auch für die Kopie
+      await ausfuehren(
+        'INSERT OR IGNORE INTO arbeitsablauf_terminarten (arbeitsablauf_id, terminart_id) SELECT arbeitsablauf_id, ? FROM arbeitsablauf_terminarten WHERE terminart_id = ?',
+        kopie, id,
+      );
       return Astro.redirect('/app/terminarten?ok=dupliziert');
     }
   }

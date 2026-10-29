@@ -1,0 +1,79 @@
+---
+import App from '../../../layouts/App.astro';
+import Icon from '../../../components/ui/Icon.astro';
+import ArbeitsablaufFormular from '../../../components/ArbeitsablaufFormular.astro';
+import { terminartenVon } from '../../../lib/abfragen';
+import {
+  ablaufAusFormular, ablaufDuplizieren, ablaufLoeschen, ablaufNachId, ablaufSpeichern, ablaufTesten, giltFuer,
+  type ArbeitsablaufWerte,
+} from '../../../lib/arbeitsablaeufe';
+import { basisUrl } from '../../../lib/buchungen';
+import { meldungAusUrl } from '../../../lib/meldungen';
+
+const ich = Astro.locals.nutzer!;
+const nutzer = Astro.locals.gastgeber!;
+const ablauf = await ablaufNachId(nutzer.id, Astro.params.id ?? '');
+if (!ablauf) return Astro.redirect('/app/arbeitsablaeufe');
+const terminarten = await terminartenVon(nutzer.id);
+
+let werte: ArbeitsablaufWerte = ablauf;
+let fehler: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const aktion = String(form.get('aktion_formular') ?? '');
+  if (aktion === 'loeschen') {
+    await ablaufLoeschen(nutzer.id, ablauf.id);
+    return Astro.redirect('/app/arbeitsablaeufe?ok=geloescht');
+  }
+  if (aktion === 'duplizieren') {
+    const neu = await ablaufDuplizieren(nutzer.id, ablauf.id);
+    return Astro.redirect(`/app/arbeitsablaeufe/${neu}?ok=dupliziert`);
+  }
+  const ergebnis = ablaufAusFormular(form, terminarten.map((t) => t.id));
+  werte = ergebnis.werte;
+  fehler = ergebnis.fehler;
+  if (!Object.keys(fehler).length) {
+    await ablaufSpeichern(nutzer.id, werte, ablauf.id);
+    if (aktion === 'testen') {
+      // Testmail mit Beispieldaten an die angemeldete Person, Termindaten aus der ersten passenden Terminart
+      const gespeichert = (await ablaufNachId(nutzer.id, ablauf.id))!;
+      const ta = terminarten.find((t) => giltFuer(gespeichert, t.id)) ?? terminarten[0];
+      if (!ta) return Astro.redirect(`/app/arbeitsablaeufe/${ablauf.id}?fehler=${encodeURIComponent('Für die Testmail braucht es mindestens eine Terminart.')}`);
+      try {
+        await ablaufTesten(gespeichert, nutzer, ta, ich.email, basisUrl(Astro.url));
+      } catch (f) {
+        console.error('Testmail fehlgeschlagen', f);
+        return Astro.redirect(`/app/arbeitsablaeufe/${ablauf.id}?fehler=${encodeURIComponent(`Gespeichert, aber die Testmail ging nicht raus: ${String(f instanceof Error ? f.message : f).slice(0, 140)}`)}`);
+      }
+      return Astro.redirect(`/app/arbeitsablaeufe/${ablauf.id}?ok=test&an=${encodeURIComponent(ich.email)}`);
+    }
+    return Astro.redirect(`/app/arbeitsablaeufe/${ablauf.id}?ok=gespeichert`);
+  }
+}
+const an = Astro.url.searchParams.get('an');
+const meldung = Astro.url.searchParams.get('ok') === 'test'
+  ? { art: 'erfolg' as const, text: `Gespeichert. Die Testmail mit Beispieldaten ist an ${an ?? ich.email} unterwegs.` }
+  : meldungAusUrl(Astro.url);
+---
+<App titel={ablauf.name} eyebrow="Arbeitsablauf bearbeiten" meldung={meldung}>
+  <Fragment slot="aktionen">
+    <form method="post">
+      <button class="knopf knopf--rahmen" name="aktion_formular" value="duplizieren"><Icon name="kopieren" />Duplizieren</button>
+    </form>
+  </Fragment>
+  <ArbeitsablaufFormular werte={werte} fehler={fehler} neu={false} terminarten={terminarten} bueroEmail={nutzer.email} />
+
+  <section class="gefahr-bereich karte" aria-labelledby="loeschen-titel">
+    <h2 id="loeschen-titel">Arbeitsablauf löschen</h2>
+    <p class="leise">Danach gehen keine Mails aus diesem Ablauf mehr raus. Willst du ihn nur pausieren, schalte „Aktiv“ aus.</p>
+    <form method="post" data-rueckfrage={`Arbeitsablauf „${ablauf.name}“ wirklich löschen?`}>
+      <button class="knopf knopf--gefahr" name="aktion_formular" value="loeschen"><Icon name="loeschen" />Arbeitsablauf löschen</button>
+    </form>
+  </section>
+</App>
+
+<style>
+  .gefahr-bereich { display: grid; gap: var(--raum-3); justify-items: start; padding: var(--raum-6); margin-top: var(--raum-8); }
+  .gefahr-bereich h2 { font-size: var(--text-h3); }
+</style>

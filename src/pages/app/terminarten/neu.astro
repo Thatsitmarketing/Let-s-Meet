@@ -1,22 +1,28 @@
 ---
 import App from '../../../layouts/App.astro';
 import TerminartFormular from '../../../components/TerminartFormular.astro';
+import { ablaufWahl, zuordnungFuerTerminart } from '../../../lib/arbeitsablaeufe';
 import { STANDARD, terminartAusFormular, terminartSpeichern, type TerminartWerte } from '../../../lib/terminart-formular';
 
 const nutzer = Astro.locals.gastgeber!;
 let werte: TerminartWerte = { ...STANDARD };
 let fehler: Record<string, string> = {};
+let gewaehlt: string[] | undefined;
 
 if (Astro.request.method === 'POST') {
-  const ergebnis = await terminartAusFormular(await Astro.request.formData(), nutzer.id);
+  const form = await Astro.request.formData();
+  const ergebnis = await terminartAusFormular(form, nutzer.id);
   werte = ergebnis.werte;
   fehler = ergebnis.fehler;
+  if (form.get('ablaeufe_gesendet')) gewaehlt = form.getAll('ablaeufe').map(String);
   if (!Object.keys(fehler).length) {
-    await terminartSpeichern(werte, nutzer.id);
+    const id = await terminartSpeichern(werte, nutzer.id);
+    if (gewaehlt) await zuordnungFuerTerminart(nutzer.id, id, gewaehlt);
     return Astro.redirect('/app/terminarten?ok=angelegt');
   }
 }
+const ablaeufe = await ablaufWahl(nutzer, undefined, gewaehlt);
 ---
 <App titel="Neue Terminart" eyebrow="Terminarten">
-  <TerminartFormular werte={werte} fehler={fehler} neu />
+  <TerminartFormular werte={werte} fehler={fehler} neu ablaeufe={ablaeufe} />
 </App>

@@ -61,9 +61,9 @@ export interface Terminart {
   max_pro_tag: number | null;
   fragen: string;
   unterlagen: string;
-  /** Veraltet, ersetzt durch erinnerungen */
+  /** Veraltet, Erinnerungen laufen über Arbeitsabläufe */
   erinnerung_std: number;
-  /** JSON Liste: Minuten vor Terminbeginn, zu denen der Gast erinnert wird */
+  /** Veraltet seit 0008, Erinnerungen laufen über Arbeitsabläufe */
   erinnerungen: string;
   bestaetigung_text: string | null;
   weiterleitung_url: string | null;
@@ -97,9 +97,9 @@ export interface Buchung {
   ort_text: string | null;
   meeting_url: string | null;
   google_event_id: string | null;
-  /** Veraltet, ersetzt durch erinnerungen_gesendet */
+  /** Veraltet, ersetzt durch arbeitsablauf_versand */
   erinnerung_gesendet: number;
-  /** JSON Liste der schon versendeten Erinnerungen (Minuten) */
+  /** Veraltet seit 0008, ersetzt durch arbeitsablauf_versand */
   erinnerungen_gesendet: string;
   quelle: string | null;
   loeschen_ab: string;
@@ -121,18 +121,6 @@ export interface Kontakt {
   erstellt_am: string;
   aktualisiert_am: string;
 }
-
-/** Auswahl für Erinnerungsmails an den Gast, Werte in Minuten vor Terminbeginn */
-export const ERINNERUNG_OPTIONEN: { min: number; text: string }[] = [
-  { min: 10080, text: '7 Tage' },
-  { min: 2880, text: '48 Stunden' },
-  { min: 1440, text: '24 Stunden' },
-  { min: 720, text: '12 Stunden' },
-  { min: 240, text: '4 Stunden' },
-  { min: 120, text: '2 Stunden' },
-  { min: 60, text: '1 Stunde' },
-  { min: 30, text: '30 Minuten' },
-];
 
 export interface Regel {
   wochentag: number;
