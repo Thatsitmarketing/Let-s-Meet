@@ -1,0 +1,51 @@
+---
+import type { KontaktWerte } from '../lib/kontakte';
+
+interface Props {
+  werte: KontaktWerte;
+  fehler: Record<string, string>;
+  neu?: boolean;
+  abbrechen: string;
+}
+const { werte: w, fehler, neu, abbrechen } = Astro.props;
+const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, 'aria-describedby': `fehler-${name}` } : {});
+---
+<form method="post" class="kontakt-formular" novalidate>
+  <input type="hidden" name="aktion" value="speichern" />
+  {fehler.doppelt && <p class="hinweis hinweis--fehler" role="alert" set:html={fehler.doppelt} />}
+  <div class="feld">
+    <label for="name">Name</label>
+    <input id="name" name="name" class="eingabe" required maxlength="120" autocomplete="off" value={w.name} {...f('name')} />
+    {fehler.name && <p class="fehlertext" id="fehler-name">{fehler.name}</p>}
+  </div>
+  <div class="zwei">
+    <div class="feld">
+      <label for="email">E Mail<span class="leise"> (optional)</span></label>
+      <input id="email" name="email" type="email" class="eingabe" maxlength="180" autocomplete="off" value={w.email} {...f('email')} />
+      {fehler.email && <p class="fehlertext" id="fehler-email">{fehler.email}</p>}
+    </div>
+    <div class="feld">
+      <label for="telefon">Telefon<span class="leise"> (optional)</span></label>
+      <input id="telefon" name="telefon" type="tel" class="eingabe" maxlength="40" autocomplete="off" value={w.telefon} {...f('telefon')} />
+      {fehler.telefon && <p class="fehlertext" id="fehler-telefon">{fehler.telefon}</p>}
+    </div>
+  </div>
+  <div class="feld">
+    <label for="unternehmen">Unternehmen<span class="leise"> (optional)</span></label>
+    <input id="unternehmen" name="unternehmen" class="eingabe" maxlength="160" autocomplete="off" value={w.unternehmen} />
+  </div>
+  <div class="feld">
+    <label for="notiz">Interne Notiz<span class="leise"> (optional)</span></label>
+    <textarea id="notiz" name="notiz" class="textfeld" maxlength="5000" placeholder="Nur für euch sichtbar">{w.notiz}</textarea>
+  </div>
+  <div class="leiste">
+    <a class="knopf knopf--leise" href={abbrechen}>Abbrechen</a>
+    <button type="submit" class="knopf knopf--orange">{neu ? 'Kontakt anlegen' : 'Speichern'}</button>
+  </div>
+</form>
+
+<style>
+  .kontakt-formular { display: grid; gap: var(--raum-4); }
+  .zwei { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--raum-4); }
+  .leiste { display: flex; justify-content: flex-end; gap: var(--raum-2); flex-wrap: wrap; padding-top: var(--raum-2); }
+</style>

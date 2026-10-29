@@ -1,6 +1,7 @@
 ---
 import Icon from './ui/Icon.astro';
-import { FARBEN, ORT_LABEL, type OrtTyp } from '../lib/typen';
+import { ERINNERUNG_OPTIONEN, FARBEN, ORT_LABEL, type OrtTyp } from '../lib/typen';
+import { erinnerungenLesen } from '../lib/abfragen';
 import type { TerminartWerte } from '../lib/terminart-formular';
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 const { werte: w, fehler, neu } = Astro.props;
 const host = Astro.url.host;
 const dauern = [15, 30, 45, 60, 90, 120];
+const erinnerungen = erinnerungenLesen(w);
 const ortTypen = Object.keys(ORT_LABEL) as OrtTyp[];
 const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, 'aria-describedby': `fehler-${name}` } : {});
 ---
@@ -152,13 +154,16 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
       <label for="bestaetigung_text">Zusatztext in der Bestätigungsmail<span class="leise"> (optional)</span></label>
       <textarea id="bestaetigung_text" name="bestaetigung_text" class="textfeld" maxlength="2000" placeholder="z. B. was der Gast vorbereiten soll">{w.bestaetigung_text}</textarea>
     </div>
-    <div class="zwei">
-      <div class="feld">
-        <label for="erinnerung_std">Erinnerungsmail an den Gast</label>
-        <select id="erinnerung_std" name="erinnerung_std" class="auswahl">
-          {[0, 1, 2, 4, 24, 48].map((s) => <option value={s} selected={w.erinnerung_std === s}>{s === 0 ? 'Keine Erinnerung' : `${s} ${s === 1 ? 'Stunde' : 'Stunden'} vorher`}</option>)}
-        </select>
+    <fieldset class="feld">
+      <legend class="feld-label">Erinnerungsmails an den Gast</legend>
+      <p class="hilfe">Wähl beliebig viele. Jede geht so lange vor Beginn raus, wie angegeben. Bucht jemand kurzfristiger, entfällt die frühere Erinnerung. Nichts gewählt bedeutet keine Erinnerung.</p>
+      <div class="chips">
+        {ERINNERUNG_OPTIONEN.map((o) => (
+          <label class="chip"><input type="checkbox" name="erinnerungen" value={o.min} checked={erinnerungen.includes(o.min)} /><span>{o.text} vorher</span></label>
+        ))}
       </div>
+    </fieldset>
+    <div class="zwei">
       <div class="feld">
         <label for="weiterleitung_url">Weiterleitung nach Buchung<span class="leise"> (optional)</span></label>
         <input id="weiterleitung_url" name="weiterleitung_url" type="url" class="eingabe" maxlength="500" placeholder="https://thatsit.marketing/danke" value={w.weiterleitung_url ?? ''} {...f('weiterleitung_url')} />

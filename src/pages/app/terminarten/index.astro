@@ -27,9 +27,9 @@ if (Astro.request.method === 'POST') {
       await db()
         .prepare(
           `INSERT INTO terminarten (id, nutzer_id, slug, titel, beschreibung, dauer_min, farbe, ort_typ, ort_wert, puffer_vor_min, puffer_nach_min,
-            vorlauf_min, max_tage_voraus, raster_min, max_pro_tag, fragen, unterlagen, erinnerung_std, bestaetigung_text, weiterleitung_url, aktiv, geheim, reihenfolge, erstellt_am, aktualisiert_am)
+            vorlauf_min, max_tage_voraus, raster_min, max_pro_tag, fragen, unterlagen, erinnerung_std, erinnerungen, bestaetigung_text, weiterleitung_url, aktiv, geheim, reihenfolge, erstellt_am, aktualisiert_am)
            SELECT ?, nutzer_id, ?, titel || ' (Kopie)', beschreibung, dauer_min, farbe, ort_typ, ort_wert, puffer_vor_min, puffer_nach_min,
-            vorlauf_min, max_tage_voraus, raster_min, max_pro_tag, fragen, unterlagen, erinnerung_std, bestaetigung_text, weiterleitung_url, 0, geheim, reihenfolge + 1, ?, ?
+            vorlauf_min, max_tage_voraus, raster_min, max_pro_tag, fragen, unterlagen, erinnerung_std, erinnerungen, bestaetigung_text, weiterleitung_url, 0, geheim, reihenfolge + 1, ?, ?
            FROM terminarten WHERE id = ?`,
         )
         .bind(neueId(), slug, jetzt, jetzt, id)
@@ -43,6 +43,11 @@ if (Astro.request.method === 'POST') {
 const arten = await terminartenVon(nutzer.id);
 const basis = Astro.url.origin;
 const kurztext = (t: string | null) => (t ?? '').replace(/\s+/g, ' ').trim();
+// Aktive oben, ausgeschaltete automatisch darunter in einem eigenen Abschnitt
+const gruppen = [
+  { id: 'aktiv', titel: 'Aktiv', hilfe: 'Buchbar über ihren Link.', liste: arten.filter((t) => t.aktiv) },
+  { id: 'inaktiv', titel: 'Nicht aktiv', hilfe: 'Ausgeschaltet, niemand kann sie buchen. Mit dem Schalter wieder aktivieren.', liste: arten.filter((t) => !t.aktiv) },
+].filter((g) => g.liste.length > 0);
 ---
 <App titel="Terminarten" eyebrow={`${basis.replace(/^https?:\/\//, '')}`} meldung={meldungAusUrl(Astro.url)}>
   <Fragment slot="aktionen">
@@ -57,8 +62,15 @@ const kurztext = (t: string | null) => (t ?? '').replace(/\s+/g, ' ').trim();
       <a class="knopf knopf--orange" href="/app/terminarten/neu"><Icon name="plus" />Erste Terminart anlegen</a>
     </div>
   ) : (
+    <div class="gruppen">
+    {gruppen.map((g) => (
+    <section class:list={['gruppe', `gruppe--${g.id}`]} aria-labelledby={`gruppe-${g.id}`}>
+      <header class="gruppe-kopf">
+        <h2 id={`gruppe-${g.id}`}>{g.titel}<span class="anzahl">{g.liste.length}</span></h2>
+        <p class="leise klein">{g.hilfe}</p>
+      </header>
     <ul class="raster" role="list">
-      {arten.map((ta) => (
+      {g.liste.map((ta) => (
         <li class:list={['art', 'karte', { inaktiv: !ta.aktiv }]} style={`--farbe:${ta.farbe}`}>
           <div class="art-kopf">
             <form method="post">
@@ -92,11 +104,21 @@ const kurztext = (t: string | null) => (t ?? '').replace(/\s+/g, ' ').trim();
         </li>
       ))}
     </ul>
+    </section>
+    ))}
+    </div>
   )}
 </App>
 
 <style>
   .leer { padding: var(--raum-12); display: grid; gap: var(--raum-4); justify-items: start; }
+  .gruppen { display: grid; gap: var(--raum-8); }
+  .gruppe { display: grid; gap: var(--raum-4); }
+  .gruppe--inaktiv { padding-top: var(--raum-8); border-top: 1px solid var(--farbe-rahmen); }
+  .gruppe-kopf { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--raum-2) var(--raum-4); }
+  .gruppe-kopf h2 { display: inline-flex; align-items: center; gap: var(--raum-3); font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-h4); letter-spacing: 0; }
+  .anzahl { display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 8px; background: var(--n-100); font-size: var(--text-sm); font-weight: 600; border-radius: 999px; }
+  .gruppe--aktiv .anzahl { background: var(--n-900); color: var(--farbe-papier); }
   .raster { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: var(--raum-4); }
   @media (min-width: 700px) { .raster { grid-template-columns: repeat(2, 1fr); } }
   @media (min-width: 1200px) { .raster { grid-template-columns: repeat(4, 1fr); } }

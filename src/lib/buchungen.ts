@@ -3,10 +3,12 @@
  * speichern, Google Termin anlegen, dann Mails und Webhook im Hintergrund.
  */
 import { env } from 'cloudflare:workers';
+import { erinnerungenLesen } from './abfragen';
 import { alle, ausfuehren, eins, jetztIso, neueId } from './db';
 import { googleAbgleichBuero, googleTerminAnlegen, googleTerminLoeschen } from './google';
 import { icsDatei } from './ics';
 import { herkunft } from './herkunft';
+import { kontaktAusBuchung } from './kontakte';
 import { base64Utf8, mailErinnerung, mailGastBestaetigung, mailGastgeberNeu, mailSenden, mailStorno, type TerminDetails } from './mail';
 import { ORT_LABEL, type Buchung, type Nutzer, type Terminart } from './typen';
 import { formatDatumLang, formatSpanne, zonenName } from './zeit';
@@ -162,6 +164,9 @@ export async function buchungAnlegen(e: {
     throw new SlotVergeben();
   }
 
+  // Gast ins Kontaktbuch, ein Fehler dort darf die Buchung nicht verhindern
+  await kontaktAusBuchung(n.id, e.gastName, e.gastEmail, e.gastTelefon).catch((f) => console.error('Kontakt nicht gespeichert', f));
+
   // Alte Buchung beim Umbuchen still beenden, Google Termin der alten Buchung entfernen
   if (e.umbuchenVon) {
     await ausfuehren(
@@ -301,44 +306,67 @@ export async function buchungAbsagen(e: {
   );
 }
 
+/** Abstand bis zum Termin in Worten, passend zum Cron Takt von zehn Minuten */
+function wannRelativ(restMin: number) {
+  if (restMin <= 40) return 'gleich';
+  if (restMin <= 90) return 'in einer Stunde';
+  const stunden = Math.round(restMin / 60);
+  if (stunden < 36) return `in ${stunden} Stunden`;
+  return `in ${Math.round(restMin / 1440)} Tagen`;
+}
+
 /** Erinnerungen versenden, abgelaufene Daten löschen und den Google Kalender abgleichen. Läuft per Cron alle zehn Minuten. */
 export async function cronLauf() {
   const basis = basisUrl();
   const jetzt = Date.now();
-  const faellig = await alle<Buchung & { erinnerung_std: number }>(
-    `SELECT b.*, t.erinnerung_std FROM buchungen b JOIN terminarten t ON t.id = b.terminart_id
-     WHERE b.status = 'bestaetigt' AND b.erinnerung_gesendet = 0 AND t.erinnerung_std > 0
+  // Alle bestätigten Buchungen der nächsten sieben Tage (längste Erinnerung), deren Terminart erinnert
+  const faellig = await alle<Buchung & { erinnerungen: string; erinnerung_std: number }>(
+    `SELECT b.*, t.erinnerungen, t.erinnerung_std FROM buchungen b JOIN terminarten t ON t.id = b.terminart_id
+     WHERE b.status = 'bestaetigt' AND t.erinnerungen != '[]'
        AND b.start_utc > ? AND b.start_utc <= ?`,
     new Date(jetzt).toISOString(),
-    new Date(jetzt + 48 * 3600_000).toISOString(),
+    new Date(jetzt + 7 * 86_400_000 + 3600_000).toISOString(),
   );
   let versendet = 0;
   for (const b of faellig) {
     const startMs = Date.parse(b.start_utc);
     const gebuchtMs = Date.parse(b.erstellt_am);
-    // Nur erinnern, wenn das Zeitfenster erreicht ist und die Buchung nicht ohnehin kurz vorher erfolgte
-    if (startMs - jetzt > b.erinnerung_std * 3600_000) continue;
-    if (startMs - gebuchtMs < b.erinnerung_std * 3600_000) {
-      await ausfuehren('UPDATE buchungen SET erinnerung_gesendet = 1 WHERE id = ?', b.id);
+    const restMin = (startMs - jetzt) / 60_000;
+    let gesendet: number[] = [];
+    try {
+      gesendet = (JSON.parse(b.erinnerungen_gesendet || '[]') as unknown[]).map(Number);
+    } catch {
+      gesendet = [];
+    }
+    // Fällig sind alle Erinnerungen, deren Zeitpunkt erreicht ist und die noch nicht raus sind
+    const offen = erinnerungenLesen(b).filter((m) => !gesendet.includes(m) && restMin <= m);
+    if (offen.length === 0) continue;
+    // Bei einer kurzfristigen Buchung entfallen Erinnerungen, die schon vor der Buchung fällig gewesen wären.
+    // Sind mehrere gleichzeitig fällig (etwa nach einem Ausfall), geht nur die kürzeste raus.
+    const sinnvoll = offen.filter((m) => startMs - gebuchtMs >= m * 60_000);
+    const erledigt = JSON.stringify([...gesendet, ...offen]);
+    if (sinnvoll.length === 0) {
+      await ausfuehren('UPDATE buchungen SET erinnerungen_gesendet = ?, erinnerung_gesendet = 1 WHERE id = ?', erledigt, b.id);
       continue;
     }
     const ta = await eins<Terminart>('SELECT * FROM terminarten WHERE id = ?', b.terminart_id);
     const n = await eins<Nutzer>('SELECT * FROM nutzer WHERE id = ?', b.nutzer_id);
     if (!ta || !n) continue;
-    const stunden = Math.round((startMs - jetzt) / 3600_000);
     try {
       await mailSenden({
         an: b.gast_email,
         antwortAn: n.email,
-        betreff: `Erinnerung: ${ta.titel} am ${formatDatumLang(b.start_utc, b.gast_zeitzone)}`,
+        betreff: restMin <= 90
+          ? `Erinnerung: ${ta.titel} ${wannRelativ(restMin)}`
+          : `Erinnerung: ${ta.titel} am ${formatDatumLang(b.start_utc, b.gast_zeitzone)}`,
         html: mailErinnerung(basis, {
           ...terminDetails(b, ta, n, b.gast_zeitzone),
           gastName: b.gast_name,
           verwaltenUrl: `${basis}/termin/${b.id}`,
-          wannRelativ: stunden <= 1 ? 'gleich' : stunden < 30 ? `in ${stunden} Stunden` : 'bald',
+          wannRelativ: wannRelativ(restMin),
         }),
       });
-      await ausfuehren('UPDATE buchungen SET erinnerung_gesendet = 1 WHERE id = ?', b.id);
+      await ausfuehren('UPDATE buchungen SET erinnerungen_gesendet = ?, erinnerung_gesendet = 1 WHERE id = ?', erledigt, b.id);
       versendet++;
     } catch (fehler) {
       console.error('Erinnerung fehlgeschlagen', b.id, fehler);

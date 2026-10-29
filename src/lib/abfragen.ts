@@ -47,6 +47,19 @@ export function unterlagenLesen(ta: Pick<Terminart, 'unterlagen'>): Unterlage[] 
   }
 }
 
+/** Erinnerungen einer Terminart in Minuten, größte zuerst. Ohne Spalte (alter Stand) gilt erinnerung_std. */
+export function erinnerungenLesen(ta: Pick<Terminart, 'erinnerungen' | 'erinnerung_std'>): number[] {
+  let roh: unknown = [];
+  try {
+    roh = JSON.parse(ta.erinnerungen ?? 'null') ?? (ta.erinnerung_std > 0 ? [ta.erinnerung_std * 60] : []);
+  } catch {
+    roh = [];
+  }
+  if (!Array.isArray(roh)) return [];
+  const minuten = roh.map(Number).filter((m) => Number.isInteger(m) && m >= 10 && m <= 10080);
+  return [...new Set(minuten)].sort((a, b) => b - a);
+}
+
 export function initialen(name: string) {
   return name
     .split(/\s+/)
