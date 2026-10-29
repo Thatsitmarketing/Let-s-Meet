@@ -12,6 +12,7 @@ const MARKE = {
   name: "That's it. Marketing",
   schwarz: '#0E0E0E',
   orange: '#DC9832',
+  gruen: '#2F8F5F',
   papier: '#FFFFFF',
   grau: '#6E6E6E',
   linie: '#E5E5E3',
@@ -89,9 +90,13 @@ function absatz(html: string) {
   return `<p style="margin:0 0 14px;">${html}</p>`;
 }
 
-function knopf(href: string, text: string, art: 'orange' | 'schwarz' | 'rahmen' = 'schwarz') {
+export type KnopfArt = 'orange' | 'gruen' | 'schwarz' | 'rahmen';
+
+function knopf(href: string, text: string, art: KnopfArt = 'schwarz') {
   const stil =
-    art === 'orange'
+    art === 'gruen'
+      ? `background:${MARKE.gruen};color:#FFFFFF;border:2px solid ${MARKE.gruen};`
+      : art === 'orange'
       ? `background:${MARKE.orange};color:${MARKE.schwarz};border:2px solid ${MARKE.orange};`
       : art === 'schwarz'
         ? `background:${MARKE.schwarz};color:#FFFFFF;border:2px solid ${MARKE.schwarz};`
@@ -144,7 +149,7 @@ ${absatz(`Hallo ${m(d.gastName)},`)}
 ${absatz(d.umgebucht ? 'du hast deinen Termin verschoben. Hier sind die neuen Daten. Die Kalenderdatei im Anhang ersetzt den alten Eintrag.' : 'danke für deine Buchung. Hier sind alle Daten auf einen Blick. Die Kalenderdatei im Anhang kannst du direkt übernehmen.')}
 ${details(d)}
 ${d.zusatz ? absatz(m(d.zusatz).replace(/\n/g, '<br>')) : ''}
-${d.meetingUrl ? knopf(d.meetingUrl, 'Zum Meeting', 'orange') : ''}${knopf(d.verwaltenUrl, 'Umbuchen oder absagen', 'rahmen')}
+${d.meetingUrl ? knopf(d.meetingUrl, 'Zum Meeting', 'gruen') : ''}${knopf(d.verwaltenUrl, 'Umbuchen oder absagen', 'rahmen')}
 ${absatz(`<span style="font-size:13px;color:${MARKE.grau};">Fragen vorab? Antworte einfach auf diese Mail.</span>`)}`,
   );
 }
@@ -202,7 +207,7 @@ export function textAlsHtml(text: string) {
 /** Mail aus einem Arbeitsablauf. Text kommt vom Team, Termindaten und Knöpfe ergänzen wir automatisch. */
 export function mailArbeitsablauf(
   basis: string,
-  d: { vorschau: string; eyebrow: string; ueberschrift: string; text: string; details: TerminDetails | null; knoepfe: { href: string; text: string; art: 'orange' | 'schwarz' | 'rahmen' }[] },
+  d: { vorschau: string; eyebrow: string; ueberschrift: string; text: string; details: TerminDetails | null; knoepfe: { href: string; text: string; art: KnopfArt }[] },
 ) {
   return rahmen(
     basis,

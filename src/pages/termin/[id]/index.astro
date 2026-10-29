@@ -60,9 +60,9 @@ const kalDaten = {
 
     {!storniert && (
       <>
-        {buchung.meeting_url && !vorbei && <a class="knopf knopf--orange" href={buchung.meeting_url} target="_blank" rel="noopener"><Icon name="video" />Zum Meeting</a>}
+        {buchung.meeting_url && !vorbei && <a class="knopf knopf--gruen" href={buchung.meeting_url} target="_blank" rel="noopener"><Icon name="video" />Zum Meeting</a>}
         <section class="kalender-links" aria-labelledby="kal-titel">
-          <h2 id="kal-titel" class="klein-titel">In deinen Kalender</h2>
+          <h2 id="kal-titel" class="klein-titel">Zu deinem Kalender hinzufügen</h2>
           <div class="reihe">
             <a class="knopf knopf--rahmen knopf--klein" href={googleKalenderLink(kalDaten)} target="_blank" rel="noopener">Google</a>
             <a class="knopf knopf--rahmen knopf--klein" href={outlookKalenderLink(kalDaten)} target="_blank" rel="noopener">Outlook</a>
@@ -116,6 +116,14 @@ const kalDaten = {
   .durch { text-decoration: line-through; color: var(--farbe-text-leise); }
   .klein-titel { font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-base); letter-spacing: 0; margin-bottom: var(--raum-3); }
   .reihe { display: flex; flex-wrap: wrap; gap: var(--raum-2); }
+  /* Knöpfe hier in Montserrat statt gesperrter Versalien, ruhiger zu lesen */
+  .bestaetigung .knopf {
+    font-family: var(--schrift-text);
+    font-weight: 600;
+    font-size: 0.9375rem;
+    letter-spacing: 0;
+    text-transform: none;
+  }
   .kalender-links, .verwalten { width: 100%; }
   .kontakt { border-top: 1px solid var(--farbe-rahmen); padding-top: var(--raum-4); width: 100%; }
 </style>

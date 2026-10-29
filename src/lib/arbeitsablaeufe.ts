@@ -6,7 +6,7 @@
  */
 import { alle, ausfuehren, db, eins, jetztIso, neueId } from './db';
 import { emailGueltig, trimmen } from './eingabe';
-import { mailArbeitsablauf, mailSenden, terminDetailsVon } from './mail';
+import { mailArbeitsablauf, mailSenden, terminDetailsVon, type KnopfArt } from './mail';
 import { ORT_LABEL, type Buchung, type Nutzer, type Terminart } from './typen';
 import { formatDatumLang, formatZeit } from './zeit';
 
@@ -356,10 +356,10 @@ export async function ablaufMailSenden(a: Arbeitsablauf, b: Buchung, ta: Termina
   const an = anTest ?? (gast ? b.gast_email : a.aktion === 'mail_buero' ? n.email : empfaengerLesen(a.empfaenger));
   if (Array.isArray(an) && an.length === 0) throw new Error('Keine Empfänger hinterlegt');
   const vorbei = Date.parse(b.start_utc) < Date.now();
-  const knoepfe: { href: string; text: string; art: 'orange' | 'schwarz' | 'rahmen' }[] = [];
+  const knoepfe: { href: string; text: string; art: KnopfArt }[] = [];
   if (!gast) knoepfe.push({ href: `${basis}/app/termine/${b.id}`, text: 'Im Backoffice öffnen', art: 'schwarz' });
   else if (b.status === 'bestaetigt' && !vorbei && (a.ausloeser === 'nach_buchung' || a.ausloeser === 'vor_beginn')) {
-    if (b.meeting_url) knoepfe.push({ href: b.meeting_url, text: 'Zum Meeting', art: 'orange' });
+    if (b.meeting_url) knoepfe.push({ href: b.meeting_url, text: 'Zum Meeting', art: 'gruen' });
     knoepfe.push({ href: `${basis}/termin/${b.id}`, text: 'Umbuchen oder absagen', art: 'rahmen' });
   } else if (a.ausloeser !== 'nach_buchung' && a.ausloeser !== 'vor_beginn') {
     knoepfe.push({ href: `${basis}/${ta.slug}`, text: 'Neuen Termin buchen', art: 'orange' });

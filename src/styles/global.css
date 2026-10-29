@@ -216,6 +216,12 @@ a:hover {
   box-shadow: var(--schatten-orange);
 }
 
+.knopf--gruen {
+  --knopf-hg: var(--farbe-erfolg);
+  --knopf-text: var(--farbe-papier);
+  --knopf-rand: var(--farbe-erfolg);
+}
+
 .knopf--rahmen {
   --knopf-hg: transparent;
   --knopf-text: var(--n-900);
