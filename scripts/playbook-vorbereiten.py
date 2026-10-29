@@ -14,12 +14,14 @@ Braucht nur Python 3.10 oder neuer mit drei Paketen, läuft auf Windows, Mac und
     pip install pikepdf pymupdf pillow
 
 Cloudflare liefert höchstens 25 MiB je Datei aus. Liegt die PDF über ZIEL_MB, werden die Bilder
-darin schrittweise verkleinert und neu als JPEG gespeichert, bis sie passt. Text, Schriften und
-Links der PDF bleiben dabei erhalten. Die Originaldatei wird nicht verändert und gehört nicht ins Repo.
+darin schrittweise verkleinert und neu als JPEG gespeichert, bis sie passt. Bei Bildern mit
+Transparenz (etwa freigestellte Handys) wird nur die Farbe JPEG, die Transparenz bleibt verlustfrei.
+Text, Schriften und Links der PDF bleiben dabei erhalten. Die Originaldatei wird nicht verändert und gehört nicht ins Repo.
 """
 import json
 import shutil
 import sys
+import zlib
 from datetime import date
 from pathlib import Path
 
@@ -52,12 +54,17 @@ def pdf_verkleinern(quelle: Path, ziel: Path, bild_max: int, qualitaet: int) -> 
     for obj in pdf.objects:
         if not isinstance(obj, pikepdf.Stream) or obj.get("/Subtype") != pikepdf.Name.Image:
             continue
-        if "/SMask" in obj or "/Mask" in obj or obj.get("/ImageMask", False):
-            continue  # Bilder mit Transparenz bleiben unverändert
+        if "/Mask" in obj or obj.get("/ImageMask", False):
+            continue  # Masken über Farbschlüssel oder Schablone bleiben unverändert
+        maske = obj.get("/SMask")
+        if maske is not None and ("/Matte" in maske or "/SMask" in maske):
+            continue  # vormultiplizierte Transparenz bleibt unverändert
         try:
             bild = pikepdf.PdfImage(obj).as_pil_image()
         except Exception:
             continue
+        if maske is not None and bild.mode in ("RGBA", "LA"):
+            bild = bild.convert(bild.mode[:-1])  # pikepdf hängt die Maske an, sie bleibt eigener Stream
         if bild.mode not in ("RGB", "L", "CMYK"):
             continue
         b, h = bild.size
@@ -69,6 +76,20 @@ def pdf_verkleinern(quelle: Path, ziel: Path, bild_max: int, qualitaet: int) -> 
         daten = puffer.getvalue()
         if faktor == 1 and len(daten) >= len(obj.read_raw_bytes()):
             continue
+        if maske is not None and faktor < 1:
+            # Transparenz (Graustufen) verlustfrei in derselben Größe wie das Bild, sonst entstehen Ränder
+            try:
+                alpha = pikepdf.PdfImage(maske).as_pil_image().convert("L")
+            except Exception:
+                continue
+            alpha = alpha.resize(bild.size, Image.LANCZOS)
+            maske.write(zlib.compress(alpha.tobytes(), 9), filter=pikepdf.Name.FlateDecode)
+            maske.Width, maske.Height = alpha.size
+            maske.BitsPerComponent = 8
+            maske.ColorSpace = pikepdf.Name.DeviceGray
+            for schluessel in ("/DecodeParms", "/Decode"):
+                if schluessel in maske:
+                    del maske[schluessel]
         obj.write(daten, filter=pikepdf.Name.DCTDecode)
         obj.Width, obj.Height = bild.size
         obj.BitsPerComponent = 8
@@ -101,11 +122,22 @@ def main() -> None:
         shutil.copy(quelle, pdf)
         print(f"PDF {groesse:.1f} MB, bleibt unverändert")
     else:
-        for bild_max, qualitaet in STUFEN:
-            pdf_verkleinern(quelle, pdf, bild_max, qualitaet)
-            print(f"PDF {groesse:.1f} MB -> {mb(pdf):.1f} MB (Bilder bis {bild_max} px, Qualität {qualitaet})")
-            if mb(pdf) <= ZIEL_MB:
+        versuche = []
+        for nr, (bild_max, qualitaet) in enumerate(STUFEN):
+            versuch = ordner / f"stufe-{nr}.pdf"
+            pdf_verkleinern(quelle, versuch, bild_max, qualitaet)
+            print(f"PDF {groesse:.1f} MB -> {mb(versuch):.1f} MB (Bilder bis {bild_max} px, Qualität {qualitaet})")
+            versuche.append(versuch)
+            if mb(versuch) <= ZIEL_MB:
                 break
+        # Erreicht keine Stufe ZIEL_MB, steckt der Rest in Text und Vektorgrafik. Dann lieber die
+        # beste Bildqualität, die höchstens 25 Prozent über der kleinsten Fassung liegt.
+        kleinste = min(mb(v) for v in versuche)
+        gewaehlt = versuche[-1] if mb(versuche[-1]) <= ZIEL_MB else next(v for v in versuche if mb(v) <= kleinste * 1.25)
+        gewaehlt.rename(pdf)
+        for v in versuche:
+            v.unlink(missing_ok=True)
+        print(f"Genommen: {STUFEN[versuche.index(gewaehlt)]}, {mb(pdf):.1f} MB")
     if mb(pdf) > GRENZE_MB:
         sys.exit("Die PDF ist auch verkleinert größer als 24 MB. Bitte beim Export eine komprimierte Fassung wählen.")
 
