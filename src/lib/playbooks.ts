@@ -5,7 +5,7 @@
  * playbook_social_recruiting, playbook_gastro) ruft nach dem Formular serverseitig
  * POST /api/playbook/anfordern auf (Bearer PLAYBOOK_SCHLUESSEL). Let's Meet legt den Kontakt
  * an, erzeugt einen Zugang mit zufälliger ID (das Geheimnis im Link) und gibt den Link zurück,
- * die Landingpage schickt ihn per Mail. Der Link gilt 30 Tage. Öffnen der Seite und
+ * die Landingpage schickt ihn per Mail. Der Link gilt 14 Tage. Öffnen der Seite und
  * Herunterladen der PDF werden am Zugang gezählt und im Kontaktbuch angezeigt.
  *
  * Die Dateien liegen in public/playbook-dateien/{schluessel}/ (playbook.pdf, seite-001.webp ...),
@@ -18,7 +18,7 @@ import dateien from '../daten/playbook-dateien.json';
 import { alle, ausfuehren, eins, jetztIso, neueId } from './db';
 import { emailNorm, kontaktAusPlaybook } from './kontakte';
 
-export const PLAYBOOK_GUELTIG_TAGE = 30;
+export const PLAYBOOK_GUELTIG_TAGE = 14;
 /** Zugänge fallen so lange nach ihrem Ablauf weg (Datenschutz, 12 Monate wie Buchungen) */
 const AUFBEWAHRUNG_TAGE = 365;
 
@@ -234,7 +234,7 @@ export async function leadsJePlaybook(nutzerId: string) {
   return new Map(zeilen.map((z) => [z.playbook, z.n]));
 }
 
-/** Link sperren oder um 30 Tage ab heute verlängern (Backoffice) */
+/** Link sperren oder um PLAYBOOK_GUELTIG_TAGE ab heute verlängern (Backoffice) */
 export async function zugangSperren(nutzerId: string, id: string) {
   await ausfuehren('UPDATE playbook_zugaenge SET gesperrt = 1 WHERE id = ? AND nutzer_id = ?', id, nutzerId);
 }

@@ -3,28 +3,28 @@
     "seiten": 51,
     "breite": 1600,
     "hoehe": 900,
-    "pdfBytes": 7599886,
+    "pdfBytes": 7884525,
     "stand": "2026-10-29"
   },
   "recruiting": {
     "seiten": 48,
     "breite": 1600,
     "hoehe": 900,
-    "pdfBytes": 5367738,
+    "pdfBytes": 5393452,
     "stand": "2026-10-29"
   },
   "social": {
     "seiten": 55,
     "breite": 1600,
     "hoehe": 1131,
-    "pdfBytes": 13092849,
+    "pdfBytes": 13120562,
     "stand": "2026-10-29"
   },
   "website": {
     "seiten": 31,
     "breite": 1132,
     "hoehe": 1600,
-    "pdfBytes": 8591530,
+    "pdfBytes": 9037602,
     "stand": "2026-10-29"
   }
 }
