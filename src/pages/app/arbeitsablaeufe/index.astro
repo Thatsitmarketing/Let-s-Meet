@@ -1,0 +1,165 @@
+---
+import App from '../../../layouts/App.astro';
+import Icon from '../../../components/ui/Icon.astro';
+import { terminartenVon } from '../../../lib/abfragen';
+import { ablaeufeVon, ablaufDuplizieren, giltFuer, tunText, versandZaehlen, wennText } from '../../../lib/arbeitsablaeufe';
+import { ausfuehren, eins, jetztIso } from '../../../lib/db';
+import { meldungAusUrl } from '../../../lib/meldungen';
+
+const nutzer = Astro.locals.gastgeber!;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const id = String(form.get('id') ?? '');
+  const aktion = String(form.get('aktion') ?? '');
+  const a = await eins<{ id: string; aktiv: number }>('SELECT id, aktiv FROM arbeitsablaeufe WHERE id = ? AND nutzer_id = ?', id, nutzer.id);
+  if (a && aktion === 'umschalten') {
+    await ausfuehren('UPDATE arbeitsablaeufe SET aktiv = ?, aktualisiert_am = ? WHERE id = ?', a.aktiv ? 0 : 1, jetztIso(), id);
+    return Astro.redirect('/app/arbeitsablaeufe?ok=gespeichert');
+  }
+  if (a && aktion === 'duplizieren') {
+    const neu = await ablaufDuplizieren(nutzer.id, id);
+    return Astro.redirect(neu ? `/app/arbeitsablaeufe/${neu}?ok=dupliziert` : '/app/arbeitsablaeufe');
+  }
+  return Astro.redirect('/app/arbeitsablaeufe');
+}
+
+const [ablaeufe, arten, versand] = await Promise.all([ablaeufeVon(nutzer.id), terminartenVon(nutzer.id), versandZaehlen(nutzer.id)]);
+---
+<App titel="Arbeitsabläufe" eyebrow="Erinnerungen und Benachrichtigungen" meldung={meldungAusUrl(Astro.url)}>
+  <Fragment slot="aktionen">
+    <a class="knopf knopf--orange" href="/app/arbeitsablaeufe/neu"><Icon name="plus" />Neuer Arbeitsablauf</a>
+  </Fragment>
+
+  <p class="einleitung leise">
+    Wenn etwas passiert, geht automatisch eine Mail raus: Erinnerungen vor dem Termin, Dank danach, eine Info an Kollegen oder ein neues Angebot, wenn jemand nicht erschienen ist.
+    Welche Terminart welchen Ablauf nutzt, stellst du hier oder direkt in der Terminart unter „Benachrichtigungen und Arbeitsabläufe“ ein.
+    Bestätigung und Absage mit Kalenderdatei gehen immer an Gast und Büro.
+  </p>
+
+  {ablaeufe.length === 0 ? (
+    <div class="leer karte">
+      <h2>Noch kein Arbeitsablauf<span class="punkt">.</span></h2>
+      <p class="leise">Leg zum Beispiel eine Erinnerung 24 Stunden vor dem Termin an.</p>
+      <a class="knopf knopf--orange" href="/app/arbeitsablaeufe/neu"><Icon name="plus" />Ersten Arbeitsablauf anlegen</a>
+    </div>
+  ) : (
+    <div class="tabelle karte">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col" class="s-aktiv"><span class="sr-only">Aktiv</span></th>
+            <th scope="col">Name</th>
+            <th scope="col">Gilt für</th>
+            <th scope="col">Wenn das passiert</th>
+            <th scope="col">Das tun</th>
+            <th scope="col" class="s-zahl">Gesendet <span class="leise">(30 Tage)</span></th>
+            <th scope="col" class="s-mehr"><span class="sr-only">Aktionen</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {ablaeufe.map((a) => {
+            const zugeordnet = arten.filter((t) => giltFuer(a, t.id));
+            return (
+              <tr class:list={{ aus: !a.aktiv }}>
+                <td class="s-aktiv">
+                  <form method="post">
+                    <input type="hidden" name="id" value={a.id} />
+                    <input type="hidden" name="aktion" value="umschalten" />
+                    <label class="schalter">
+                      <input type="checkbox" checked={Boolean(a.aktiv)} onchange="this.form.requestSubmit()" aria-label={`${a.name} ${a.aktiv ? 'pausieren' : 'aktivieren'}`} />
+                      <span class="leise schalter-text">{a.aktiv ? 'Aktiv' : 'Pausiert'}</span>
+                    </label>
+                    <noscript><button class="knopf knopf--klein knopf--leise">Umschalten</button></noscript>
+                  </form>
+                </td>
+                <td class="s-name"><a href={`/app/arbeitsablaeufe/${a.id}`}>{a.name}</a></td>
+                <td data-label="Gilt für" class="s-fuer">
+                  {a.alle_terminarten ? (
+                    <span class="alle">Alle Terminarten, auch neue <span class="leise">({zugeordnet.length})</span></span>
+                  ) : zugeordnet.length === 0 ? (
+                    <span class="leise">Keiner Terminart zugeordnet</span>
+                  ) : (
+                    <ul class="arten" role="list">
+                      {zugeordnet.map((t) => (
+                        <li class:list={{ inaktiv: !t.aktiv }}>
+                          <span class="punkt-farbe" style={`background:${t.farbe}`} aria-hidden="true"></span>
+                          <a href={`/app/terminarten/${t.id}`} title={t.aktiv ? t.titel : `${t.titel} (nicht aktiv)`}>{t.titel}</a>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </td>
+                <td data-label="Wenn das passiert">{wennText(a)}</td>
+                <td data-label="Das tun" class="s-tun umbruch">{tunText(a, nutzer.email)}</td>
+                <td data-label="Gesendet (30 Tage)" class="s-zahl">{versand.get(a.id) ?? 0}</td>
+                <td class="s-mehr">
+                  <a class="symbol" href={`/app/arbeitsablaeufe/${a.id}`} title="Bearbeiten"><Icon name="stift" /><span class="sr-only">{a.name} bearbeiten</span></a>
+                  <form method="post">
+                    <input type="hidden" name="id" value={a.id} />
+                    <button class="symbol" name="aktion" value="duplizieren" title="Duplizieren"><Icon name="kopieren" /><span class="sr-only">{a.name} duplizieren</span></button>
+                  </form>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  )}
+</App>
+
+<style>
+  .einleitung { max-width: 900px; margin: calc(var(--raum-4) * -1) 0 var(--raum-6); line-height: 1.6; }
+  .leer { padding: var(--raum-12); display: grid; gap: var(--raum-4); justify-items: start; }
+  .tabelle { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+  th { text-align: left; font-weight: 600; padding: var(--raum-4); border-bottom: 1px solid var(--farbe-rahmen-stark); white-space: nowrap; }
+  td { padding: var(--raum-4); border-bottom: 1px solid var(--farbe-rahmen); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tr.aus td:not(.s-aktiv):not(.s-mehr) { opacity: 0.55; }
+  .s-aktiv { width: 1%; white-space: nowrap; }
+  .s-name a { font-weight: 600; font-size: var(--text-base); text-decoration: none; }
+  .s-name a:hover { text-decoration: underline; text-decoration-color: var(--farbe-akzent); }
+  .s-zahl { text-align: right; white-space: nowrap; }
+  .s-mehr { width: 1%; white-space: nowrap; }
+  .s-mehr, .s-mehr form { display: flex; gap: 2px; justify-content: flex-end; }
+  td.s-mehr { display: table-cell; }
+  td.s-mehr > * { display: inline-flex; vertical-align: middle; }
+  .schalter-text { min-width: 4.5em; }
+  .alle { display: block; font-weight: 600; }
+  .arten { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .arten li { display: flex; align-items: center; gap: var(--raum-2); min-width: 0; }
+  .arten li.inaktiv { opacity: 0.6; }
+  .arten li { align-items: baseline; }
+  .arten a { text-decoration: none; color: inherit; }
+  .s-fuer { min-width: 240px; }
+  .s-tun { min-width: 200px; }
+  .arten a:hover { text-decoration: underline; }
+  .punkt-farbe { width: 8px; height: 8px; border-radius: 50%; flex: none; transform: translateY(-1px); }
+  .umbruch { overflow-wrap: anywhere; }
+  .symbol {
+    display: grid; place-items: center; width: 36px; height: 36px; background: none; border: 1px solid transparent;
+    color: var(--n-700); cursor: pointer; border-radius: var(--radius-s);
+  }
+  .symbol:hover { border-color: var(--n-900); color: var(--n-900); }
+
+  /* Unter 1000px als Karten */
+  @media (max-width: 1000px) {
+    .tabelle { overflow: visible; background: none; box-shadow: none; border: 0; }
+    table, tbody, tr, td { display: block; }
+    thead { display: none; }
+    tbody { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--raum-4); }
+    tr { background: var(--farbe-papier); border: 1px solid var(--farbe-rahmen); padding: var(--raum-4); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--raum-3); min-width: 0; }
+    td { padding: 0; border: 0; min-width: 0; }
+    .s-aktiv, .s-mehr { width: auto; }
+    td[data-label] { grid-column: 1 / -1; }
+    td[data-label]::before { content: attr(data-label); display: block; font-size: 0.75rem; color: var(--farbe-text-leise); margin-bottom: 2px; }
+    .s-aktiv { grid-column: 1; grid-row: 1; }
+    td.s-aktiv::before { display: none; }
+    .s-name { grid-column: 1 / -1; grid-row: 2; }
+    td.s-mehr { grid-column: 2; grid-row: 1; display: flex; }
+    .s-zahl { text-align: left; }
+    .s-fuer, .s-tun { min-width: 0; }
+  }
+</style>

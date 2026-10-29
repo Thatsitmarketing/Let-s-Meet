@@ -1,0 +1,26 @@
+---
+import App from '../../../layouts/App.astro';
+import ArbeitsablaufFormular from '../../../components/ArbeitsablaufFormular.astro';
+import { terminartenVon } from '../../../lib/abfragen';
+import { STANDARD_ABLAUF, ablaufAusFormular, ablaufSpeichern, type ArbeitsablaufWerte } from '../../../lib/arbeitsablaeufe';
+
+const nutzer = Astro.locals.gastgeber!;
+const terminarten = await terminartenVon(nutzer.id);
+// Aus dem Terminart Editor: ?terminart= ordnet den neuen Ablauf direkt dieser Terminart zu
+const ausTerminart = terminarten.find((t) => t.id === Astro.url.searchParams.get('terminart'));
+let werte: ArbeitsablaufWerte = ausTerminart ? { ...STANDARD_ABLAUF, alle_terminarten: 0, terminarten: [ausTerminart.id] } : { ...STANDARD_ABLAUF };
+let fehler: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const ergebnis = ablaufAusFormular(await Astro.request.formData(), terminarten.map((t) => t.id));
+  werte = ergebnis.werte;
+  fehler = ergebnis.fehler;
+  if (!Object.keys(fehler).length) {
+    const id = await ablaufSpeichern(nutzer.id, werte);
+    return Astro.redirect(ausTerminart ? `/app/terminarten/${ausTerminart.id}?ok=angelegt#b-ablaeufe` : `/app/arbeitsablaeufe/${id}?ok=angelegt`);
+  }
+}
+---
+<App titel="Neuer Arbeitsablauf" eyebrow={ausTerminart ? `Für ${ausTerminart.titel}` : 'Arbeitsabläufe'}>
+  <ArbeitsablaufFormular werte={werte} fehler={fehler} neu terminarten={terminarten} bueroEmail={nutzer.email} />
+</App>

@@ -1,18 +1,30 @@
 ---
 import Icon from './ui/Icon.astro';
-import { ERINNERUNG_OPTIONEN, FARBEN, ORT_LABEL, type OrtTyp } from '../lib/typen';
-import { erinnerungenLesen } from '../lib/abfragen';
+import { FARBEN, ORT_LABEL, type OrtTyp } from '../lib/typen';
 import type { TerminartWerte } from '../lib/terminart-formular';
+
+/** Arbeitsabläufe des Büros mit Auswahl für diese Terminart */
+export interface AblaufWahl {
+  id: string;
+  name: string;
+  wenn: string;
+  tun: string;
+  aktiv: boolean;
+  alle: boolean;
+  gewaehlt: boolean;
+}
 
 interface Props {
   werte: TerminartWerte;
   fehler: Record<string, string>;
   neu: boolean;
+  ablaeufe: AblaufWahl[];
+  terminartId?: string;
 }
-const { werte: w, fehler, neu } = Astro.props;
+const { werte: w, fehler, neu, ablaeufe, terminartId } = Astro.props;
 const host = Astro.url.host;
 const dauern = [15, 30, 45, 60, 90, 120];
-const erinnerungen = erinnerungenLesen(w);
+const neuerAblauf = `/app/arbeitsablaeufe/neu${terminartId ? `?terminart=${terminartId}` : ''}`;
 const ortTypen = Object.keys(ORT_LABEL) as OrtTyp[];
 const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, 'aria-describedby': `fehler-${name}` } : {});
 ---
@@ -154,15 +166,6 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
       <label for="bestaetigung_text">Zusatztext in der Bestätigungsmail<span class="leise"> (optional)</span></label>
       <textarea id="bestaetigung_text" name="bestaetigung_text" class="textfeld" maxlength="2000" placeholder="z. B. was der Gast vorbereiten soll">{w.bestaetigung_text}</textarea>
     </div>
-    <fieldset class="feld">
-      <legend class="feld-label">Erinnerungsmails an den Gast</legend>
-      <p class="hilfe">Wähl beliebig viele. Jede geht so lange vor Beginn raus, wie angegeben. Bucht jemand kurzfristiger, entfällt die frühere Erinnerung. Nichts gewählt bedeutet keine Erinnerung.</p>
-      <div class="chips">
-        {ERINNERUNG_OPTIONEN.map((o) => (
-          <label class="chip"><input type="checkbox" name="erinnerungen" value={o.min} checked={erinnerungen.includes(o.min)} /><span>{o.text} vorher</span></label>
-        ))}
-      </div>
-    </fieldset>
     <div class="zwei">
       <div class="feld">
         <label for="weiterleitung_url">Weiterleitung nach Buchung<span class="leise"> (optional)</span></label>
@@ -170,6 +173,35 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
         {fehler.weiterleitung_url && <p class="fehlertext" id="fehler-weiterleitung_url">{fehler.weiterleitung_url}</p>}
       </div>
     </div>
+  </section>
+
+  <section class="block karte" aria-labelledby="b-ablaeufe">
+    <div class="block-kopf">
+      <h2 id="b-ablaeufe">Benachrichtigungen und Arbeitsabläufe</h2>
+      <a class="knopf knopf--leise knopf--klein" href="/app/arbeitsablaeufe">Alle verwalten</a>
+    </div>
+    <p class="hilfe">Bestätigung und Absage gehen immer an Gast und Büro, jeweils mit Kalenderdatei. Erinnerungen und weitere Mails steuerst du über Arbeitsabläufe. Haken setzen heißt: gilt für diese Terminart. Dieselbe Zuordnung siehst du unter <a href="/app/arbeitsablaeufe">Arbeitsabläufe</a>.</p>
+    <input type="hidden" name="ablaeufe_gesendet" value="1" />
+    {ablaeufe.length === 0 ? (
+      <p class="leise">Noch keine Arbeitsabläufe angelegt.</p>
+    ) : (
+      <ul class="ablaeufe" role="list">
+        {ablaeufe.map((a) => (
+          <li class:list={['ablauf', { aus: !a.aktiv }]}>
+            <label class="haken">
+              <input type="checkbox" name="ablaeufe" value={a.id} checked={a.gewaehlt} />
+              <span class="ablauf-text">
+                <span class="ablauf-name">{a.name}{!a.aktiv && <span class="pille">Pausiert</span>}{a.alle && <span class="pille">Alle Terminarten</span>}</span>
+                <span class="ablauf-info">{a.wenn} · {a.tun}</span>
+              </span>
+            </label>
+            <a class="ablauf-link" href={`/app/arbeitsablaeufe/${a.id}`} aria-label={`${a.name} bearbeiten`} title="Bearbeiten"><Icon name="stift" groesse={18} /></a>
+          </li>
+        ))}
+      </ul>
+    )}
+    <a class="knopf knopf--rahmen knopf--klein" href={neuerAblauf}><Icon name="plus" />Neuer Arbeitsablauf</a>
+    {neu && <p class="hilfe">Ein neuer Arbeitsablauf lässt sich dieser Terminart erst nach dem Anlegen direkt zuordnen.</p>}
   </section>
 
   <section class="block karte" aria-labelledby="b-sicht">
@@ -404,6 +436,18 @@ const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, '
     display: grid; place-items: center; width: 44px; height: 44px; background: none; border: 1px solid transparent; cursor: pointer; color: var(--n-700);
   }
   .fragen :global(.symbol:hover) { border-color: var(--farbe-fehler); color: var(--farbe-fehler); }
+  .block-kopf { display: flex; justify-content: space-between; align-items: center; gap: var(--raum-3); flex-wrap: wrap; }
+  .block > .knopf { justify-self: start; }
+  .ablaeufe { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--farbe-rahmen); }
+  .ablauf { display: flex; align-items: center; gap: var(--raum-3); padding: var(--raum-3) 0; border-bottom: 1px solid var(--farbe-rahmen); }
+  .ablauf .haken { flex: 1; align-items: flex-start; min-width: 0; }
+  .ablauf .haken input { margin-top: 3px; }
+  .ablauf.aus .ablauf-text { opacity: 0.6; }
+  .ablauf-text { display: grid; gap: 2px; min-width: 0; }
+  .ablauf-name { font-weight: 600; display: flex; gap: var(--raum-2); align-items: center; flex-wrap: wrap; }
+  .ablauf-info { font-size: var(--text-sm); color: var(--farbe-text-leise); }
+  .ablauf-link { display: grid; place-items: center; width: 40px; height: 40px; color: var(--n-700); flex: none; }
+  .ablauf-link:hover { color: var(--n-900); background: var(--n-050); }
   .leiste {
     position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: var(--raum-2);
     padding: var(--raum-4) 0; background: var(--farbe-flaeche-alt); border-top: 1px solid var(--farbe-rahmen);

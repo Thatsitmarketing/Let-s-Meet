@@ -1,10 +1,11 @@
 import { alle, ausfuehren, jetztIso, neueId } from './db';
 import { RESERVIERTE_SLUGS, ganzzahl, slugify, trimmen, urlGueltig } from './eingabe';
-import { ERINNERUNG_OPTIONEN, FARBEN, type Frage, type OrtTyp, type Terminart, type Unterlage } from './typen';
+import { FARBEN, type Frage, type OrtTyp, type Terminart, type Unterlage } from './typen';
 
 const ORT_TYPEN: OrtTyp[] = ['google_meet', 'telefon_wir', 'telefon_gast', 'vor_ort', 'link'];
 
-export type TerminartWerte = Omit<Terminart, 'id' | 'nutzer_id' | 'erstellt_am' | 'aktualisiert_am' | 'reihenfolge'>;
+/** Erinnerungen laufen seit 0008 über Arbeitsabläufe, die alten Spalten werden nicht mehr bearbeitet. */
+export type TerminartWerte = Omit<Terminart, 'id' | 'nutzer_id' | 'erstellt_am' | 'aktualisiert_am' | 'reihenfolge' | 'erinnerung_std' | 'erinnerungen'>;
 
 export const STANDARD: TerminartWerte = {
   slug: '',
@@ -22,8 +23,6 @@ export const STANDARD: TerminartWerte = {
   max_pro_tag: null,
   fragen: '[]',
   unterlagen: '[]',
-  erinnerung_std: 24,
-  erinnerungen: '[1440,60]',
   bestaetigung_text: '',
   weiterleitung_url: '',
   aktiv: 1,
@@ -75,10 +74,6 @@ export async function terminartAusFormular(form: FormData, nutzerId: string, eig
   if (unterlagen.some((u) => !u.titel || !linkOk(u.url))) fehler.unterlagen = 'Jede Unterlage braucht einen Titel und einen Link, beginnend mit https:// oder /.';
   else if (unterlagen.some((u) => u.bild && !linkOk(u.bild))) fehler.unterlagen = 'Das Vorschaubild braucht einen Link, beginnend mit https:// oder /.';
 
-  // Mehrere Erinnerungen, nur Werte aus der Auswahl
-  const erlaubt = new Set(ERINNERUNG_OPTIONEN.map((o) => o.min));
-  const erinnerungen = [...new Set(form.getAll('erinnerungen').map((v) => Number(v)).filter((m) => erlaubt.has(m)))].sort((a, b) => b - a);
-
   const werte: TerminartWerte = {
     titel,
     slug,
@@ -95,9 +90,6 @@ export async function terminartAusFormular(form: FormData, nutzerId: string, eig
     max_pro_tag: maxProTag ? ganzzahl(maxProTag, 1, 50, 1) : null,
     fragen: JSON.stringify(fragen),
     unterlagen: JSON.stringify(unterlagen),
-    // Alte Spalte bleibt mit der frühesten Erinnerung gefüllt
-    erinnerung_std: erinnerungen.length ? Math.max(1, Math.round(erinnerungen[0]! / 60)) : 0,
-    erinnerungen: JSON.stringify(erinnerungen),
     bestaetigung_text: trimmen(form.get('bestaetigung_text'), 2000),
     weiterleitung_url: weiterleitung,
     aktiv: form.get('aktiv') ? 1 : 0,
@@ -123,14 +115,14 @@ export async function terminartSpeichern(w: TerminartWerte, nutzerId: string, id
   const jetzt = jetztIso();
   const felder = [
     w.slug, w.titel, w.beschreibung || null, w.dauer_min, w.farbe, w.ort_typ, w.ort_wert || null, w.puffer_vor_min, w.puffer_nach_min,
-    w.vorlauf_min, w.max_tage_voraus, w.raster_min, w.max_pro_tag, w.fragen, w.unterlagen, w.erinnerung_std, w.erinnerungen, w.bestaetigung_text || null,
+    w.vorlauf_min, w.max_tage_voraus, w.raster_min, w.max_pro_tag, w.fragen, w.unterlagen, w.bestaetigung_text || null,
     w.weiterleitung_url || null, w.aktiv, w.geheim,
   ] as const;
   if (id) {
     await ausfuehren(
       `UPDATE terminarten SET slug = ?, titel = ?, beschreibung = ?, dauer_min = ?, farbe = ?, ort_typ = ?, ort_wert = ?, puffer_vor_min = ?,
-        puffer_nach_min = ?, vorlauf_min = ?, max_tage_voraus = ?, raster_min = ?, max_pro_tag = ?, fragen = ?, unterlagen = ?, erinnerung_std = ?,
-        erinnerungen = ?, bestaetigung_text = ?, weiterleitung_url = ?, aktiv = ?, geheim = ?, aktualisiert_am = ?
+        puffer_nach_min = ?, vorlauf_min = ?, max_tage_voraus = ?, raster_min = ?, max_pro_tag = ?, fragen = ?, unterlagen = ?,
+        bestaetigung_text = ?, weiterleitung_url = ?, aktiv = ?, geheim = ?, aktualisiert_am = ?
        WHERE id = ? AND nutzer_id = ?`,
       ...felder, jetzt, id, nutzerId,
     );
@@ -139,9 +131,9 @@ export async function terminartSpeichern(w: TerminartWerte, nutzerId: string, id
   const neu = neueId();
   await ausfuehren(
     `INSERT INTO terminarten (slug, titel, beschreibung, dauer_min, farbe, ort_typ, ort_wert, puffer_vor_min, puffer_nach_min, vorlauf_min,
-      max_tage_voraus, raster_min, max_pro_tag, fragen, unterlagen, erinnerung_std, erinnerungen, bestaetigung_text, weiterleitung_url, aktiv, geheim,
-      erstellt_am, aktualisiert_am, id, nutzer_id, reihenfolge)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(reihenfolge), 0) + 1 FROM terminarten WHERE nutzer_id = ?))`,
+      max_tage_voraus, raster_min, max_pro_tag, fragen, unterlagen, bestaetigung_text, weiterleitung_url, aktiv, geheim,
+      erstellt_am, aktualisiert_am, id, nutzer_id, erinnerung_std, erinnerungen, reihenfolge)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '[]', (SELECT COALESCE(MAX(reihenfolge), 0) + 1 FROM terminarten WHERE nutzer_id = ?))`,
     ...felder, jetzt, jetzt, neu, nutzerId, nutzerId,
   );
   return neu;

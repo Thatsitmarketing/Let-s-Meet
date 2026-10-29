@@ -5,6 +5,8 @@
  */
 import { env } from 'cloudflare:workers';
 import { maskieren as m } from './eingabe';
+import type { Buchung, Nutzer, Terminart } from './typen';
+import { formatDatumLang, formatSpanne, zonenName } from './zeit';
 
 const MARKE = {
   name: "That's it. Marketing",
@@ -25,9 +27,9 @@ export interface Anhang {
   content_type?: string;
 }
 
-export async function mailSenden(n: { an: string; betreff: string; html: string; antwortAn?: string; anhaenge?: Anhang[] }) {
+export async function mailSenden(n: { an: string | string[]; betreff: string; html: string; antwortAn?: string; anhaenge?: Anhang[] }) {
   if (!env.RESEND_API_KEY) {
-    console.log(`[Mail nicht versendet, RESEND_API_KEY fehlt] an ${n.an}: ${n.betreff}`);
+    console.log(`[Mail nicht versendet, RESEND_API_KEY fehlt] an ${[n.an].flat().join(', ')}: ${n.betreff}`);
     return;
   }
   const res = await fetch('https://api.resend.com/emails', {
@@ -107,6 +109,19 @@ export interface TerminDetails {
   meetingUrl?: string | null;
 }
 
+/** Termindaten für die Mailvorlagen, Zeiten in der Zone des Empfängers */
+export function terminDetailsVon(b: Buchung, ta: Terminart, n: Nutzer, tz: string): TerminDetails {
+  return {
+    terminTitel: ta.titel,
+    wann: `${formatDatumLang(b.start_utc, tz)}, ${formatSpanne(b.start_utc, b.ende_utc, tz)}`,
+    zone: zonenName(tz),
+    dauer: ta.dauer_min,
+    gastgeber: /that'?s it/i.test(n.name) ? n.name : `${n.name}, That's it. Marketing`,
+    ort: b.meeting_url ? null : b.ort_text,
+    meetingUrl: b.meeting_url,
+  };
+}
+
 function details(d: TerminDetails) {
   const zeile = (label: string, wert: string) =>
     `<tr><td style="padding:10px 0;border-bottom:1px solid ${MARKE.linie};width:120px;vertical-align:top;font-size:13px;color:${MARKE.grau};">${label}</td><td style="padding:10px 0;border-bottom:1px solid ${MARKE.linie};font-size:15px;">${wert}</td></tr>`;
@@ -169,15 +184,33 @@ ${d.neuBuchenUrl ? knopf(d.neuBuchenUrl, 'Neuen Termin buchen', 'orange') : ''}`
   );
 }
 
-export function mailErinnerung(basis: string, d: TerminDetails & { gastName: string; verwaltenUrl: string; wannRelativ: string }) {
+/** Freier Text aus einem Arbeitsablauf: maskiert, Absätze und Zeilenumbrüche, Links klickbar */
+export function textAlsHtml(text: string) {
+  return text
+    .trim()
+    .split(/\n{2,}/)
+    .map((absatzText) =>
+      absatz(
+        m(absatzText)
+          .replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)]/g, (url) => `<a href="${url}" style="color:${MARKE.schwarz};">${url}</a>`)
+          .replace(/\n/g, '<br>'),
+      ),
+    )
+    .join('\n');
+}
+
+/** Mail aus einem Arbeitsablauf. Text kommt vom Team, Termindaten und Knöpfe ergänzen wir automatisch. */
+export function mailArbeitsablauf(
+  basis: string,
+  d: { vorschau: string; eyebrow: string; ueberschrift: string; text: string; details: TerminDetails | null; knoepfe: { href: string; text: string; art: 'orange' | 'schwarz' | 'rahmen' }[] },
+) {
   return rahmen(
     basis,
-    `Erinnerung: ${d.terminTitel} ${d.wannRelativ}`,
-    `${eyebrow('Erinnerung')}
-${titel(`Wir sehen uns ${d.wannRelativ}`)}
-${absatz(`Hallo ${m(d.gastName)},`)}
-${absatz('kurze Erinnerung an deinen Termin. Falls etwas dazwischenkommt, buche einfach um.')}
-${details(d)}
-${d.meetingUrl ? knopf(d.meetingUrl, 'Zum Meeting', 'orange') : ''}${knopf(d.verwaltenUrl, 'Umbuchen oder absagen', 'rahmen')}`,
+    d.vorschau,
+    `${eyebrow(d.eyebrow)}
+${d.ueberschrift ? titel(d.ueberschrift) : ''}
+${textAlsHtml(d.text)}
+${d.details ? details(d.details) : ''}
+${d.knoepfe.map((k) => knopf(k.href, k.text, k.art)).join('')}`,
   );
 }
