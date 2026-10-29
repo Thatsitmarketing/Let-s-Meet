@@ -5,7 +5,7 @@ import KontaktFormular from '../../../components/KontaktFormular.astro';
 import Icon from '../../../components/ui/Icon.astro';
 import { kontaktAusFormular, kontaktEntfernen, kontaktMitMeetings, kontaktSpeichern, meetingsVon, type KontaktWerte } from '../../../lib/kontakte';
 import { meldungAusUrl } from '../../../lib/meldungen';
-import { istPlaybook, PLAYBOOKS, zugaengeVonKontakt, zugangSperren, zugangStatus, zugangVerlaengern } from '../../../lib/playbooks';
+import { istPlaybook, PLAYBOOK_GUELTIG_TAGE, PLAYBOOKS, zugaengeVonKontakt, zugangSperren, zugangStatus, zugangVerlaengern } from '../../../lib/playbooks';
 import { formatDatumMittel, formatZeit } from '../../../lib/zeit';
 
 const nutzer = Astro.locals.gastgeber!;
@@ -138,7 +138,7 @@ const wann = (iso: string) => `${formatDatumMittel(iso, tz)}, ${formatZeit(iso, 
                     <form method="post">
                       <input type="hidden" name="zugang" value={z.id} />
                       <input type="hidden" name="aktion" value="playbook-verlaengern" />
-                      <button class="knopf knopf--rahmen knopf--klein" type="submit">{st === 'gueltig' ? 'Um 30 Tage verlängern' : 'Wieder freischalten'}</button>
+                      <button class="knopf knopf--rahmen knopf--klein" type="submit">{st === 'gueltig' ? `Um ${PLAYBOOK_GUELTIG_TAGE} Tage verlängern` : 'Wieder freischalten'}</button>
                     </form>
                     {st === 'gueltig' && (
                       <form method="post" data-rueckfrage="Diesen Link sperren? Die Person kommt dann nicht mehr an das Playbook.">

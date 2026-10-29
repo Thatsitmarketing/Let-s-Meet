@@ -9,9 +9,11 @@ Ergebnis in public/playbook-dateien/<schluessel>/ (playbook.pdf, seite-001.webp 
 Eintrag in src/daten/playbook-dateien.json. Die Dateien sind nicht öffentlich: src/worker.ts
 blockt den direkten Aufruf, ausgeliefert wird nur über /playbook/<id>/... mit gültigem Link.
 
-Braucht nur Python 3.10 oder neuer mit drei Paketen, läuft auf Windows, Mac und Linux:
+Braucht nur Python 3.10 oder neuer mit diesen Paketen, läuft auf Windows, Mac und Linux:
 
-    pip install pikepdf pymupdf pillow
+    pip install pikepdf pymupdf pillow opencv-python-headless qrcode
+
+Am Ende tauscht scripts/playbook-qr.py die QR-Codes gegen den Link zum passenden Gespräch.
 
 Cloudflare liefert höchstens 25 MiB je Datei aus. Liegt die PDF über ZIEL_MB, werden die Bilder
 darin schrittweise verkleinert und neu als JPEG gespeichert, bis sie passt. Bei Bildern mit
@@ -166,6 +168,13 @@ def main() -> None:
     bilder = sum(p.stat().st_size for p in ordner.glob("seite-*.webp")) / 1_048_576
     print(f"Fertig: {schluessel}, {seiten} Seiten ({breite} x {hoehe}), PDF {mb(pdf):.1f} MB, Seitenbilder zusammen {bilder:.1f} MB")
     print(f"Liegt in {ordner.relative_to(ROOT)}")
+
+    # QR-Codes im Playbook auf das passende Gespräch in Let's Meet umstellen (Originale zeigen auf Calendly)
+    import subprocess
+    qr = subprocess.run([sys.executable, str(ROOT / "scripts" / "playbook-qr.py"), schluessel])
+    if qr.returncode != 0:
+        print("Achtung: QR-Codes nicht ersetzt. Pakete installieren (pip install opencv-python-headless qrcode) und")
+        print(f"danach  python scripts/playbook-qr.py {schluessel}  ausführen.")
 
 
 if __name__ == "__main__":

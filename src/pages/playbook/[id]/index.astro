@@ -18,9 +18,10 @@ const dateien = playbookDateien(zugang.playbook);
 const status = zugangStatus(zugang);
 const vorname = zugang.name.split(/\s+/)[0] ?? zugang.name;
 const bis = formatDatumMittel(zugang.gueltig_bis, 'Europe/Berlin');
+const restTage = Math.max(1, Math.ceil((Date.parse(zugang.gueltig_bis) - Date.now()) / 86_400_000));
 const mb = dateien?.pdfBytes ? (dateien.pdfBytes / 1_048_576).toLocaleString('de-DE', { maximumFractionDigits: 1 }) : null;
 ---
-<Oeffentlich titel={status === 'gueltig' ? pb.name : 'Link nicht mehr gültig'} breit>
+<Oeffentlich titel={status === 'gueltig' ? pb.name : 'Link nicht mehr gültig'} breit markenlogo>
   {status === 'gueltig' ? (
     <article class="playbook">
       <header class="kopf-text">
@@ -28,7 +29,10 @@ const mb = dateien?.pdfBytes ? (dateien.pdfBytes / 1_048_576).toLocaleString('de
         <h1>{pb.name}<span class="punkt">.</span></h1>
         <p class="einleitung">
           Hallo {vorname}, hier kannst du das Playbook direkt durchblättern oder als PDF speichern.
-          Dein persönlicher Link gilt bis zum {bis}.
+        </p>
+        <p class="gueltig">
+          <Icon name="uhr" groesse={20} />
+          <span>Dein persönlicher Link gilt noch <strong>{restTage} {restTage === 1 ? 'Tag' : 'Tage'}</strong>, bis zum <strong>{bis}</strong>. Lade dir das Playbook am besten jetzt als PDF herunter.</span>
         </p>
       </header>
 
@@ -89,16 +93,33 @@ const mb = dateien?.pdfBytes ? (dateien.pdfBytes / 1_048_576).toLocaleString('de
   .playbook { max-width: 1240px; margin: 0 auto; display: grid; gap: var(--raum-8); }
   .kopf-text { display: grid; gap: var(--raum-3); max-width: 760px; }
   .einleitung { color: var(--farbe-text-2); font-size: var(--text-lg); }
+  /* Gültigkeit deutlich sichtbar: orangener Rahmen, Zeichen und fette Frist */
+  .gueltig {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--raum-3);
+    margin: 0;
+    padding: 12px 16px;
+    background: #fff;
+    border: 2px solid var(--farbe-akzent);
+    border-radius: var(--radius-s);
+    font-size: var(--text-base);
+    color: var(--farbe-text);
+    justify-self: start;
+  }
+  .gueltig :global(svg) { flex: none; color: var(--farbe-akzent); margin-top: 2px; }
+  .gueltig strong { font-weight: 700; }
   .aktionen { display: flex; justify-content: center; }
   .aktionen .knopf { font-family: var(--schrift-text); font-weight: 600; letter-spacing: 0; text-transform: none; font-size: var(--text-base); min-height: 52px; padding-inline: 1.75rem; }
   .groesse { font-weight: 400; }
   .gespraech { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--raum-6); padding: clamp(1.5rem, 4vw, 2.5rem); }
   .gespraech > div { display: grid; gap: var(--raum-3); }
   .gespraech p:not(.eyebrow) { color: var(--farbe-text-2); max-width: 62ch; }
-  .gespraech .knopf { font-family: var(--schrift-text); font-weight: 600; letter-spacing: 0; text-transform: none; font-size: var(--text-base); }
+  .gespraech .knopf { font-family: var(--schrift-text); font-weight: 600; letter-spacing: 0; text-transform: none; font-size: var(--text-base); justify-content: flex-start; text-align: left; }
   .abgelaufen { max-width: 640px; margin: 0 auto; padding: clamp(1.5rem, 5vw, 3rem); display: grid; gap: var(--raum-4); justify-items: start; }
   @media (max-width: 760px) {
     .gespraech { grid-template-columns: 1fr; }
-    .gespraech .knopf, .aktionen .knopf { width: 100%; white-space: normal; text-align: center; }
+    .gespraech .knopf, .aktionen .knopf { width: 100%; white-space: normal; }
+    .aktionen .knopf { text-align: center; }
   }
 </style>
