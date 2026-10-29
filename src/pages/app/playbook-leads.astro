@@ -1,7 +1,7 @@
 ---
 /**
  * Leadliste der Playbook Anfragen: eine Zeile je Anfrage über eine der vier Landingpages,
- * mit Playbook, Kontaktdaten und Stand (angefordert, geöffnet, PDF geladen).
+ * mit Playbook, E Mail, Telefon und Stand (angefordert, geöffnet, PDF geladen).
  * Reiter je Playbook, Filter nach Stand, Suche, CSV Export. Name führt in den Kontakt.
  * "Aktualisieren" holt die Seite im Hintergrund neu und tauscht nur die Liste aus.
  */
@@ -91,6 +91,7 @@ const standChips: { wert: LeadStand; text: string }[] = [
           <tr>
             <th scope="col" class="s-name">Name</th>
             <th scope="col" class="s-pb">Playbook</th>
+            <th scope="col" class="s-mail">E Mail</th>
             <th scope="col" class="s-tel">Telefon</th>
             <th scope="col" class="s-zeit">Angefordert</th>
             <th scope="col" class="s-stand">Geöffnet</th>
@@ -113,11 +114,12 @@ const standChips: { wert: LeadStand; text: string }[] = [
                   ) : (
                     <span class="name"><Avatar name={name} groesse={32} /><span>{name}</span></span>
                   )}
-                  <span class="unter leise">{[firma, z.email].filter(Boolean).join(' · ')}</span>
+                  {firma && <span class="unter leise">{firma}</span>}
                 </td>
                 <td class="s-pb" data-label="Playbook">
                   <span class="pb"><span class:list={['farbe', schluessel && `pb-${schluessel}`]} aria-hidden="true"></span>{schluessel ? PLAYBOOKS[schluessel].name.replace(/ Playbook$/, '') : z.playbook}</span>
                 </td>
+                <td class="s-mail" data-label="E Mail">{z.email ? <a href={`mailto:${z.email}`}>{z.email}</a> : <span class="leer-wert">–</span>}</td>
                 <td class="s-tel" data-label="Telefon">{telefon ? <a href={`tel:${telefon.replace(/[^\d+]/g, '')}`}>{telefon}</a> : <span class="leer-wert">–</span>}</td>
                 <td class="s-zeit" data-label="Angefordert">{formatDatumMittel(z.erstellt_am, tz)}<span class="datum leise">{formatZeit(z.erstellt_am, tz)} Uhr</span></td>
                 <td class="s-stand" data-label="Geöffnet">
@@ -238,9 +240,13 @@ const standChips: { wert: LeadStand; text: string }[] = [
   .leer { padding: var(--raum-12); display: grid; justify-items: center; gap: var(--raum-3); text-align: center; color: var(--farbe-text-2); }
   .leer p { max-width: 60ch; }
 
+  /* Wie im CRM: Spalten werden nicht gequetscht, die Tabelle scrollt seitlich, der Name bleibt links stehen */
   .tabelle { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-  th, td { text-align: left; padding: var(--raum-3) var(--raum-4); border-bottom: 1px solid var(--farbe-rahmen); vertical-align: middle; }
+  table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--text-sm); }
+  th, td { text-align: left; padding: var(--raum-3) var(--raum-4); border-bottom: 1px solid var(--farbe-rahmen); vertical-align: middle; white-space: nowrap; }
+  .s-name { position: sticky; left: 0; z-index: 1; background: var(--farbe-papier); box-shadow: 1px 0 0 var(--farbe-rahmen); }
+  thead th.s-name { background: var(--n-050); }
+  tbody tr:hover td.s-name { background: var(--n-050); }
   th + th, td + td { border-left: 1px solid var(--farbe-rahmen); }
   thead th { background: var(--n-050); font-weight: 600; white-space: nowrap; height: 52px; }
   tbody tr:hover { background: var(--n-050); }
@@ -251,8 +257,7 @@ const standChips: { wert: LeadStand; text: string }[] = [
   .datum { display: block; font-size: 0.8125rem; font-weight: 400; }
   td a:not(.name) { color: var(--farbe-text-2); text-decoration: none; }
   td a:not(.name):hover { color: var(--n-900); text-decoration: underline; }
-  .pb { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
-  .s-tel, .s-zeit, .s-stand, .s-link { white-space: nowrap; }
+  .pb { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
   .ja { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--farbe-erfolg-text); }
   .leer-wert { color: var(--n-400); }
   .seiten { display: flex; justify-content: center; align-items: center; gap: var(--raum-4); margin-top: var(--raum-6); }
@@ -260,12 +265,15 @@ const standChips: { wert: LeadStand; text: string }[] = [
   @media (max-width: 1000px) {
     .tabelle { overflow: visible; background: none; border: 0; box-shadow: none; }
     table, tbody, tr, td { display: block; }
+    table { width: auto; min-width: 0; }
     thead { display: none; }
     tbody { display: grid; gap: var(--raum-3); }
     tbody tr { background: var(--farbe-papier); border: 1px solid var(--farbe-rahmen); padding: var(--raum-3) var(--raum-4); display: grid; grid-template-columns: 1fr 1fr; gap: var(--raum-2) var(--raum-4); }
     tbody tr:hover { background: var(--farbe-papier); }
     td, td + td { border: 0; padding: 0; min-width: 0; white-space: normal; }
-    td.s-name, td.s-pb { grid-column: 1 / -1; }
+    td.s-name, tbody tr:hover td.s-name { position: static; background: none; box-shadow: none; }
+    td.s-mail { overflow-wrap: anywhere; }
+    td.s-name, td.s-pb, td.s-mail { grid-column: 1 / -1; }
     .reiter { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
     td:not(.s-name):not(.s-pb)::before { content: attr(data-label); display: block; font-size: 0.75rem; color: var(--farbe-text-leise); }
     td.s-tel:has(.leer-wert) { display: none; }
