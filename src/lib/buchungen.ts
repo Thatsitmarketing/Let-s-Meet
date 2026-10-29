@@ -9,6 +9,7 @@ import { googleAbgleichBuero, googleTerminAnlegen, googleTerminLoeschen } from '
 import { icsDatei } from './ics';
 import { herkunft } from './herkunft';
 import { kontaktAusBuchung } from './kontakte';
+import { playbookZugaengeAufraeumen } from './playbooks';
 import { base64Utf8, mailGastBestaetigung, mailGastgeberNeu, mailSenden, mailStorno, terminDetailsVon } from './mail';
 import { ORT_LABEL, type Buchung, type Nutzer, type Terminart } from './typen';
 import { formatDatumLang } from './zeit';
@@ -308,9 +309,13 @@ export async function cronLauf() {
   });
   await ausfuehren('DELETE FROM arbeitsablauf_versand WHERE buchung_id IN (SELECT id FROM buchungen WHERE loeschen_ab < ?)', new Date(jetzt).toISOString());
   const geloescht = await ausfuehren('DELETE FROM buchungen WHERE loeschen_ab < ?', new Date(jetzt).toISOString());
+  const playbookZugaenge = await playbookZugaengeAufraeumen().catch((fehler) => {
+    console.error('Playbook Zugänge aufräumen fehlgeschlagen', fehler);
+    return 0;
+  });
   const google = await googleAbgleichBuero().catch((fehler) => {
     console.error('Google Abgleich im Cron fehlgeschlagen', fehler);
     return null;
   });
-  return { arbeitsablaeufe: ablaeufe, geloescht: geloescht.meta?.changes ?? 0, googleTermine: google };
+  return { arbeitsablaeufe: ablaeufe, geloescht: geloescht.meta?.changes ?? 0, playbookZugaenge, googleTermine: google };
 }

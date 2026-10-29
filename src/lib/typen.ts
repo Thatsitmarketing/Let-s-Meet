@@ -115,7 +115,7 @@ export interface Kontakt {
   telefon: string | null;
   unternehmen: string | null;
   notiz: string | null;
-  quelle: 'buchung' | 'google' | 'import' | 'manuell';
+  quelle: 'buchung' | 'google' | 'import' | 'manuell' | 'playbook';
   letztes_meeting: string | null;
   ausgeblendet: number;
   erstellt_am: string;

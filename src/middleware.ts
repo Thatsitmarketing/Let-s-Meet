@@ -37,6 +37,12 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
     kopf.set('X-Frame-Options', 'DENY');
     kopf.set('Content-Security-Policy', "frame-ancestors 'none'");
     kopf.set('Cache-Control', 'no-store');
+  } else if (pfad.startsWith('/playbook/') || pfad.startsWith('/api/playbook/')) {
+    // Persönliche Playbook Links: nicht indexieren, nicht einbetten, Seite nicht zwischenspeichern
+    kopf.set('X-Robots-Tag', 'noindex, nofollow');
+    kopf.set('Content-Security-Policy', "frame-ancestors 'none'");
+    kopf.set('Referrer-Policy', 'no-referrer');
+    if (!kopf.has('Cache-Control')) kopf.set('Cache-Control', 'no-store');
   } else {
     // Buchungsseiten sind ausdrücklich zum Einbetten auf Kundenwebsites gedacht
     kopf.set('Content-Security-Policy', 'frame-ancestors *');

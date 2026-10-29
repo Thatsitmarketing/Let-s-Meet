@@ -14,6 +14,8 @@ declare namespace Cloudflare {
     RESEND_API_KEY?: string;
     PUBLIC_TURNSTILE_SITE_KEY?: string;
     TURNSTILE_SECRET_KEY?: string;
+    /** Gemeinsamer Schlüssel der vier Playbook Landingpages für /api/playbook/anfordern */
+    PLAYBOOK_SCHLUESSEL?: string;
     GOOGLE_CLIENT_ID?: string;
     GOOGLE_CLIENT_SECRET?: string;
   }

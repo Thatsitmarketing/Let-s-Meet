@@ -1,0 +1,211 @@
+---
+/**
+ * Leadliste der Playbook Anfragen: eine Zeile je Anfrage über eine der vier Landingpages,
+ * mit Playbook, Kontaktdaten und Stand (angefordert, geöffnet, PDF geladen).
+ * Reiter je Playbook, Filter nach Stand, Suche, CSV Export. Name führt in den Kontakt.
+ */
+import App from '../../layouts/App.astro';
+import Avatar from '../../components/Avatar.astro';
+import Icon from '../../components/ui/Icon.astro';
+import { istPlaybook, LEAD_STAND, leadAbfrage, leadsJePlaybook, PLAYBOOKS, zugangStatus, type LeadStand, type PlaybookSchluessel } from '../../lib/playbooks';
+import { formatDatumMittel, formatZeit } from '../../lib/zeit';
+
+const nutzer = Astro.locals.gastgeber!;
+const tz = nutzer.zeitzone;
+const p = Astro.url.searchParams;
+const playbook: PlaybookSchluessel | null = istPlaybook(p.get('playbook')) ? (p.get('playbook') as PlaybookSchluessel) : null;
+const stand: LeadStand = LEAD_STAND.includes(p.get('stand') as LeadStand) ? (p.get('stand') as LeadStand) : 'alle';
+const suche = (p.get('suche') ?? '').trim().slice(0, 100);
+const PRO_SEITE = 100;
+const seite = Math.max(1, Number(p.get('seite') ?? 1) || 1);
+
+const abfrage = leadAbfrage(nutzer.id, { playbook, stand, suche });
+const [zeilen, gesamt, jePlaybook] = await Promise.all([abfrage.liste(PRO_SEITE, (seite - 1) * PRO_SEITE), abfrage.anzahl(), leadsJePlaybook(nutzer.id)]);
+const alleAnzahl = [...jePlaybook.values()].reduce((a, b) => a + b, 0);
+const seiten = Math.max(1, Math.ceil(gesamt / PRO_SEITE));
+
+const link = (aenderung: Record<string, string | null>) => {
+  const q = new URLSearchParams(p);
+  if (!('seite' in aenderung)) q.delete('seite');
+  for (const [k, v] of Object.entries(aenderung)) v === null ? q.delete(k) : q.set(k, v);
+  const s = q.toString();
+  return `/app/playbook-leads${s ? `?${s}` : ''}`;
+};
+const exportParams = new URLSearchParams({ ...(playbook ? { playbook } : {}), ...(stand !== 'alle' ? { stand } : {}), ...(suche ? { suche } : {}) });
+const standChips: { wert: LeadStand; text: string }[] = [
+  { wert: 'alle', text: 'Alle' },
+  { wert: 'angefordert', text: 'Nur angefordert' },
+  { wert: 'geoeffnet', text: 'Geöffnet, nicht geladen' },
+  { wert: 'geladen', text: 'PDF geladen' },
+];
+---
+<App titel="Playbook Leads" eyebrow="Anfragen über die Landingpages">
+  <Fragment slot="aktionen">
+    <a class="knopf knopf--rahmen" href={`/api/app/playbook-leads.csv${exportParams.size ? `?${exportParams}` : ''}`}><Icon name="download" />CSV Export</a>
+  </Fragment>
+
+  <nav class="reiter" aria-label="Nach Playbook">
+    <a href={link({ playbook: null })} aria-current={!playbook ? 'page' : undefined}>Alle Playbooks <span class="zahl">{alleAnzahl}</span></a>
+    {(Object.keys(PLAYBOOKS) as PlaybookSchluessel[]).map((s) => (
+      <a href={link({ playbook: s })} aria-current={playbook === s ? 'page' : undefined}>
+        <span class:list={['farbe', `pb-${s}`]} aria-hidden="true"></span>{PLAYBOOKS[s].name} <span class="zahl">{jePlaybook.get(s) ?? 0}</span>
+      </a>
+    ))}
+  </nav>
+
+  <div class="werkzeuge">
+    <form class="suche" method="get" role="search">
+      {playbook && <input type="hidden" name="playbook" value={playbook} />}
+      {stand !== 'alle' && <input type="hidden" name="stand" value={stand} />}
+      <label for="suche" class="sr-only">Leads durchsuchen</label>
+      <Icon name="suche" groesse={18} />
+      <input id="suche" name="suche" type="search" class="eingabe" placeholder="Name, E Mail oder Unternehmen" value={suche} />
+      <button class="knopf" type="submit">Suchen</button>
+      {suche && <a class="knopf knopf--leise" href={link({ suche: null })}>Zurücksetzen</a>}
+    </form>
+    <nav class="filter" aria-label="Nach Stand filtern">
+      {standChips.map((c) => (
+        <a href={link({ stand: c.wert === 'alle' ? null : c.wert })} aria-current={stand === c.wert ? 'page' : undefined}>
+          {stand === c.wert && <Icon name="check" groesse={16} />}{c.text}
+        </a>
+      ))}
+    </nav>
+  </div>
+
+  <p class="anzahl leise klein" role="status">{gesamt} {gesamt === 1 ? 'Anfrage' : 'Anfragen'}</p>
+
+  {zeilen.length === 0 ? (
+    <div class="leer karte">
+      <Icon name="dokument" groesse={28} />
+      <p>{alleAnzahl === 0 ? 'Noch keine Anfragen. Sobald jemand auf einer Playbook Landingpage das Formular abschickt, steht die Anfrage hier.' : 'Keine Anfragen passen zu Filter oder Suche.'}</p>
+    </div>
+  ) : (
+    <div class="tabelle karte">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col" class="s-name">Name</th>
+            <th scope="col" class="s-pb">Playbook</th>
+            <th scope="col" class="s-tel">Telefon</th>
+            <th scope="col" class="s-zeit">Angefordert</th>
+            <th scope="col" class="s-stand">Geöffnet</th>
+            <th scope="col" class="s-stand">PDF geladen</th>
+            <th scope="col" class="s-link">Link</th>
+          </tr>
+        </thead>
+        <tbody>
+          {zeilen.map((z) => {
+            const name = z.kontakt_name ?? z.name;
+            const firma = z.kontakt_unternehmen ?? z.unternehmen;
+            const telefon = z.kontakt_telefon ?? z.telefon;
+            const st = zugangStatus(z);
+            const schluessel = istPlaybook(z.playbook) ? z.playbook : null;
+            return (
+              <tr>
+                <td class="s-name" data-label="Name">
+                  {z.kontakt_id ? (
+                    <a class="name" href={`/app/kontakte/${z.kontakt_id}#playbooks`}><Avatar name={name} groesse={32} /><span>{name}</span></a>
+                  ) : (
+                    <span class="name"><Avatar name={name} groesse={32} /><span>{name}</span></span>
+                  )}
+                  <span class="unter leise">{[firma, z.email].filter(Boolean).join(' · ')}</span>
+                </td>
+                <td class="s-pb" data-label="Playbook">
+                  <span class="pb"><span class:list={['farbe', schluessel && `pb-${schluessel}`]} aria-hidden="true"></span>{schluessel ? PLAYBOOKS[schluessel].name.replace(/ Playbook$/, '') : z.playbook}</span>
+                </td>
+                <td class="s-tel" data-label="Telefon">{telefon ? <a href={`tel:${telefon.replace(/[^\d+]/g, '')}`}>{telefon}</a> : <span class="leer-wert">–</span>}</td>
+                <td class="s-zeit" data-label="Angefordert">{formatDatumMittel(z.erstellt_am, tz)}<span class="datum leise">{formatZeit(z.erstellt_am, tz)} Uhr</span></td>
+                <td class="s-stand" data-label="Geöffnet">
+                  {z.aufrufe > 0 ? <span class="ja"><Icon name="auge" groesse={16} />{z.aufrufe}×</span><span class="datum leise">{formatDatumMittel(z.zuletzt_geoeffnet!, tz)}</span> : <span class="leer-wert">Nein</span>}
+                </td>
+                <td class="s-stand" data-label="PDF geladen">
+                  {z.downloads > 0 ? <span class="ja"><Icon name="download" groesse={16} />{z.downloads}×</span><span class="datum leise">{formatDatumMittel(z.zuletzt_geladen!, tz)}</span> : <span class="leer-wert">Nein</span>}
+                </td>
+                <td class="s-link" data-label="Link">
+                  {!z.link_versendet
+                    ? <span class="leise" title="Für dieses Playbook lagen noch keine Dateien in Let's Meet, die Mail hatte den alten Downloadlink">Alter Downloadlink</span>
+                    : st === 'gueltig' ? <span>Gültig<span class="datum leise">bis {formatDatumMittel(z.gueltig_bis, tz)}</span></span>
+                    : st === 'gesperrt' ? <span class="leise">Gesperrt</span>
+                    : <span class="leise">Abgelaufen</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  )}
+
+  {seiten > 1 && (
+    <nav class="seiten" aria-label="Seiten">
+      {seite > 1 && <a class="knopf knopf--rahmen knopf--klein" href={link({ seite: String(seite - 1) })}><Icon name="links" />Zurück</a>}
+      <span class="leise klein">Seite {seite} von {seiten}</span>
+      {seite < seiten && <a class="knopf knopf--rahmen knopf--klein" href={link({ seite: String(seite + 1) })}>Weiter<Icon name="rechts" /></a>}
+    </nav>
+  )}
+</App>
+
+<style>
+  .reiter { display: flex; flex-wrap: wrap; gap: 0 var(--raum-6); border-bottom: 1px solid var(--farbe-rahmen); margin-bottom: var(--raum-6); }
+  .reiter a { display: inline-flex; align-items: center; gap: 8px; padding: var(--raum-3) 0; margin-bottom: -1px; border-bottom: 2px solid transparent; text-decoration: none; font-weight: 500; color: var(--farbe-text-2); white-space: nowrap; }
+  .reiter a:hover { color: var(--n-900); }
+  .reiter a[aria-current='page'] { color: var(--n-900); font-weight: 600; border-bottom-color: var(--farbe-akzent); }
+  .zahl { font-size: 0.75rem; font-weight: 600; padding: 1px 7px; background: var(--n-100); color: var(--n-700); border-radius: var(--radius-pille); }
+  /* Ein Farbpunkt je Playbook, damit man die Herkunft in der Liste sofort sieht */
+  .farbe { display: inline-block; width: 10px; height: 10px; flex: none; background: var(--n-400); }
+  .pb-website { background: #2B6CB0; }
+  .pb-social { background: #DC9832; }
+  .pb-recruiting { background: #2F8F5F; }
+  .pb-gastro { background: #B5452F; }
+
+  .werkzeuge { display: grid; gap: var(--raum-4); }
+  .suche { display: flex; align-items: center; gap: var(--raum-2); position: relative; max-width: 720px; }
+  .suche > :global(svg) { position: absolute; left: 12px; color: var(--n-500); pointer-events: none; }
+  .suche .eingabe { padding-left: 38px; flex: 1; min-width: 0; }
+  .filter { display: flex; flex-wrap: wrap; gap: var(--raum-2); }
+  .filter a {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 var(--raum-4); border: 1px solid var(--farbe-rahmen);
+    background: var(--farbe-papier); text-decoration: none; font-size: var(--text-sm); font-weight: 500; border-radius: var(--radius-s);
+  }
+  .filter a:hover { border-color: var(--n-900); }
+  .filter a[aria-current='page'] { background: var(--n-900); border-color: var(--n-900); color: var(--farbe-papier); }
+  .anzahl { margin: var(--raum-4) 0; }
+  .leer { padding: var(--raum-12); display: grid; justify-items: center; gap: var(--raum-3); text-align: center; color: var(--farbe-text-2); }
+  .leer p { max-width: 60ch; }
+
+  .tabelle { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+  th, td { text-align: left; padding: var(--raum-3) var(--raum-4); border-bottom: 1px solid var(--farbe-rahmen); vertical-align: middle; }
+  th + th, td + td { border-left: 1px solid var(--farbe-rahmen); }
+  thead th { background: var(--n-050); font-weight: 600; white-space: nowrap; height: 52px; }
+  tbody tr:hover { background: var(--n-050); }
+  tbody tr:last-child td { border-bottom: 0; }
+  .name { display: inline-flex; align-items: center; gap: var(--raum-3); font-weight: 600; text-decoration: none; color: var(--n-900); }
+  a.name:hover span { text-decoration: underline; text-decoration-color: var(--farbe-akzent); }
+  .unter { display: block; margin: 2px 0 0 calc(32px + var(--raum-3)); font-size: 0.8125rem; overflow-wrap: anywhere; }
+  .datum { display: block; font-size: 0.8125rem; font-weight: 400; }
+  td a:not(.name) { color: var(--farbe-text-2); text-decoration: none; }
+  td a:not(.name):hover { color: var(--n-900); text-decoration: underline; }
+  .pb { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
+  .s-tel, .s-zeit, .s-stand, .s-link { white-space: nowrap; }
+  .ja { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--farbe-erfolg-text); }
+  .leer-wert { color: var(--n-400); }
+  .seiten { display: flex; justify-content: center; align-items: center; gap: var(--raum-4); margin-top: var(--raum-6); }
+
+  @media (max-width: 1000px) {
+    .tabelle { overflow: visible; background: none; border: 0; box-shadow: none; }
+    table, tbody, tr, td { display: block; }
+    thead { display: none; }
+    tbody { display: grid; gap: var(--raum-3); }
+    tbody tr { background: var(--farbe-papier); border: 1px solid var(--farbe-rahmen); padding: var(--raum-3) var(--raum-4); display: grid; grid-template-columns: 1fr 1fr; gap: var(--raum-2) var(--raum-4); }
+    tbody tr:hover { background: var(--farbe-papier); }
+    td, td + td { border: 0; padding: 0; min-width: 0; white-space: normal; }
+    td.s-name, td.s-pb { grid-column: 1 / -1; }
+    .reiter { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    td:not(.s-name):not(.s-pb)::before { content: attr(data-label); display: block; font-size: 0.75rem; color: var(--farbe-text-leise); }
+    td.s-tel:has(.leer-wert) { display: none; }
+    .suche { flex-wrap: wrap; }
+    .suche .eingabe { flex-basis: 100%; }
+    .suche > :global(svg) { top: 13px; }
+  }
+</style>

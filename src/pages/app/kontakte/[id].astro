@@ -5,6 +5,7 @@ import KontaktFormular from '../../../components/KontaktFormular.astro';
 import Icon from '../../../components/ui/Icon.astro';
 import { kontaktAusFormular, kontaktEntfernen, kontaktMitMeetings, kontaktSpeichern, meetingsVon, type KontaktWerte } from '../../../lib/kontakte';
 import { meldungAusUrl } from '../../../lib/meldungen';
+import { istPlaybook, PLAYBOOKS, zugaengeVonKontakt, zugangSperren, zugangStatus, zugangVerlaengern } from '../../../lib/playbooks';
 import { formatDatumMittel, formatZeit } from '../../../lib/zeit';
 
 const nutzer = Astro.locals.gastgeber!;
@@ -23,7 +24,14 @@ let fehler: Record<string, string> = {};
 
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
-  if (form.get('aktion') === 'entfernen') {
+  const aktion = form.get('aktion');
+  const zugangId = String(form.get('zugang') ?? '');
+  if (aktion === 'playbook-verlaengern' || aktion === 'playbook-sperren') {
+    if (aktion === 'playbook-verlaengern') await zugangVerlaengern(nutzer.id, zugangId);
+    else await zugangSperren(nutzer.id, zugangId);
+    return Astro.redirect(`/app/kontakte/${id}?ok=gespeichert#playbooks`);
+  }
+  if (aktion === 'entfernen') {
     await kontaktEntfernen(nutzer.id, id);
     return Astro.redirect('/app/kontakte?ok=entfernt');
   }
@@ -38,9 +46,9 @@ if (Astro.request.method === 'POST') {
 }
 
 const tz = nutzer.zeitzone;
-const meetings = await meetingsVon(nutzer.id, kontakt.email);
+const [meetings, zugaenge] = await Promise.all([meetingsVon(nutzer.id, kontakt.email), zugaengeVonKontakt(kontakt.id)]);
 const jetzt = new Date().toISOString();
-const QUELLE: Record<string, string> = { buchung: 'Buchung über Let\'s Meet', google: 'Gast im Google Kalender', import: 'CSV Import', manuell: 'Von Hand angelegt' };
+const QUELLE: Record<string, string> = { buchung: 'Buchung über Let\'s Meet', google: 'Gast im Google Kalender', import: 'CSV Import', manuell: 'Von Hand angelegt', playbook: 'Playbook angefordert' };
 
 // Termin für den Kontakt buchen: Buchungsseite mit vorausgefülltem Formular (Fragment geht an keinen Server)
 const vorbelegung = new URLSearchParams({ name: kontakt.name, ...(kontakt.email ? { email: kontakt.email } : {}), ...(kontakt.telefon ? { telefon: kontakt.telefon } : {}), quelle: 'backoffice' });
@@ -103,6 +111,50 @@ const wann = (iso: string) => `${formatDatumMittel(iso, tz)}, ${formatZeit(iso, 
         )}
       </section>
 
+      {zugaenge.length > 0 && (
+        <section class="karte block" aria-labelledby="k-playbooks" id="playbooks">
+          <h2 id="k-playbooks" class="klein-titel">Playbooks</h2>
+          <ol class="playbooks" role="list">
+            {zugaenge.map((z) => {
+              const st = zugangStatus(z);
+              return (
+                <li>
+                  <strong>{istPlaybook(z.playbook) ? PLAYBOOKS[z.playbook].name : z.playbook}</strong>
+                  <span class="leise klein">Angefordert am {wann(z.erstellt_am)}</span>
+                  <dl class="pb-stand">
+                    <div class:list={{ ja: z.aufrufe > 0 }}>
+                      <dt><Icon name="auge" groesse={16} />Geöffnet</dt>
+                      <dd>{z.aufrufe > 0 ? `${z.aufrufe}×, zuletzt ${wann(z.zuletzt_geoeffnet!)}` : 'Noch nicht'}</dd>
+                    </div>
+                    <div class:list={{ ja: z.downloads > 0 }}>
+                      <dt><Icon name="download" groesse={16} />PDF geladen</dt>
+                      <dd>{z.downloads > 0 ? `${z.downloads}×, zuletzt ${wann(z.zuletzt_geladen!)}` : 'Noch nicht'}</dd>
+                    </div>
+                  </dl>
+                  <span class="leise klein">
+                    {st === 'gueltig' ? `Link gültig bis ${formatDatumMittel(z.gueltig_bis, tz)}` : st === 'gesperrt' ? 'Link gesperrt' : `Link abgelaufen am ${formatDatumMittel(z.gueltig_bis, tz)}`}
+                  </span>
+                  <div class="pb-aktionen">
+                    <form method="post">
+                      <input type="hidden" name="zugang" value={z.id} />
+                      <input type="hidden" name="aktion" value="playbook-verlaengern" />
+                      <button class="knopf knopf--rahmen knopf--klein" type="submit">{st === 'gueltig' ? 'Um 30 Tage verlängern' : 'Wieder freischalten'}</button>
+                    </form>
+                    {st === 'gueltig' && (
+                      <form method="post" data-rueckfrage="Diesen Link sperren? Die Person kommt dann nicht mehr an das Playbook.">
+                        <input type="hidden" name="zugang" value={z.id} />
+                        <input type="hidden" name="aktion" value="playbook-sperren" />
+                        <button class="knopf knopf--leise knopf--klein" type="submit">Sperren</button>
+                      </form>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
+
       <section class="karte block" aria-labelledby="k-entfernen">
         <h2 id="k-entfernen" class="klein-titel">Kontakt entfernen</h2>
         <p class="leise klein">Entfernt den Kontakt aus der Liste. Buchungen bleiben erhalten. Bucht die Person erneut, steht sie wieder im Kontaktbuch.</p>
@@ -136,6 +188,14 @@ const wann = (iso: string) => `${formatDatumMittel(iso, tz)}, ${formatZeit(iso, 
   .meetings a > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .m-wann { display: flex; gap: var(--raum-2); align-items: center; font-size: var(--text-sm); font-weight: 600; color: var(--farbe-text-2); }
   .m-wann .badge { padding: 1px 8px; font-size: 0.75rem; }
+  .playbooks { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-3); }
+  .playbooks li { display: grid; gap: var(--raum-2); padding: var(--raum-3) var(--raum-4); border: 1px solid var(--farbe-rahmen); border-left: 4px solid var(--farbe-akzent); }
+  .pb-stand { margin: 0; display: grid; gap: 4px; }
+  .pb-stand div { display: flex; flex-wrap: wrap; gap: 2px var(--raum-2); font-size: var(--text-sm); color: var(--farbe-text-leise); }
+  .pb-stand dt { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+  .pb-stand dd { margin: 0; }
+  .pb-stand div.ja { color: var(--farbe-erfolg-text); }
+  .pb-aktionen { display: flex; flex-wrap: wrap; gap: var(--raum-2); }
   @media (max-width: 1100px) { .raster { grid-template-columns: 1fr; } }
   @media (max-width: 520px) { .ueberblick { grid-template-columns: 1fr; } }
 </style>
