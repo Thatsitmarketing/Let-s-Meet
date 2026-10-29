@@ -3,6 +3,8 @@
 import Icon from './ui/Icon.astro';
 import Marke from './ui/Marke.astro';
 import OrtIcon from './OrtIcon.astro';
+import QrDialog from './QrDialog.astro';
+import { qrLink } from '../lib/qr';
 import { terminartenVon } from '../lib/abfragen';
 import { ORT_LABEL } from '../lib/typen';
 
@@ -72,6 +74,7 @@ const sichtbarkeit = (a: (typeof arten)[number]): [string, string] => (!a.aktiv 
                 <td class="aktionen">
                   <span class="aktionen-in">
                   <button type="button" class="knopf knopf--rahmen knopf--klein" data-kopieren={url}><Icon name="kopieren" groesse={16} />Link</button>
+                  <button type="button" class="knopf knopf--leise knopf--klein" data-qr-id={a.id} data-qr-titel={a.titel} data-qr-link={qrLink(a.slug, Astro.url)} title="QR-Code" aria-label={`QR-Code für ${a.titel}`}><Icon name="qr" groesse={16} /></button>
                   <a class="knopf knopf--leise knopf--klein" href={url} target="_blank" rel="noopener" aria-label={`${a.titel} ansehen`}><Icon name="extern" groesse={16} /></a>
                   <a class="knopf knopf--leise knopf--klein" href={`/app/terminarten/${a.id}`}><Icon name="stift" groesse={16} />Bearbeiten</a>
                   </span>
@@ -99,6 +102,7 @@ const sichtbarkeit = (a: (typeof arten)[number]): [string, string] => (!a.aktiv 
       ))}
     </div>
   </section>
+  <QrDialog />
 <style>
   .block { display: grid; gap: var(--raum-6); margin-bottom: var(--raum-12); }
   .block:last-child { margin-bottom: 0; }
@@ -118,7 +122,7 @@ const sichtbarkeit = (a: (typeof arten)[number]): [string, string] => (!a.aktiv 
   .reihe { display: flex; flex-wrap: wrap; gap: var(--raum-2); }
   .tabelle-rahmen { overflow: hidden; }
   .tabelle { width: 100%; border-collapse: collapse; }
-  .tabelle th, .tabelle td { text-align: left; padding: var(--raum-4) var(--raum-6); border-bottom: 1px solid var(--farbe-rahmen); vertical-align: middle; }
+  .tabelle th, .tabelle td { text-align: left; padding: var(--raum-4); border-bottom: 1px solid var(--farbe-rahmen); vertical-align: middle; }
   .tabelle th { font-size: var(--text-sm); font-weight: 600; color: var(--n-600); background: var(--n-050, transparent); white-space: nowrap; }
   .tabelle tr:last-child td { border-bottom: 0; }
   .tabelle .slug { display: block; margin-top: 2px; }

@@ -2,9 +2,11 @@
 import App from '../../../layouts/App.astro';
 import Icon from '../../../components/ui/Icon.astro';
 import OrtIcon from '../../../components/OrtIcon.astro';
+import QrDialog from '../../../components/QrDialog.astro';
 import { terminartenVon } from '../../../lib/abfragen';
 import { alle, ausfuehren, db, eins, jetztIso, neueId } from '../../../lib/db';
 import { meldungAusUrl } from '../../../lib/meldungen';
+import { qrLink } from '../../../lib/qr';
 import { ORT_LABEL, type Terminart } from '../../../lib/typen';
 
 const nutzer = Astro.locals.gastgeber!;
@@ -88,17 +90,6 @@ const gruppen = [
               </label>
               <noscript><button class="knopf knopf--klein knopf--leise">Umschalten</button></noscript>
             </form>
-            {ta.geheim ? <span class="badge badge--hell">Geheim</span> : null}
-          </div>
-          <a class="art-titel" href={`/app/terminarten/${ta.id}`}>{ta.titel}</a>
-          <p class="art-meta">
-            <span><Icon name="uhr" groesse={16} />{ta.dauer_min} Min</span>
-            <span><OrtIcon typ={ta.ort_typ} groesse={16} />{ORT_LABEL[ta.ort_typ]}</span>
-          </p>
-          {kurztext(ta.beschreibung) ? <p class="art-text">{kurztext(ta.beschreibung)}</p> : null}
-          <a class="art-link leise klein" href={`/${ta.slug}`} target="_blank" rel="noopener">/{ta.slug}</a>
-          <div class="art-fuss">
-            <button type="button" class="knopf knopf--rahmen knopf--klein" data-kopieren={`${basis}/${ta.slug}`}><Icon name="kopieren" />Link kopieren</button>
             <div class="art-mehr">
               <a class="symbol" href={`/app/terminarten/${ta.id}`} title="Bearbeiten"><Icon name="stift" /><span class="sr-only">{ta.titel} bearbeiten</span></a>
               <form method="post">
@@ -107,6 +98,18 @@ const gruppen = [
               </form>
             </div>
           </div>
+          <a class="art-titel" href={`/app/terminarten/${ta.id}`}>{ta.titel}</a>
+          <p class="art-meta">
+            <span><Icon name="uhr" groesse={16} />{ta.dauer_min} Min</span>
+            <span><OrtIcon typ={ta.ort_typ} groesse={16} />{ORT_LABEL[ta.ort_typ]}</span>
+            {ta.geheim ? <span class="badge badge--hell">Geheim</span> : null}
+          </p>
+          {kurztext(ta.beschreibung) ? <p class="art-text">{kurztext(ta.beschreibung)}</p> : null}
+          <a class="art-link leise klein" href={`/${ta.slug}`} target="_blank" rel="noopener">/{ta.slug}</a>
+          <div class="art-fuss">
+            <button type="button" class="knopf knopf--rahmen knopf--klein" data-kopieren={`${basis}/${ta.slug}`}><Icon name="kopieren" />Link kopieren</button>
+            <button type="button" class="knopf knopf--rahmen knopf--klein" data-qr-id={ta.id} data-qr-titel={ta.titel} data-qr-link={qrLink(ta.slug, Astro.url)}><Icon name="qr" />QR-Code</button>
+          </div>
         </li>
       ))}
     </ul>
@@ -114,6 +117,7 @@ const gruppen = [
     ))}
     </div>
   )}
+  <QrDialog />
 </App>
 
 <style>
@@ -137,7 +141,9 @@ const gruppen = [
   .art-meta span { display: inline-flex; align-items: center; gap: 6px; }
   .art-text { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--farbe-text-2); display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .art-link { overflow-wrap: anywhere; }
-  .art-fuss { margin-top: auto; padding-top: var(--raum-4); border-top: 1px solid var(--farbe-rahmen); display: flex; justify-content: space-between; align-items: center; gap: var(--raum-2); }
+  .art-fuss { margin-top: auto; padding-top: var(--raum-4); border-top: 1px solid var(--farbe-rahmen); display: flex; flex-wrap: wrap; gap: var(--raum-2); }
+  /* Link und QR-Code nebeneinander, wird es eng, je eine volle Zeile */
+  .art-fuss > .knopf { flex: 1 1 auto; justify-content: center; }
   .art-mehr { display: flex; gap: 2px; }
   .symbol {
     display: grid; place-items: center; width: 36px; height: 36px; background: none; border: 1px solid transparent;

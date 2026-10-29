@@ -2,6 +2,8 @@
 import App from '../../../layouts/App.astro';
 import Icon from '../../../components/ui/Icon.astro';
 import TerminartFormular from '../../../components/TerminartFormular.astro';
+import QrDialog from '../../../components/QrDialog.astro';
+import { qrLink } from '../../../lib/qr';
 import { ausfuehren, eins } from '../../../lib/db';
 import { meldungAusUrl } from '../../../lib/meldungen';
 import { terminartAusFormular, terminartSpeichern, type TerminartWerte } from '../../../lib/terminart-formular';
@@ -47,6 +49,7 @@ const ablaeufe = await ablaufWahl(nutzer, ta.id, gewaehlt);
 <App titel={ta.titel} eyebrow="Terminart bearbeiten" meldung={meldungAusUrl(Astro.url)}>
   <Fragment slot="aktionen">
     <button type="button" class="knopf knopf--rahmen" data-kopieren={link}><Icon name="kopieren" />Link kopieren</button>
+    <button type="button" class="knopf knopf--rahmen" data-qr-id={ta.id} data-qr-titel={ta.titel} data-qr-link={qrLink(ta.slug, Astro.url)}><Icon name="qr" />QR-Code</button>
     <a class="knopf knopf--rahmen" href={link} target="_blank" rel="noopener"><Icon name="auge" />Ansehen</a>
   </Fragment>
   <TerminartFormular werte={werte} fehler={fehler} neu={false} ablaeufe={ablaeufe} terminartId={ta.id} />
@@ -58,6 +61,7 @@ const ablaeufe = await ablaufWahl(nutzer, ta.id, gewaehlt);
       <button class="knopf knopf--gefahr" name="aktion" value="loeschen"><Icon name="loeschen" />Terminart löschen</button>
     </form>
   </section>
+  <QrDialog />
 </App>
 
 <style>

@@ -1,0 +1,89 @@
+---
+/**
+ * Fenster mit dem QR-Code einer Terminart: Vorschau, Link und Download als PNG oder SVG.
+ * Einmal pro Seite einbinden. Geöffnet von Knöpfen mit `data-qr-id`, `data-qr-titel` und `data-qr-link`.
+ */
+import Icon from './ui/Icon.astro';
+---
+<dialog class="qr-fenster" id="qr-fenster" aria-labelledby="qr-titel">
+  <div class="qr-kopf">
+    <div>
+      <p class="qr-eyebrow">QR-Code</p>
+      <h2 id="qr-titel" data-qr-feld="titel">Terminart</h2>
+    </div>
+    <button type="button" class="qr-zu" data-qr-zu aria-label="Schließen"><Icon name="x" /></button>
+  </div>
+  <div class="qr-bild">
+    <img data-qr-feld="bild" src="data:," alt="" width="240" height="240" />
+  </div>
+  <p class="qr-link klein"><span class="leise">Führt zu</span> <a data-qr-feld="link" href="#" target="_blank" rel="noopener"></a></p>
+  <div class="qr-knoepfe">
+    <a class="knopf knopf--orange" data-qr-feld="png" href="#" download><Icon name="download" />PNG herunterladen</a>
+    <a class="knopf knopf--rahmen" data-qr-feld="svg" href="#" download><Icon name="download" />SVG herunterladen</a>
+    <button type="button" class="knopf knopf--leise" data-qr-feld="kopieren" data-kopieren=""><Icon name="kopieren" />Link kopieren</button>
+  </div>
+  <p class="leise klein qr-hilfe">PNG (1.200 Pixel) für Präsentationen, Mails und Social Media. SVG für den Druck, lässt sich ohne Qualitätsverlust beliebig vergrößern.</p>
+</dialog>
+
+<script>
+  const fenster = document.getElementById('qr-fenster') as HTMLDialogElement | null;
+  if (fenster) {
+    const feld = <T extends HTMLElement>(name: string) => fenster.querySelector<T>(`[data-qr-feld="${name}"]`)!;
+    let ausloeser: HTMLElement | null = null;
+    document.addEventListener('click', (e) => {
+      const k = (e.target as HTMLElement).closest<HTMLElement>('[data-qr-id]');
+      if (!k) return;
+      const { qrId = '', qrTitel = '', qrLink = '' } = k.dataset;
+      const basis = `/api/app/terminarten/${encodeURIComponent(qrId)}/qr`;
+      feld('titel').textContent = qrTitel;
+      const bild = feld<HTMLImageElement>('bild');
+      bild.src = `${basis}?format=svg`;
+      bild.alt = `QR-Code für ${qrTitel}`;
+      bild.title = `QR-Code für ${qrTitel}`;
+      const link = feld<HTMLAnchorElement>('link');
+      link.href = qrLink;
+      link.textContent = qrLink.replace(/^https?:\/\//, '');
+      feld<HTMLAnchorElement>('png').href = `${basis}?format=png&download=1`;
+      feld<HTMLAnchorElement>('svg').href = `${basis}?format=svg&download=1`;
+      feld('kopieren').dataset.kopieren = qrLink;
+      ausloeser = k;
+      fenster.showModal();
+    });
+    fenster.addEventListener('click', (e) => {
+      // Klick neben das Fenster oder auf das X schließt
+      if (e.target === fenster || (e.target as HTMLElement).closest('[data-qr-zu]')) fenster.close();
+    });
+    fenster.addEventListener('close', () => ausloeser?.focus());
+  }
+</script>
+
+<style>
+  .qr-fenster {
+    width: min(440px, calc(100vw - 2 * var(--raum-4)));
+    max-height: calc(100dvh - 2 * var(--raum-4));
+    overflow: auto;
+    margin: auto;
+    padding: var(--raum-6);
+    border: 0;
+    border-top: 4px solid var(--farbe-akzent);
+    border-radius: var(--radius-s);
+    background: var(--farbe-papier);
+    color: var(--farbe-text);
+    box-shadow: 0 24px 64px rgb(0 0 0 / 0.28);
+  }
+  .qr-fenster::backdrop { background: rgb(14 14 14 / 0.6); }
+  .qr-fenster[open] { display: grid; gap: var(--raum-4); }
+  .qr-kopf { display: flex; justify-content: space-between; align-items: start; gap: var(--raum-4); }
+  .qr-eyebrow { margin: 0 0 4px; font-family: var(--schrift-label); font-weight: 500; font-size: var(--text-sm); letter-spacing: 0.4em; text-transform: uppercase; color: var(--farbe-text-2); }
+  .qr-kopf h2 { margin: 0; font-size: var(--text-h3); line-height: 1.1; }
+  .qr-zu {
+    display: grid; place-items: center; flex: none; width: 36px; height: 36px; background: none; cursor: pointer;
+    border: 1px solid transparent; border-radius: var(--radius-s); color: var(--n-700);
+  }
+  .qr-zu:hover { border-color: var(--n-900); color: var(--n-900); }
+  .qr-bild { display: grid; place-items: center; padding: var(--raum-4); border: 1px solid var(--farbe-rahmen); background: #fff; }
+  .qr-bild img { display: block; width: min(240px, 100%); height: auto; aspect-ratio: 1; image-rendering: pixelated; }
+  .qr-link { margin: 0; overflow-wrap: anywhere; }
+  .qr-knoepfe { display: flex; flex-wrap: wrap; gap: var(--raum-2); }
+  .qr-hilfe { margin: 0; }
+</style>
