@@ -20,7 +20,7 @@ const vorname = zugang.name.split(/\s+/)[0] ?? zugang.name;
 const bis = formatDatumMittel(zugang.gueltig_bis, 'Europe/Berlin');
 const mb = dateien?.pdfBytes ? (dateien.pdfBytes / 1_048_576).toLocaleString('de-DE', { maximumFractionDigits: 1 }) : null;
 ---
-<Oeffentlich titel={status === 'gueltig' ? pb.name : 'Link nicht mehr gültig'} breit>
+<Oeffentlich titel={status === 'gueltig' ? pb.name : 'Link nicht mehr gültig'} breit marke="thatsit">
   {status === 'gueltig' ? (
     <article class="playbook">
       <header class="kopf-text">

@@ -9,11 +9,13 @@ interface Props {
   breit?: boolean;
   /** Bürofoto als Seitenhintergrund (zentrale Buchungsseite) */
   bild?: boolean;
+  /** thatsit: Logo That's it. Marketing statt Let's Meet im Kopf (Playbook Seite) */
+  marke?: 'letsmeet' | 'thatsit';
 }
-const { titel, beschreibung, indexieren = false, breit = false, bild = false } = Astro.props;
+const { titel, beschreibung, indexieren = false, breit = false, bild = false, marke = 'letsmeet' } = Astro.props;
 const embed = Astro.url.searchParams.get('embed') === '1';
 ---
-<Basis titel={titel} beschreibung={beschreibung} indexieren={indexieren} klasse={embed ? 'embed' : bild ? 'oeffentlich mit-bild' : 'oeffentlich'}>
+<Basis titel={titel} beschreibung={beschreibung} indexieren={indexieren} marke={marke} klasse={embed ? 'embed' : bild ? 'oeffentlich mit-bild' : 'oeffentlich'}>
   <slot name="head" slot="head" />
   {!embed && (
     <header class="kopf">
@@ -21,6 +23,10 @@ const embed = Astro.url.searchParams.get('embed') === '1';
         {bild ? (
           <a href="/" class="kopf-logo" aria-label="That's it. Marketing, zur Startseite">
             <img src="/images/brand/logo-weiss.webp" alt="Logo That's it. Marketing" title="That's it. Marketing, Gelsenkirchen" width="198" height="60" />
+          </a>
+        ) : marke === 'thatsit' ? (
+          <a href="https://thatsit.marketing/" class="kopf-logo kopf-logo--thatsit" aria-label="That's it. Marketing, zur Website">
+            <img src="/images/brand/logo-schwarz.webp" alt="Logo That's it. Marketing" title="That's it. Marketing, Gelsenkirchen" width="198" height="60" />
           </a>
         ) : (
           <Logo form="voll" hoehe={34} href="/" />
@@ -92,6 +98,8 @@ const embed = Astro.url.searchParams.get('embed') === '1';
   }
   .kopf-logo { display: inline-block; line-height: 0; }
   .kopf-logo img { height: 60px; width: auto; }
+  /* Auf der weißen Leiste so hoch wie das Let's Meet Logo der anderen Seiten */
+  .kopf-logo--thatsit img { height: 40px; }
   .kopf-innen { padding-top: var(--raum-3); padding-bottom: var(--raum-3); }
   .kopf-innen,
   .fuss-innen {
@@ -143,5 +151,6 @@ const embed = Astro.url.searchParams.get('embed') === '1';
     .haupt { padding-top: var(--raum-6); }
     .haupt.bild { padding-top: var(--raum-4); padding-bottom: var(--raum-6); }
     .kopf-logo img { height: 38px; }
+    .kopf-logo--thatsit img { height: 32px; }
   }
 </style>
