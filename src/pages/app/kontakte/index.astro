@@ -7,6 +7,7 @@ import {
   type KontaktFilter, type KontaktSortierung,
 } from '../../../lib/kontakte';
 import { meldungAusUrl } from '../../../lib/meldungen';
+import { playbookStandVonKontakten } from '../../../lib/playbooks';
 import { datumInZone, formatDatumMittel, formatZeit } from '../../../lib/zeit';
 
 const nutzer = Astro.locals.gastgeber!;
@@ -35,6 +36,9 @@ const seite = Math.max(1, Number(p.get('seite') ?? 1) || 1);
 
 const abfrage = kontaktAbfrage(nutzer.id, { suche, filter, sortierung });
 const [zeilen, gesamt] = await Promise.all([abfrage.liste(PRO_SEITE, (seite - 1) * PRO_SEITE), abfrage.anzahl()]);
+// Markierung, wie weit jemand mit einem angeforderten Playbook ist
+const playbookStand = await playbookStandVonKontakten(zeilen.map((k) => k.id));
+const PLAYBOOK_MARKE = { geladen: 'Playbook geladen', geoeffnet: 'Playbook geöffnet', angefordert: 'Playbook angefordert' } as const;
 const seiten = Math.max(1, Math.ceil(gesamt / PRO_SEITE));
 const heute = datumInZone(new Date(), tz);
 
@@ -127,6 +131,9 @@ const importiert = p.get('importiert');
                   <Avatar name={k.name} groesse={32} />
                   <span>{k.name}</span>
                 </a>
+                {playbookStand.get(k.id) && (
+                  <span class:list={['pille', 'pb-marke', `pb-${playbookStand.get(k.id)}`]}>{PLAYBOOK_MARKE[playbookStand.get(k.id)!]}</span>
+                )}
               </td>
               <td class="s-mail" data-label="E Mail">{k.email ? <a href={`mailto:${k.email}`}>{k.email}</a> : <span class="leer-wert">–</span>}</td>
               <td class="s-tel" data-label="Telefon">{k.telefon ? <a href={`tel:${k.telefon.replace(/[^\d+]/g, '')}`}>{k.telefon}</a> : <span class="leer-wert">–</span>}</td>
@@ -206,6 +213,10 @@ const importiert = p.get('importiert');
   .s-tel, .s-letztes, .s-naechstes { white-space: nowrap; }
   .naechstes { display: inline-flex; align-items: baseline; gap: var(--raum-2); font-weight: 600; }
   .naechstes .badge { padding: 1px 8px; font-size: 0.75rem; }
+  .pb-marke { display: flex; width: fit-content; margin: 4px 0 0 calc(32px + var(--raum-3)); padding: 1px 8px; font-size: 0.75rem; }
+  .pb-geladen { background: var(--farbe-erfolg-flaeche); color: var(--farbe-erfolg-text); }
+  .pb-geoeffnet { background: var(--n-100); color: var(--n-700); }
+  .pb-angefordert { background: transparent; color: var(--farbe-text-leise); box-shadow: inset 0 0 0 1px var(--farbe-rahmen); }
   .leer-wert { color: var(--n-300); }
 
   .seiten { display: flex; justify-content: center; align-items: center; gap: var(--raum-4); margin-top: var(--raum-6); }

@@ -1,0 +1,470 @@
+---
+/**
+ * Blätterbares Playbook auf /playbook/{id}. Übernommen aus dem abgenommenen Flipbook der
+ * Website Conversion Landingpage (playbook_website, src/components/ui/PlaybookVorschau.astro),
+ * erweitert auf beliebig viele Seiten und Querformat.
+ *
+ * Modell wie dort: Blätter mit Vorder- und Rückseite, umgeschlagene Blätter stehen auf
+ * rotateY(-180deg). Hochformat zeigt ab 560 Pixeln Bühnenbreite eine Doppelseite, Querformat
+ * (die Playbooks sind Folien 16 zu 9) immer eine Seite mit halber Drehung beim Blättern.
+ *
+ * Die Seitenbilder kommen einzeln über /playbook/{id}/seite/{nr} (nur mit gültigem Link) und
+ * werden erst in der Nähe der aktuellen Seite geladen, damit beim Öffnen nicht alle 50 Seiten
+ * auf einmal kommen.
+ */
+import Icon from './ui/Icon.astro';
+
+interface Props {
+  id: string;
+  name: string;
+  seiten: number;
+  breite: number;
+  hoehe: number;
+}
+const { id, name, seiten, breite, hoehe } = Astro.props;
+const quer = breite >= hoehe;
+const nummern = Array.from({ length: seiten }, (_, i) => i + 1);
+const blaetter = Array.from({ length: Math.ceil(seiten / 2) }, (_, i) => ({
+  vorne: i * 2,
+  hinten: i * 2 + 1 < seiten ? i * 2 + 1 : null,
+}));
+const quelle = (nr: number) => `/playbook/${id}/seite/${nr + 1}`;
+---
+
+<div class="flipbook" data-flipbook data-quer={quer ? '' : undefined} style={`--seite-b:${breite};--seite-h:${hoehe}`}>
+  <div class="flipbook__buehne" data-flipbook-buehne>
+    <div class="flipbook__buch" data-flipbook-buch role="group" aria-roledescription="Blätterbares Dokument" aria-label={`${name}, ${seiten} Seiten`} tabindex="0">
+      {blaetter.map((blatt, i) => (
+        <div class="flipbook__blatt" data-flipbook-blatt>
+          <div class="flipbook__flaeche flipbook__flaeche--vorne" data-flipbook-seite={blatt.vorne}>
+            <img
+              data-src={quelle(blatt.vorne)}
+              src={i === 0 ? quelle(blatt.vorne) : undefined}
+              alt={`Seite ${blatt.vorne + 1} von ${seiten}, ${name}`}
+              title={`${name}, Seite ${blatt.vorne + 1}`}
+              width={breite}
+              height={hoehe}
+              decoding="async"
+            />
+            <span class="flipbook__bund" aria-hidden="true"></span>
+            <span class="flipbook__schatten" aria-hidden="true"></span>
+          </div>
+          {blatt.hinten !== null && (
+            <div class="flipbook__flaeche flipbook__flaeche--hinten" data-flipbook-seite={blatt.hinten}>
+              <img
+                data-src={quelle(blatt.hinten)}
+                src={i === 0 ? quelle(blatt.hinten) : undefined}
+                alt={`Seite ${blatt.hinten + 1} von ${seiten}, ${name}`}
+                title={`${name}, Seite ${blatt.hinten + 1}`}
+                width={breite}
+                height={hoehe}
+                decoding="async"
+              />
+              <span class="flipbook__bund" aria-hidden="true"></span>
+              <span class="flipbook__schatten" aria-hidden="true"></span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+
+    <button type="button" class="flipbook__pfeil flipbook__pfeil--zurueck" data-flipbook-zurueck disabled>
+      <Icon name="links" groesse={22} /><span class="sr-only">Vorherige Seite</span>
+    </button>
+    <button type="button" class="flipbook__pfeil flipbook__pfeil--vor" data-flipbook-vor>
+      <Icon name="rechts" groesse={22} /><span class="sr-only">Nächste Seite</span>
+    </button>
+  </div>
+
+  <div class="flipbook__leiste">
+    <p class="flipbook__zaehler" data-flipbook-zaehler aria-live="polite">Seite 1 von {seiten}</p>
+    <label class="flipbook__sprung">
+      <span class="sr-only">Zu Seite springen</span>
+      <select data-flipbook-sprung>
+        {nummern.map((n) => <option value={n - 1}>Seite {n}</option>)}
+      </select>
+    </label>
+    <button type="button" class="flipbook__vollbild" data-flipbook-vollbild hidden>
+      <Icon name="raster" groesse={18} /><span data-flipbook-vollbild-text>Vollbild</span>
+    </button>
+  </div>
+</div>
+
+<style>
+  .flipbook {
+    --flip-dauer: 760ms;
+    display: flex;
+    flex-direction: column;
+    gap: var(--raum-4);
+    padding: clamp(var(--raum-4), 3vw, var(--raum-8));
+    background: var(--n-900);
+    color: #fff;
+  }
+  .flipbook:fullscreen { justify-content: center; padding: var(--raum-6); }
+
+  .flipbook__buehne {
+    position: relative;
+    perspective: 2400px;
+    overflow: clip;
+    padding-inline: 52px;
+  }
+
+  /* Doppelseite im Hochformat: zwei Blattbreiten, Seitenverhältnis der echten Seiten.
+     Gedeckelt über die Breite, damit das Verhältnis nie bricht. */
+  .flipbook__buch {
+    --buch-hoehe: min(40rem, 72svh);
+    --verhaeltnis: calc(var(--seite-b) / var(--seite-h));
+    position: relative;
+    inline-size: min(100%, calc(var(--buch-hoehe) * var(--verhaeltnis) * 2));
+    aspect-ratio: calc(var(--verhaeltnis) * 2);
+    margin-inline: auto;
+    transform-style: preserve-3d;
+    transform: translateX(var(--buch-versatz, 0%));
+    transition: transform var(--flip-dauer) var(--kurve);
+    cursor: pointer;
+  }
+  .flipbook:fullscreen .flipbook__buch { --buch-hoehe: calc(100svh - 9rem); }
+  .flipbook__buch:focus-visible { outline: 2px solid var(--farbe-akzent); outline-offset: 4px; }
+
+  .flipbook__blatt {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 50%;
+    inline-size: 50%;
+    transform-origin: left center;
+    transform-style: preserve-3d;
+    background: #fff;
+    box-shadow: 0 10px 36px rgba(0, 0, 0, 0.5);
+  }
+  .flipbook__flaeche {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    overflow: hidden;
+    background: #fff;
+  }
+  .flipbook__flaeche--hinten { transform: rotateY(180deg); }
+  .flipbook__flaeche img { display: block; inline-size: 100%; block-size: 100%; object-fit: contain; }
+
+  .flipbook__bund { position: absolute; inset-block: 0; inline-size: 8%; pointer-events: none; }
+  .flipbook__flaeche--vorne .flipbook__bund { inset-inline-start: 0; background: linear-gradient(90deg, rgba(14, 14, 14, 0.22), rgba(14, 14, 14, 0)); }
+  .flipbook__flaeche--hinten .flipbook__bund { inset-inline-end: 0; background: linear-gradient(270deg, rgba(14, 14, 14, 0.22), rgba(14, 14, 14, 0)); }
+  .flipbook__schatten { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(90deg, rgba(14, 14, 14, 0.75), rgba(14, 14, 14, 0.1)); }
+
+  @keyframes flipbook-vor { from { transform: rotateY(0deg); } to { transform: rotateY(-180deg); } }
+  @keyframes flipbook-zurueck { from { transform: rotateY(-180deg); } to { transform: rotateY(0deg); } }
+  @keyframes flipbook-schatten-auf { from { opacity: 0; } to { opacity: 0.5; } }
+  @keyframes flipbook-schatten-ab { from { opacity: 0.5; } to { opacity: 0; } }
+  .flipbook__blatt[data-dreht='vor'] { animation: flipbook-vor var(--flip-dauer) var(--kurve) forwards; }
+  .flipbook__blatt[data-dreht='zurueck'] { animation: flipbook-zurueck var(--flip-dauer) var(--kurve) forwards; }
+  .flipbook__blatt[data-dreht='vor'] .flipbook__flaeche--vorne .flipbook__schatten,
+  .flipbook__blatt[data-dreht='zurueck'] .flipbook__flaeche--hinten .flipbook__schatten { animation: flipbook-schatten-auf var(--flip-dauer) var(--kurve); }
+  .flipbook__blatt[data-dreht='vor'] .flipbook__flaeche--hinten .flipbook__schatten,
+  .flipbook__blatt[data-dreht='zurueck'] .flipbook__flaeche--vorne .flipbook__schatten { animation: flipbook-schatten-ab var(--flip-dauer) var(--kurve); }
+
+  .flipbook__pfeil {
+    position: absolute;
+    inset-block-start: 50%;
+    z-index: 120;
+    display: grid;
+    place-items: center;
+    inline-size: 44px;
+    block-size: 44px;
+    color: var(--farbe-akzent);
+    background: rgba(14, 14, 14, 0.9);
+    border: 1px solid rgba(220, 152, 50, 0.6);
+    border-radius: 50%;
+    cursor: pointer;
+    transform: translateY(-50%);
+    transition: background var(--dauer-normal) var(--kurve), color var(--dauer-normal) var(--kurve), opacity var(--dauer-normal) var(--kurve);
+  }
+  .flipbook__pfeil--zurueck { inset-inline-start: 0; }
+  .flipbook__pfeil--vor { inset-inline-end: 0; }
+  .flipbook__pfeil:hover:not(:disabled) { background: var(--farbe-akzent); color: var(--n-900); }
+  .flipbook__pfeil:disabled { opacity: 0.25; cursor: default; }
+  .flipbook__pfeil:focus-visible { outline: 2px solid var(--farbe-akzent); outline-offset: 2px; }
+
+  .flipbook__leiste { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--raum-3) var(--raum-6); }
+  .flipbook__zaehler {
+    margin: 0;
+    font-family: var(--schrift-label);
+    font-weight: 500;
+    font-size: var(--text-sm);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.78);
+  }
+  .flipbook__sprung select {
+    font: inherit;
+    font-size: var(--text-sm);
+    color: #fff;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: var(--radius-s);
+    padding: 6px 10px;
+  }
+  .flipbook__sprung option { color: var(--n-900); }
+  .flipbook__vollbild {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--raum-2);
+    font: inherit;
+    font-size: var(--text-sm);
+    color: #fff;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: var(--radius-s);
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  .flipbook__vollbild[hidden] { display: none; }
+  .flipbook__vollbild:hover, .flipbook__sprung select:hover { border-color: var(--farbe-akzent); }
+
+  /* Eine Seite: Querformat immer, Hochformat auf schmaler Bühne */
+  .flipbook__buch[data-modus='einzeln'] {
+    inline-size: min(100%, calc(var(--buch-hoehe) * var(--verhaeltnis)));
+    aspect-ratio: var(--verhaeltnis);
+    transform: none;
+  }
+  .flipbook__buch[data-modus='einzeln'] .flipbook__blatt {
+    inset-inline-start: 0;
+    inline-size: 100%;
+    transform: none;
+    box-shadow: none;
+    background: transparent;
+    pointer-events: none;
+  }
+  .flipbook__buch[data-modus='einzeln'] .flipbook__flaeche {
+    backface-visibility: visible;
+    visibility: hidden;
+    opacity: 0;
+    transform: none;
+    box-shadow: 0 10px 36px rgba(0, 0, 0, 0.5);
+  }
+  .flipbook__buch[data-modus='einzeln'] .flipbook__bund { display: none; }
+  .flipbook__buch[data-modus='einzeln'] .flipbook__flaeche[data-sichtbar] { visibility: visible; opacity: 1; }
+  @keyframes flipbook-einzeln-ab-vor { from { transform: rotateY(0deg); opacity: 1; } to { transform: rotateY(-88deg); opacity: 0; } }
+  @keyframes flipbook-einzeln-an-vor { from { transform: rotateY(88deg); opacity: 0; } to { transform: rotateY(0deg); opacity: 1; } }
+  @keyframes flipbook-einzeln-ab-zurueck { from { transform: rotateY(0deg); opacity: 1; } to { transform: rotateY(88deg); opacity: 0; } }
+  @keyframes flipbook-einzeln-an-zurueck { from { transform: rotateY(-88deg); opacity: 0; } to { transform: rotateY(0deg); opacity: 1; } }
+  .flipbook__buch[data-modus='einzeln'] .flipbook__flaeche[data-geht='vor'] { visibility: visible; transform-origin: left center; animation: flipbook-einzeln-ab-vor calc(var(--flip-dauer) * 0.5) var(--kurve) forwards; }
+  .flipbook__buch[data-modus='einzeln'] .flipbook__flaeche[data-kommt='vor'] { transform-origin: right center; animation: flipbook-einzeln-an-vor calc(var(--flip-dauer) * 0.5) calc(var(--flip-dauer) * 0.5) var(--kurve) backwards; }
+  .flipbook__buch[data-modus='einzeln'] .flipbook__flaeche[data-geht='zurueck'] { visibility: visible; transform-origin: right center; animation: flipbook-einzeln-ab-zurueck calc(var(--flip-dauer) * 0.5) var(--kurve) forwards; }
+  .flipbook__buch[data-modus='einzeln'] .flipbook__flaeche[data-kommt='zurueck'] { transform-origin: left center; animation: flipbook-einzeln-an-zurueck calc(var(--flip-dauer) * 0.5) calc(var(--flip-dauer) * 0.5) var(--kurve) backwards; }
+
+  /* Ohne Skript: nur das erste Blatt, die ganze Datei gibt es über den PDF Knopf darunter */
+  .flipbook:not([data-bereit]) .flipbook__blatt:not(:first-child) { display: none; }
+  .flipbook:not([data-bereit]) .flipbook__buehne { padding-inline: 0; }
+  .flipbook:not([data-bereit]) .flipbook__buch { inline-size: 100%; aspect-ratio: auto; transform: none; display: grid; gap: var(--raum-4); }
+  .flipbook:not([data-bereit]) .flipbook__blatt { position: static; inline-size: 100%; display: grid; gap: var(--raum-4); background: transparent; box-shadow: none; }
+  .flipbook:not([data-bereit]) .flipbook__flaeche { position: static; transform: none; aspect-ratio: var(--seite-b) / var(--seite-h); }
+  .flipbook:not([data-bereit]) .flipbook__pfeil,
+  .flipbook:not([data-bereit]) .flipbook__leiste { display: none; }
+
+  @media (max-width: 620px) {
+    .flipbook { padding: var(--raum-3) var(--raum-2) var(--raum-4); }
+    .flipbook__buehne { padding-inline: 0; }
+    /* Auf dem Handy liegen die Pfeile unter der Seite, die Seite nutzt die volle Breite */
+    .flipbook__pfeil { position: static; transform: none; }
+    .flipbook[data-bereit] .flipbook__buehne { display: grid; grid-template-columns: 1fr 1fr; gap: var(--raum-4) var(--raum-6); }
+    .flipbook[data-bereit] .flipbook__buch { grid-column: 1 / -1; }
+    .flipbook__pfeil--zurueck { grid-row: 2; grid-column: 1; justify-self: end; }
+    .flipbook__pfeil--vor { grid-row: 2; grid-column: 2; justify-self: start; }
+    .flipbook__buch { --buch-hoehe: 100vw; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .flipbook__buch { transition: none; }
+    .flipbook__blatt[data-dreht], .flipbook__blatt[data-dreht] .flipbook__schatten,
+    .flipbook__flaeche[data-geht], .flipbook__flaeche[data-kommt] { animation: none !important; }
+  }
+</style>
+
+<script>
+  const FLIP_DAUER = 760;
+  /* Doppelseite nur im Hochformat und ab dieser Bühnenbreite */
+  const DOPPELSEITE_AB = 560;
+  /* So viele Seiten um die aktuelle herum werden vorab geladen */
+  const VORLADEN = 3;
+
+  document.querySelectorAll<HTMLElement>('[data-flipbook]').forEach((wurzel) => {
+    const buehne = wurzel.querySelector<HTMLElement>('[data-flipbook-buehne]');
+    const buch = wurzel.querySelector<HTMLElement>('[data-flipbook-buch]');
+    if (!buehne || !buch) return;
+    wurzel.dataset.bereit = '';
+
+    const quer = wurzel.hasAttribute('data-quer');
+    const blaetter = Array.from(buch.querySelectorAll<HTMLElement>('[data-flipbook-blatt]'));
+    const flaechen = Array.from(buch.querySelectorAll<HTMLElement>('[data-flipbook-seite]'));
+    const zaehler = wurzel.querySelector<HTMLElement>('[data-flipbook-zaehler]');
+    const sprung = wurzel.querySelector<HTMLSelectElement>('[data-flipbook-sprung]');
+    const zurueckKnopf = wurzel.querySelector<HTMLButtonElement>('[data-flipbook-zurueck]');
+    const vorKnopf = wurzel.querySelector<HTMLButtonElement>('[data-flipbook-vor]');
+    const vollbild = wurzel.querySelector<HTMLButtonElement>('[data-flipbook-vollbild]');
+    const vollbildText = wurzel.querySelector<HTMLElement>('[data-flipbook-vollbild-text]');
+
+    const anzahlSeiten = flaechen.length;
+    const anzahlBlaetter = blaetter.length;
+    const maxBlatt = Math.floor(anzahlSeiten / 2);
+    let blattIndex = 0;
+    let seitenIndex = 0;
+    let einzeln = true;
+    let laeuft = false;
+    const wenigBewegung = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    /* Bilder erst laden, wenn sie gleich gebraucht werden */
+    const flaecheVon = (nr: number) => flaechen.find((f) => Number(f.dataset.flipbookSeite) === nr);
+    const lade = (mitte: number) => {
+      for (let nr = mitte - VORLADEN; nr <= mitte + VORLADEN + 1; nr++) {
+        const bild = flaecheVon(nr)?.querySelector<HTMLImageElement>('img[data-src]');
+        if (bild && !bild.getAttribute('src')) bild.src = bild.dataset.src!;
+      }
+    };
+    const aktuelleSeite = () => (einzeln ? seitenIndex : Math.max(0, blattIndex * 2 - 1));
+
+    const setzeBlaetter = () => {
+      blaetter.forEach((blatt, i) => {
+        const umgeschlagen = i < blattIndex;
+        blatt.style.transform = umgeschlagen ? 'rotateY(-180deg)' : 'rotateY(0deg)';
+        blatt.style.zIndex = String(umgeschlagen ? i + 1 : anzahlBlaetter - i);
+      });
+    };
+    const linkeSeite = () => (blattIndex > 0 ? blattIndex * 2 - 1 : -1);
+    const rechteSeite = () => (blattIndex * 2 < anzahlSeiten ? blattIndex * 2 : -1);
+    const setzeVersatz = () => {
+      buch.style.setProperty('--buch-versatz', linkeSeite() < 0 ? '-25%' : rechteSeite() < 0 ? '25%' : '0%');
+    };
+    const setzeEinzelSeiten = () => {
+      flaechen.forEach((f) => f.toggleAttribute('data-sichtbar', Number(f.dataset.flipbookSeite) === seitenIndex));
+    };
+
+    const beschrifte = () => {
+      if (zaehler) {
+        if (einzeln) zaehler.textContent = `Seite ${seitenIndex + 1} von ${anzahlSeiten}`;
+        else {
+          const l = linkeSeite();
+          const r = rechteSeite();
+          zaehler.textContent = l >= 0 && r >= 0 ? `Seite ${l + 1} und ${r + 1} von ${anzahlSeiten}` : `Seite ${(l >= 0 ? l : r) + 1} von ${anzahlSeiten}`;
+        }
+      }
+      if (sprung) sprung.value = String(aktuelleSeite());
+      if (zurueckKnopf) zurueckKnopf.disabled = einzeln ? seitenIndex === 0 : blattIndex === 0;
+      if (vorKnopf) vorKnopf.disabled = einzeln ? seitenIndex >= anzahlSeiten - 1 : blattIndex >= maxBlatt;
+      lade(aktuelleSeite());
+    };
+
+    const zeichne = () => {
+      if (einzeln) {
+        buch.dataset.modus = 'einzeln';
+        blaetter.forEach((b) => { b.style.transform = ''; b.style.zIndex = ''; });
+        buch.style.removeProperty('--buch-versatz');
+        setzeEinzelSeiten();
+      } else {
+        delete buch.dataset.modus;
+        flaechen.forEach((f) => f.removeAttribute('data-sichtbar'));
+        setzeBlaetter();
+        setzeVersatz();
+      }
+      beschrifte();
+    };
+
+    const geheZu = (seite: number) => {
+      const ziel = Math.max(0, Math.min(anzahlSeiten - 1, seite));
+      if (einzeln) seitenIndex = ziel;
+      else blattIndex = Math.min(maxBlatt, Math.floor((ziel + 1) / 2));
+      zeichne();
+    };
+
+    const blaettere = (richtung: 1 | -1) => {
+      if (laeuft) return;
+      const vor = richtung === 1;
+      const ohneBewegung = wenigBewegung.matches;
+      if (einzeln) {
+        const ziel = seitenIndex + richtung;
+        if (ziel < 0 || ziel >= anzahlSeiten) return;
+        const alt = flaecheVon(seitenIndex);
+        const neu = flaecheVon(ziel);
+        seitenIndex = ziel;
+        if (ohneBewegung || !alt || !neu) { setzeEinzelSeiten(); beschrifte(); return; }
+        laeuft = true;
+        const art = vor ? 'vor' : 'zurueck';
+        alt.removeAttribute('data-sichtbar');
+        alt.dataset.geht = art;
+        neu.dataset.kommt = art;
+        neu.toggleAttribute('data-sichtbar', true);
+        window.setTimeout(() => {
+          alt.removeAttribute('data-geht');
+          neu.removeAttribute('data-kommt');
+          setzeEinzelSeiten();
+          laeuft = false;
+        }, FLIP_DAUER);
+        beschrifte();
+        return;
+      }
+      const ziel = blattIndex + richtung;
+      if (ziel < 0 || ziel > maxBlatt) return;
+      const blatt = blaetter[vor ? blattIndex : ziel];
+      blattIndex = ziel;
+      if (ohneBewegung || !blatt) { setzeBlaetter(); setzeVersatz(); beschrifte(); return; }
+      laeuft = true;
+      setzeBlaetter();
+      setzeVersatz();
+      blatt.style.zIndex = '99';
+      blatt.dataset.dreht = vor ? 'vor' : 'zurueck';
+      const fertig = () => { blatt.removeAttribute('data-dreht'); laeuft = false; setzeBlaetter(); };
+      blatt.addEventListener('animationend', fertig, { once: true });
+      window.setTimeout(() => { if (laeuft) { blatt.removeEventListener('animationend', fertig); fertig(); } }, FLIP_DAUER + 220);
+      beschrifte();
+    };
+
+    vorKnopf?.addEventListener('click', () => blaettere(1));
+    zurueckKnopf?.addEventListener('click', () => blaettere(-1));
+    sprung?.addEventListener('change', () => geheZu(Number(sprung.value)));
+    buch.addEventListener('click', (e) => {
+      const k = buch.getBoundingClientRect();
+      blaettere(e.clientX < k.left + k.width * (einzeln ? 0.35 : 0.5) ? -1 : 1);
+    });
+    const tasten = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLSelectElement) return;
+      if (e.key === 'ArrowRight' || (e.target === buch && (e.key === ' ' || e.key === 'Enter'))) { e.preventDefault(); blaettere(1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); blaettere(-1); }
+    };
+    buch.addEventListener('keydown', tasten);
+    wurzel.addEventListener('keydown', (e) => { if (e.target !== buch) tasten(e); });
+
+    let startX = 0;
+    let startY = 0;
+    buch.addEventListener('touchstart', (e) => { startX = e.changedTouches[0]!.clientX; startY = e.changedTouches[0]!.clientY; }, { passive: true });
+    buch.addEventListener('touchend', (e) => {
+      const x = e.changedTouches[0]!.clientX - startX;
+      const y = e.changedTouches[0]!.clientY - startY;
+      if (Math.abs(x) < 40 || Math.abs(x) < Math.abs(y)) return;
+      blaettere(x < 0 ? 1 : -1);
+    }, { passive: true });
+
+    /* Modus nach Bühnenbreite, Querformat bleibt immer bei einer Seite */
+    const pruefeModus = (breite: number) => {
+      const neuEinzeln = quer || breite < DOPPELSEITE_AB;
+      if (neuEinzeln === einzeln) return;
+      const seite = aktuelleSeite();
+      einzeln = neuEinzeln;
+      geheZu(seite);
+    };
+    if ('ResizeObserver' in window) new ResizeObserver((e) => pruefeModus(e[0]?.contentRect.width ?? buehne.clientWidth)).observe(buehne);
+    pruefeModus(buehne.clientWidth);
+    zeichne();
+
+    /* Vollbild, wo der Browser es kann (nicht auf dem iPhone) */
+    if (vollbild && document.fullscreenEnabled) {
+      vollbild.hidden = false;
+      vollbild.addEventListener('click', () => {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else wurzel.requestFullscreen().catch(() => {});
+      });
+      document.addEventListener('fullscreenchange', () => {
+        if (vollbildText) vollbildText.textContent = document.fullscreenElement ? 'Vollbild beenden' : 'Vollbild';
+        buch.focus({ preventScroll: true });
+      });
+    }
+  });
+</script>

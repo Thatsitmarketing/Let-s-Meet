@@ -8,6 +8,13 @@
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // Statische Dateien aus dist/client. Die Playbook Dateien gehen zuerst an den Worker,
+  // damit sie nur mit gültigem persönlichem Link ausgeliefert werden (src/worker.ts)
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist/client",
+    "run_worker_first": ["/playbook-dateien/*"]
+  },
   "d1_databases": [
     {
       "binding": "DB",
