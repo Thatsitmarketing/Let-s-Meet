@@ -136,9 +136,10 @@ ${absatz(`<span style="font-size:13px;color:${MARKE.grau};">Fragen vorab? Antwor
 
 export function mailGastgeberNeu(
   basis: string,
-  d: TerminDetails & { gastName: string; gastEmail: string; gastTelefon?: string | null; antworten: { label: string; wert: string }[]; nachricht?: string | null; backofficeUrl: string; umgebucht?: boolean },
+  d: TerminDetails & { gastName: string; gastEmail: string; gastTelefon?: string | null; antworten: { label: string; wert: string }[]; nachricht?: string | null; backofficeUrl: string; herkunft?: string | null; umgebucht?: boolean },
 ) {
   const extra = [
+    d.herkunft ? `<p style="margin:0 0 4px;font-size:13px;color:${MARKE.grau};">Herkunft</p><p style="margin:0 0 14px;"><strong>${m(d.herkunft)}</strong></p>` : '',
     ...d.antworten.map((a) => `<p style="margin:0 0 4px;font-size:13px;color:${MARKE.grau};">${m(a.label)}</p><p style="margin:0 0 14px;white-space:pre-wrap;">${m(a.wert)}</p>`),
     d.nachricht ? `<p style="margin:0 0 4px;font-size:13px;color:${MARKE.grau};">Nachricht</p><p style="margin:0 0 14px;white-space:pre-wrap;border-left:3px solid ${MARKE.orange};padding-left:12px;">${m(d.nachricht)}</p>` : '',
   ].join('');

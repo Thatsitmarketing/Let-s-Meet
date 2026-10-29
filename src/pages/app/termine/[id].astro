@@ -7,6 +7,7 @@ import { ausfuehren, jetztIso } from '../../../lib/db';
 import { trimmen } from '../../../lib/eingabe';
 import { meldungAusUrl } from '../../../lib/meldungen';
 import { formatDatumKurz, formatDatumLang, formatSpanne, formatZeit, zonenName } from '../../../lib/zeit';
+import { herkunft } from '../../../lib/herkunft';
 
 const ich = Astro.locals.nutzer!;
 const nutzer = Astro.locals.gastgeber!;
@@ -70,7 +71,7 @@ const umbuchenLink = gastgeber && ta ? `${Astro.url.origin}/${ta.slug}?umbuchen=
           <div><dt>Ort</dt><dd>{buchung.meeting_url ? <a href={buchung.meeting_url} target="_blank" rel="noopener">{buchung.meeting_url}</a> : buchung.ort_text}</dd></div>
           <div><dt>Zeit beim Gast</dt><dd>{formatZeit(buchung.start_utc, buchung.gast_zeitzone)} Uhr, {zonenName(buchung.gast_zeitzone)}</dd></div>
           <div><dt>Gebucht am</dt><dd>{formatDatumKurz(buchung.erstellt_am, tz)}, {formatZeit(buchung.erstellt_am, tz)} Uhr</dd></div>
-          {buchung.quelle && <div><dt>Eingebettet auf</dt><dd class="umbruch">{buchung.quelle}</dd></div>}
+          {buchung.quelle && <div><dt>Herkunft</dt><dd class="umbruch">{herkunft(buchung.quelle)?.text ?? buchung.quelle}</dd></div>}
           {buchung.umgebucht_von && <div><dt>Umgebucht von</dt><dd><a href={`/app/termine/${buchung.umgebucht_von}`}>vorheriger Termin</a></dd></div>}
           {buchung.umgebucht_zu && <div><dt>Neuer Termin</dt><dd><a href={`/app/termine/${buchung.umgebucht_zu}`}>zum neuen Termin</a></dd></div>}
           {buchung.status === 'storniert' && buchung.storno_grund && buchung.storno_grund !== 'Umgebucht' && <div><dt>Absagegrund</dt><dd>{buchung.storno_grund}</dd></div>}
