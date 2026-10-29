@@ -12,11 +12,14 @@ const slug = (Astro.params.slug ?? '').toLowerCase();
 const gastgeber = await buero();
 if (!gastgeber) return Astro.rewrite('/404');
 
-// Alter Link aus der Zeit mit einem einzigen Erstgespräch
-if (slug === 'erstgespraech') return Astro.redirect(`/strategiegespraech${Astro.url.search}`, 301);
+// Das Hauptgespräch hieß mal /erstgespraech, mal /strategiegespraech. Gibt es den einen Link nicht, führt er auf den anderen.
+const ALIAS: Record<string, string> = { erstgespraech: 'strategiegespraech', strategiegespraech: 'erstgespraech' };
 
 const terminart = await terminartNachSlug(gastgeber.id, slug);
 if (!terminart || !terminart.aktiv) {
+  const alias = ALIAS[slug];
+  const ziel = alias ? await terminartNachSlug(gastgeber.id, alias) : null;
+  if (ziel?.aktiv) return Astro.redirect(`/${alias}${Astro.url.search}`, 301);
   if (await nutzerNachSlug(slug)) return Astro.redirect(`/${Astro.url.search}`, 301);
   return Astro.rewrite('/404');
 }
