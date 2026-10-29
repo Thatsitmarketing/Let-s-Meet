@@ -6,6 +6,7 @@ import { env } from 'cloudflare:workers';
 import { alle, ausfuehren, eins, jetztIso, neueId } from './db';
 import { googleAbgleichBuero, googleTerminAnlegen, googleTerminLoeschen } from './google';
 import { icsDatei } from './ics';
+import { herkunft } from './herkunft';
 import { base64Utf8, mailErinnerung, mailGastBestaetigung, mailGastgeberNeu, mailSenden, mailStorno, type TerminDetails } from './mail';
 import { ORT_LABEL, type Buchung, type Nutzer, type Terminart } from './typen';
 import { formatDatumLang, formatSpanne, zonenName } from './zeit';
@@ -234,6 +235,7 @@ async function benachrichtigenNeu(b: Buchung, ta: Terminart, n: Nutzer, basis: s
         antworten: antwortenLesen(b),
         nachricht: b.nachricht,
         backofficeUrl: `${basis}/app/termine/${b.id}`,
+        herkunft: herkunft(b.quelle)?.text ?? null,
         umgebucht,
       }),
       anhaenge: [anhang],
