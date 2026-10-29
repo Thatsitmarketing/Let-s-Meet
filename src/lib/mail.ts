@@ -65,8 +65,8 @@ function rahmen(basis: string, vorschau: string, inhalt: string) {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${MARKE.flaeche};padding:32px 12px;">
 <tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:${MARKE.papier};">
-<tr><td style="background:${MARKE.schwarz};padding:24px 32px;">
-<img src="${basis}/images/brand/letsmeet-kompakt-weiss.png" alt="Let's Meet." title="Let's Meet. That's it. Marketing" width="200" height="34" style="display:block;border:0;width:200px;height:34px;" />
+<tr><td style="background:#FFFFFF;padding:0;border-bottom:3px solid ${MARKE.schwarz};">
+<a href="https://${MARKE.web}" style="display:block;text-decoration:none;"><img src="${basis}/images/brand/mail-kopf-hell.png" alt="That's it. Marketing" title="That's it. Marketing" width="600" height="88" style="display:block;border:0;width:100%;max-width:600px;height:auto;background:#FFFFFF;" /></a>
 </td></tr>
 <tr><td style="padding:36px 32px 32px;font-size:15px;line-height:1.6;">${inhalt}</td></tr>
 <tr><td style="padding:20px 32px;border-top:1px solid ${MARKE.linie};font-size:12px;line-height:1.6;color:${MARKE.grau};">
