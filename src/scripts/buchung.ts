@@ -4,6 +4,7 @@
  * Mobil (bis 860px) ist jeder Teil ein eigener Schritt (tag, zeit, daten), die Zurück Geste
  * des Browsers geht einen Schritt zurück.
  */
+import { vorabHinweis as vorabHinweisText } from '../lib/herkunft';
 import { addTage, datumInZone, teileInZone, wochentagVon, zoneZuUtc } from '../lib/zeit';
 
 interface Konfig {
@@ -290,7 +291,12 @@ export function starteBuchung() {
     if (telefon && !telefon.value && vorab.telefon) telefon.value = vorab.telefon;
     const nachricht = $<HTMLTextAreaElement>('f-nachricht');
     if (!nachricht.value && vorab.nachricht) nachricht.value = vorab.nachricht;
-    if (vorabHinweis) vorabHinweis.hidden = !(vorab.name || vorab.email);
+    if (vorabHinweis) {
+      vorabHinweis.hidden = !(vorab.name || vorab.email);
+      // Text passend zur Herkunft, z. B. "aus der Anfrage zum Gastro Marketing Playbook"
+      const text = vorabHinweis.querySelector('[data-vorab-text]');
+      if (text && vorab.quelle) text.textContent = vorabHinweisText(vorab.quelle);
+    }
     $('titel-formular').setAttribute('tabindex', '-1');
     $('titel-formular').focus({ preventScroll: mobil.matches });
     if (!k.embed && !mobil.matches) window.scrollTo({ top: 0, behavior: 'smooth' });
