@@ -1,0 +1,25 @@
+---
+/**
+ * Titel einer Terminart in Überschriften. Beginnt der Titel mit einem Wort auf „gespräch“
+ * und folgt noch etwas („Strategiegespräch Social Recruiting“), steht dieses Wort allein in
+ * der ersten Zeile und die Leistung darunter. Keine Silbentrennung, der orange Punkt hängt fest
+ * am letzten Wort, damit er nie allein in einer Zeile steht (Kundenwunsch 2026-10-30).
+ */
+interface Props {
+  titel: string;
+  punkt?: boolean;
+}
+
+const { titel, punkt = true } = Astro.props;
+const treffer = titel.trim().match(/^(\S*gespräch)\s+(.+)$/i);
+const ersteZeile = treffer ? treffer[1] : null;
+const woerter = (treffer ? treffer[2] : titel.trim()).split(/\s+/);
+const letztes = woerter.pop() ?? '';
+const davor = woerter.join(' ');
+---
+<span class="gt">{ersteZeile && <><span class="gt-zeile">{ersteZeile}</span><br /></>}{davor && `${davor} `}<span class="gt-ende">{letztes}{punkt && <span class="punkt">.</span>}</span></span>
+
+<style>
+  .gt { hyphens: manual; -webkit-hyphens: manual; }
+  .gt-ende { white-space: nowrap; }
+</style>
