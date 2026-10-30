@@ -33,7 +33,7 @@ export const PLAYBOOKS = {
     name: 'Social Media Playbook',
     landingpage: 'https://social-media-playbook.thatsit.marketing/',
     gespraech: 'strategiegespraech-social-media',
-    gespraechName: 'Strategiegespräch Social Media Marketing',
+    gespraechName: 'Strategiegespräch Social Media',
   },
   recruiting: {
     name: 'Social Recruiting Playbook',
@@ -45,7 +45,7 @@ export const PLAYBOOKS = {
     name: 'Gastro Marketing Playbook',
     landingpage: 'https://gastro-marketing-playbook.thatsit.marketing/',
     gespraech: 'strategiegespraech-social-media',
-    gespraechName: 'Strategiegespräch Social Media Marketing',
+    gespraechName: 'Strategiegespräch Social Media',
   },
 } as const;
 

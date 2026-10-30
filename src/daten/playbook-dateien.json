@@ -3,8 +3,8 @@
     "seiten": 51,
     "breite": 1600,
     "hoehe": 900,
-    "pdfBytes": 7884525,
-    "stand": "2026-10-29"
+    "pdfBytes": 8078046,
+    "stand": "2026-10-30"
   },
   "recruiting": {
     "seiten": 48,
@@ -17,14 +17,14 @@
     "seiten": 55,
     "breite": 1600,
     "hoehe": 1131,
-    "pdfBytes": 13120562,
-    "stand": "2026-10-29"
+    "pdfBytes": 13052521,
+    "stand": "2026-10-30"
   },
   "website": {
     "seiten": 31,
     "breite": 1132,
     "hoehe": 1600,
-    "pdfBytes": 9050697,
+    "pdfBytes": 8901324,
     "stand": "2026-10-30"
   }
 }

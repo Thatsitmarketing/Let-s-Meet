@@ -10,6 +10,7 @@
 import { env } from 'cloudflare:workers';
 import Icon from './ui/Icon.astro';
 import OrtIcon from './OrtIcon.astro';
+import GespraechTitel from './GespraechTitel.astro';
 import { buchungNachId, fragenLesen } from '../lib/abfragen';
 import { KONTAKT, STANDARD_BEGRUESSUNG } from '../lib/marke';
 import { ORT_LABEL, type Nutzer, type Terminart } from '../lib/typen';
@@ -185,7 +186,7 @@ const absaetze = (terminart.beschreibung ?? '')
     <aside class="info" aria-label="Details zum Termin">
       <div class="info-block">
         <p class="eyebrow info-label">Dein Termin</p>
-        <h2 class="info-titel">{terminart.titel}<span class="punkt">.</span></h2>
+        <h2 class="info-titel"><GespraechTitel titel={terminart.titel} /></h2>
         <ul class="meta" role="list">
           <li><Icon name="uhr" />{terminart.dauer_min} Minuten</li>
           <li><OrtIcon typ={terminart.ort_typ} />{ortText}</li>

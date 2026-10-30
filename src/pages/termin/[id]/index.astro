@@ -2,6 +2,7 @@
 import Oeffentlich from '../../../layouts/Oeffentlich.astro';
 import Icon from '../../../components/ui/Icon.astro';
 import OrtIcon from '../../../components/OrtIcon.astro';
+import GespraechTitel from '../../../components/GespraechTitel.astro';
 import { buchungNachId, nutzerNachId, terminartNachId } from '../../../lib/abfragen';
 import { googleKalenderLink, outlookKalenderLink } from '../../../lib/ics';
 import { formatDatumLang, formatSpanne, zonenName } from '../../../lib/zeit';
@@ -39,7 +40,7 @@ const kalDaten = {
       <>
         <span class="haken-gross" aria-hidden="true"><Icon name="check" groesse={28} /></span>
         <p class="eyebrow">{neu ? 'Gebucht' : 'Dein Termin'}</p>
-        <h1>{neu ? 'Dein Termin steht' : terminart.titel}<span class="punkt">.</span></h1>
+        <h1>{neu ? <>Dein Termin steht<span class="punkt">.</span></> : <GespraechTitel titel={terminart.titel} />}</h1>
         {neu && <p class="unterzeile">Eine Bestätigung mit Kalendereintrag ist unterwegs an <strong>{buchung.gast_email}</strong>.</p>}
       </>
     )}
