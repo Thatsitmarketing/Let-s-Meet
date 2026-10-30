@@ -5,6 +5,7 @@
  */
 import { env } from 'cloudflare:workers';
 import { maskieren as m } from './eingabe';
+import { MAIL_LOGO_CID, mitLogoAnhang } from './mail-logo';
 import type { Buchung, Nutzer, Terminart } from './typen';
 import { formatDatumLang, formatSpanne, zonenName } from './zeit';
 
@@ -26,6 +27,7 @@ export interface Anhang {
   filename: string;
   content: string; // base64
   content_type?: string;
+  content_id?: string;
 }
 
 export async function mailSenden(n: { an: string | string[]; betreff: string; html: string; antwortAn?: string; anhaenge?: Anhang[] }) {
@@ -42,7 +44,8 @@ export async function mailSenden(n: { an: string | string[]; betreff: string; ht
       reply_to: n.antwortAn || env.MAIL_REPLY_TO || undefined,
       subject: n.betreff,
       html: n.html,
-      attachments: n.anhaenge,
+      // Logo als eingebettetes Bild (CID) mitschicken, siehe `mail-logo.ts`.
+      attachments: mitLogoAnhang(n.html, n.anhaenge),
     }),
   });
   if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);
@@ -66,7 +69,7 @@ function rahmen(basis: string, vorschau: string, inhalt: string) {
 <tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:${MARKE.papier};">
 <tr><td style="background:#FFFFFF;padding:0;border-bottom:3px solid ${MARKE.schwarz};">
-<a href="https://${MARKE.web}" style="display:block;text-decoration:none;"><img src="${basis}/images/brand/mail-kopf-hell.png" alt="That's it. Marketing" title="That's it. Marketing" width="600" height="88" style="display:block;border:0;width:100%;max-width:600px;height:auto;background:#FFFFFF;" /></a>
+<a href="https://${MARKE.web}" style="display:block;text-decoration:none;"><img src="cid:${MAIL_LOGO_CID}" alt="That's it. Marketing" title="That's it. Marketing" width="600" height="88" style="display:block;border:0;width:100%;max-width:600px;height:auto;background:#FFFFFF;color:#0E0E0E;font-family:Arial,Helvetica,sans-serif;font-size:24px;font-weight:bold;line-height:88px;text-indent:32px;" /></a>
 </td></tr>
 <tr><td style="padding:36px 32px 32px;font-size:15px;line-height:1.6;">${inhalt}</td></tr>
 <tr><td style="padding:20px 32px;border-top:1px solid ${MARKE.linie};font-size:12px;line-height:1.6;color:${MARKE.grau};">
