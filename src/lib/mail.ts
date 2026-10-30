@@ -78,12 +78,17 @@ ${MARKE.name} &middot; Gelsenkirchen &middot; <a href="https://${MARKE.web}" sty
 </body></html>`;
 }
 
+/* Goldflaechen mit einfarbigem Verlauf als Hintergrundbild (seit 2026-10-30): Gmail auf dem iPhone kehrt
+   im Dunkelmodus alle Farben um und machte aus dem Markengold ein dunkles Braunorange. Hintergrundbilder
+   faerbt Gmail nicht um. */
+const GOLD = `background-color:${MARKE.orange};background-image:linear-gradient(${MARKE.orange},${MARKE.orange});`;
+
 function eyebrow(text: string) {
   return `<p style="margin:0 0 12px;font-family:'Barlow Condensed',${SCHRIFT};font-size:12px;letter-spacing:4px;text-transform:uppercase;color:${MARKE.orange};">${m(text)}</p>`;
 }
 
 function titel(text: string) {
-  return `<h1 style="margin:0 0 20px;font-family:${DISPLAY};font-weight:900;font-size:30px;line-height:1.05;letter-spacing:-0.5px;color:${MARKE.schwarz};">${m(text)}<span style="display:inline-block;width:5px;height:5px;margin-left:2px;background:${MARKE.orange};font-size:0;line-height:0;">&nbsp;</span></h1>`;
+  return `<h1 style="margin:0 0 20px;font-family:${DISPLAY};font-weight:900;font-size:30px;line-height:1.05;letter-spacing:-0.5px;color:${MARKE.schwarz};">${m(text)}<span style="display:inline-block;width:5px;height:5px;margin-left:2px;${GOLD}font-size:0;line-height:0;">&nbsp;</span></h1>`;
 }
 
 function absatz(html: string) {
@@ -97,7 +102,7 @@ function knopf(href: string, text: string, art: KnopfArt = 'schwarz') {
     art === 'gruen'
       ? `background:${MARKE.gruen};color:#FFFFFF;border:2px solid ${MARKE.gruen};`
       : art === 'orange'
-      ? `background:${MARKE.orange};color:${MARKE.schwarz};border:2px solid ${MARKE.orange};`
+      ? `${GOLD}color:${MARKE.schwarz};border:2px solid transparent;`
       : art === 'schwarz'
         ? `background:${MARKE.schwarz};color:#FFFFFF;border:2px solid ${MARKE.schwarz};`
         : `background:#FFFFFF;color:${MARKE.schwarz};border:2px solid ${MARKE.schwarz};`;
