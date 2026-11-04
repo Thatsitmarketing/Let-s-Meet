@@ -470,6 +470,9 @@ export async function ablaeufeImCron(basis: string) {
     }
     const [ta, n] = await Promise.all([laden<Terminart>('terminarten', b.terminart_id), laden<Nutzer>('nutzer', b.nutzer_id)]);
     if (!ta || !n) continue;
+    // Zwischenzeitlich abgesagt? Dann geht keine Erinnerung mehr raus
+    const aktuell = await eins<{ status: string }>('SELECT status FROM buchungen WHERE id = ?', b.id);
+    if (!aktuell || aktuell.status !== 'bestaetigt') continue;
     if (!(await versandReservieren(a.id, b.id, 'gesendet'))) continue;
     try {
       await ablaufMailSenden(a, b, ta, n, basis);
@@ -481,6 +484,21 @@ export async function ablaeufeImCron(basis: string) {
     }
   }
   return { gesendet, entfallen };
+}
+
+/**
+ * Bei einer Absage: alle noch offenen zeitversetzten Abläufe (Erinnerungen, Mails nach dem Termin)
+ * dieser Buchung als „entfallen“ vermerken. Der Gast bekommt nur die Stornierung.
+ */
+export async function ablaeufeBeiAbsageStoppen(b: Buchung, ta: Terminart, n: Nutzer) {
+  await ausfuehren(
+    `INSERT OR IGNORE INTO arbeitsablauf_versand (arbeitsablauf_id, buchung_id, status, gesendet_am)
+     SELECT a.id, ?, 'entfallen', ? FROM arbeitsablaeufe a
+      WHERE a.nutzer_id = ? AND a.aktiv = 1
+        AND (a.ausloeser IN ('vor_beginn', 'nach_ende') OR (a.ausloeser = 'nach_buchung' AND a.versatz_min > 0))
+        AND ${GILT_FUER_SQL}`,
+    b.id, jetztIso(), n.id, ta.id,
+  ).catch((f) => console.error('Arbeitsabläufe stoppen fehlgeschlagen', f));
 }
 
 /** Testmail mit einem Beispieltermin in drei Tagen um 10 Uhr */

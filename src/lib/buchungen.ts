@@ -3,7 +3,7 @@
  * speichern, Google Termin anlegen, dann Mails und Webhook im Hintergrund.
  */
 import { env } from 'cloudflare:workers';
-import { ablaeufeAusloesen, ablaeufeImCron } from './arbeitsablaeufe';
+import { ablaeufeAusloesen, ablaeufeBeiAbsageStoppen, ablaeufeImCron } from './arbeitsablaeufe';
 import { ausfuehren, eins, jetztIso, neueId } from './db';
 import { googleAbgleichBuero, googleTerminAnlegen, googleTerminLoeschen } from './google';
 import { icsDatei } from './ics';
@@ -261,6 +261,8 @@ export async function buchungAbsagen(e: {
   if (!ta || !n) return;
   if (b.google_event_id) await googleTerminLoeschen(n, b.google_event_id);
   const aktuell = { ...b, status: 'storniert' as const, storno_grund: e.grund };
+  // Erinnerungen und andere zeitversetzte Mails dieser Buchung stoppen, vor dem Versand der Stornierung
+  await ablaeufeBeiAbsageStoppen(aktuell, ta, n);
   const anhang = { filename: 'absage.ics', content: base64Utf8(ics(aktuell, ta, n, e.basis, true)), content_type: 'text/calendar; method=CANCEL' };
   const vonGast = e.von === 'gast';
   e.imHintergrund(
