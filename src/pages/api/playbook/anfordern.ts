@@ -7,9 +7,10 @@ import type { APIRoute } from 'astro';
 import { buero } from '../../../lib/abfragen';
 import { basisUrl } from '../../../lib/buchungen';
 import { emailGueltig, json, telefonGueltig, trimmen } from '../../../lib/eingabe';
-import { anfrageBerechtigt, istPlaybook, playbookDateien, zugangAnlegen } from '../../../lib/playbooks';
+import { crmMelden } from '../../../lib/crm';
+import { anfrageBerechtigt, istPlaybook, PLAYBOOKS, playbookDateien, zugangAnlegen } from '../../../lib/playbooks';
 
-export const POST: APIRoute = async ({ request, url }) => {
+export const POST: APIRoute = async ({ request, url, locals }) => {
   if (!anfrageBerechtigt(request)) return json(401, { fehler: 'Nicht berechtigt' });
 
   let d: Record<string, unknown>;
@@ -40,6 +41,20 @@ export const POST: APIRoute = async ({ request, url }) => {
   // Noch keine Dateien hinterlegt: Lead trotzdem erfassen, die Landingpage nimmt ihren bisherigen Downloadlink
   const mitDateien = Boolean(playbookDateien(playbook));
   const { id, gueltigBis } = await zugangAnlegen(gastgeber.id, { playbook, name, email, telefon, unternehmen }, mitDateien);
+  // Lead in Close (Close Automat), im Hintergrund nach der Antwort
+  locals.cfContext.waitUntil(
+    crmMelden('playbook.angefordert', {
+      zugang_id: id,
+      playbook,
+      playbook_name: PLAYBOOKS[playbook].name,
+      landingpage: PLAYBOOKS[playbook].landingpage,
+      name,
+      email,
+      telefon: telefonRoh || null,
+      unternehmen,
+      zeit: new Date().toISOString(),
+    }),
+  );
   if (!mitDateien) return json(200, { link: null, grund: 'Für dieses Playbook sind in Let\'s Meet noch keine Dateien hinterlegt.' });
 
   return json(200, { link: `${basisUrl(url)}/playbook/${id}`, gueltigBis });

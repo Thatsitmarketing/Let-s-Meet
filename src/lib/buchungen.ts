@@ -8,6 +8,7 @@ import { ausfuehren, eins, jetztIso, neueId } from './db';
 import { googleAbgleichBuero, googleTerminAnlegen, googleTerminLoeschen } from './google';
 import { icsDatei } from './ics';
 import { herkunft } from './herkunft';
+import { crmMelden } from './crm';
 import { kontaktAusBuchung } from './kontakte';
 import { playbookZugaengeAufraeumen } from './playbooks';
 import { base64Utf8, mailGastBestaetigung, mailGastgeberNeu, mailSenden, mailStorno, terminDetailsVon } from './mail';
@@ -237,6 +238,7 @@ async function benachrichtigenNeu(b: Buchung, ta: Terminart, n: Nutzer, basis: s
       anhaenge: [anhang],
     }),
     webhookSenden(n, umgebucht ? 'buchung.umgebucht' : 'buchung.erstellt', webhookDaten(b, ta, n, basis)),
+    crmMelden(umgebucht ? 'buchung.umgebucht' : 'buchung.erstellt', webhookDaten(b, ta, n, basis)),
     ablaeufeAusloesen('nach_buchung', b, ta, n, basis),
   ];
   const ergebnisse = await Promise.allSettled(aufgaben);
@@ -294,6 +296,7 @@ export async function buchungAbsagen(e: {
         anhaenge: [anhang],
       }),
       webhookSenden(n, 'buchung.storniert', webhookDaten(aktuell, ta, n, e.basis)),
+      crmMelden('buchung.storniert', webhookDaten(aktuell, ta, n, e.basis)),
       ablaeufeAusloesen('bei_absage', aktuell, ta, n, e.basis),
     ]),
   );
