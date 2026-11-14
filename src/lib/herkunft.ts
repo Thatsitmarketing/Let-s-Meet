@@ -39,6 +39,7 @@ export function herkunft(quelle: string | null | undefined): Herkunft | null {
     const name = PLAYBOOKS[schluessel];
     return name ? { art: 'playbook', text: `Landingpage ${name}`, playbook: name } : { art: 'playbook', text: roh };
   }
+  if (art === 'whatsapp') return { art: 'sonstige', text: 'WhatsApp Bot, Landingpage Kostenloser Website-Entwurf' };
   if (art === 'backoffice') return { art: 'sonstige', text: 'Backoffice, gebucht aus dem Kontaktbuch' };
   if (art === 'website') return { art: 'homepage', text: HOMEPAGE[schluessel] ?? `Homepage, ${schluessel || 'Kontaktformular'}` };
   return { art: 'sonstige', text: roh };

@@ -1,0 +1,99 @@
+---
+import App from '../../../layouts/App.astro';
+import Icon from '../../../components/ui/Icon.astro';
+import { alle, eins } from '../../../lib/db';
+import { botPausieren, SCHRITT_TEXT, STATUS_TEXT, type Gespraech, type WaNachricht } from '../../../lib/whatsapp/bot';
+import { formatDatumMittel, formatZeit } from '../../../lib/zeit';
+
+const tz = 'Europe/Berlin';
+const id = Astro.params.id ?? '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const aktion = form.get('aktion');
+  if (aktion === 'pausieren' || aktion === 'fortsetzen') await botPausieren(id, aktion === 'pausieren');
+  return Astro.redirect(`/app/whatsapp/${id}`);
+}
+
+const g = await eins<Gespraech>('SELECT * FROM wa_gespraeche WHERE id = ?', id);
+if (!g) return Astro.redirect('/app/whatsapp');
+const nachrichten = await alle<WaNachricht>('SELECT * FROM wa_nachrichten WHERE gespraech_id = ? ORDER BY erstellt_am', id);
+const wann = (iso: string | null) => (iso ? `${formatDatumMittel(iso, tz)}, ${formatZeit(iso, tz)}` : '');
+const angaben: [string, string | null][] = [
+  ['Status', STATUS_TEXT[g.status]],
+  ['Schritt', SCHRITT_TEXT[g.schritt] ?? g.schritt],
+  ['Telefon', `+${g.telefon}`],
+  ['E-Mail', g.email],
+  ['Firma', g.firma],
+  ['Webseite', g.webseite || (g.hat_website ? null : 'keine')],
+  ['Was stört', g.problem],
+  ['Ziel', g.ziel],
+  ['Zeitpunkt', g.zeitpunkt ? `${g.zeitpunkt}${g.heiss ? ' (heiß)' : ''}` : null],
+  ['Budget', g.budget],
+  ['Entscheider', g.entscheider],
+  ['Website, die gefällt', g.briefing],
+  ['Hinweise', g.hinweise],
+  ['Fehler', g.fehler],
+];
+const pausiert = g.status === 'mensch';
+---
+<App titel={g.name} eyebrow="WhatsApp Bot">
+  <Fragment slot="aktionen">
+    <a class="knopf knopf--rahmen" href="/app/whatsapp"><Icon name="zurueck" />Alle Gespräche</a>
+    <a class="knopf knopf--rahmen" href={`https://wa.me/${g.telefon}`} target="_blank" rel="noopener"><Icon name="chat" />In WhatsApp öffnen</a>
+  </Fragment>
+
+  <div class="raster">
+    <section class="karte chat" aria-label="Chatverlauf">
+      {nachrichten.length === 0 && <p class="leise">Noch keine Nachrichten.</p>}
+      {nachrichten.map((n) => (
+        <div class:list={['blase', n.richtung === 'ein' ? 'ein' : 'aus', { team: n.richtung === 'team' }]}>
+          <p>{n.text}</p>
+          <span class="leise klein">{n.richtung === 'ein' ? g.vorname : n.richtung === 'team' ? 'Team (App)' : n.art === 'vorlage' ? 'Bot, Vorlage' : 'Bot'} · {wann(n.erstellt_am)}</span>
+        </div>
+      ))}
+    </section>
+
+    <aside class="seite">
+      <section class="karte block">
+        <dl class="angaben">
+          {angaben.filter(([, w]) => w).map(([k, w]) => (
+            <div><dt>{k}</dt><dd>{w}</dd></div>
+          ))}
+        </dl>
+        {g.buchung_id && <a class="knopf knopf--rahmen" href={`/app/termine/${g.buchung_id}`}><Icon name="kalender" />Zum Termin</a>}
+      </section>
+      {g.status !== 'abgemeldet' && (
+        <section class="karte block">
+          <p class="leise klein">
+            {pausiert
+              ? 'Der Bot ist in diesem Chat pausiert, das Team schreibt selbst. Antworten des Leads werden weiter mitgeschrieben.'
+              : 'Schreibt jemand aus dem Team in der WhatsApp Business App in diesen Chat, pausiert der Bot von selbst.'}
+          </p>
+          <form method="post">
+            <input type="hidden" name="aktion" value={pausiert ? 'fortsetzen' : 'pausieren'} />
+            <button class="knopf knopf--breit" type="submit">{pausiert ? 'Bot wieder übernehmen lassen' : 'Bot pausieren, Team übernimmt'}</button>
+          </form>
+        </section>
+      )}
+    </aside>
+  </div>
+</App>
+
+<style>
+  .raster { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: var(--raum-6); align-items: start; max-width: 1300px; }
+  .chat { padding: var(--raum-6); display: grid; gap: var(--raum-3); }
+  .blase { max-width: 78%; padding: var(--raum-3) var(--raum-4); display: grid; gap: 4px; background: var(--n-050); border: 1px solid var(--n-200); }
+  .blase p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .blase.aus { justify-self: end; background: #f3efe6; border-color: #e6dcc7; }
+  .blase.team { background: #e8f3ec; border-color: #c9e3d3; }
+  .seite { display: grid; gap: var(--raum-6); }
+  .block { padding: var(--raum-6); display: grid; gap: var(--raum-4); }
+  .angaben { margin: 0; display: grid; gap: var(--raum-3); }
+  .angaben dt { font-size: var(--text-sm); color: var(--farbe-text-leise); }
+  .angaben dd { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  @media (max-width: 1000px) {
+    .raster { grid-template-columns: 1fr; }
+    .blase { max-width: 92%; }
+  }
+</style>

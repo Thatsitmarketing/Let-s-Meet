@@ -37,6 +37,9 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
     kopf.set('X-Frame-Options', 'DENY');
     kopf.set('Content-Security-Policy', "frame-ancestors 'none'");
     kopf.set('Cache-Control', 'no-store');
+  } else if (pfad.startsWith('/api/whatsapp/')) {
+    kopf.set('X-Robots-Tag', 'noindex, nofollow');
+    kopf.set('Cache-Control', 'no-store');
   } else if (pfad.startsWith('/playbook/') || pfad.startsWith('/api/playbook/')) {
     // Persönliche Playbook Links: nicht indexieren, nicht einbetten, Seite nicht zwischenspeichern
     kopf.set('X-Robots-Tag', 'noindex, nofollow');

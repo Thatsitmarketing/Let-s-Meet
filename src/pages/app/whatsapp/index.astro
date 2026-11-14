@@ -1,0 +1,70 @@
+---
+import App from '../../../layouts/App.astro';
+import Icon from '../../../components/ui/Icon.astro';
+import { alle } from '../../../lib/db';
+import { SCHRITT_TEXT, STATUS_TEXT, type Gespraech } from '../../../lib/whatsapp/bot';
+import { formatDatumMittel, formatZeit } from '../../../lib/zeit';
+
+const tz = 'Europe/Berlin';
+const status = Astro.url.searchParams.get('status') ?? '';
+const gueltig = (Object.keys(STATUS_TEXT) as Gespraech['status'][]).includes(status as Gespraech['status']);
+const gespraeche = await alle<Gespraech>(
+  `SELECT * FROM wa_gespraeche ${gueltig ? 'WHERE status = ?' : ''} ORDER BY COALESCE(letzte_eingang_am, erstellt_am) DESC LIMIT 200`,
+  ...(gueltig ? [status] : []),
+);
+const zaehler = await alle<{ status: string; n: number }>('SELECT status, COUNT(*) AS n FROM wa_gespraeche GROUP BY status');
+const anzahl = new Map(zaehler.map((z) => [z.status, z.n]));
+const wann = (iso: string | null) => (iso ? `${formatDatumMittel(iso, tz)}, ${formatZeit(iso, tz)}` : '');
+const pilleArt = (s: Gespraech['status']) => (s === 'gebucht' ? 'pille--erfolg' : s === 'anrufen' || s === 'mensch' ? 'pille--fehler' : '');
+---
+<App titel="WhatsApp Bot" eyebrow="Leads der Landingpage Website-Entwurf">
+  <nav class="filter" aria-label="Nach Status filtern">
+    <a href="/app/whatsapp" aria-current={!gueltig ? 'page' : undefined}>Alle <span class="zahl">{[...anzahl.values()].reduce((a, b) => a + b, 0)}</span></a>
+    {(Object.keys(STATUS_TEXT) as Gespraech['status'][]).map((s) => (
+      <a href={`/app/whatsapp?status=${s}`} aria-current={status === s ? 'page' : undefined}>{STATUS_TEXT[s]} <span class="zahl">{anzahl.get(s) ?? 0}</span></a>
+    ))}
+  </nav>
+
+  {gespraeche.length === 0 ? (
+    <p class="karte leer leise">Noch keine Gespräche. Sie entstehen, sobald jemand auf der Landingpage den Haken für WhatsApp setzt.</p>
+  ) : (
+    <ul class="liste">
+      {gespraeche.map((g) => (
+        <li class="karte">
+          <a href={`/app/whatsapp/${g.id}`} class="zeile">
+            <span class="wer">
+              <strong>{g.name}</strong>
+              <span class="leise klein">{[g.firma, `+${g.telefon}`].filter(Boolean).join(' · ')}</span>
+            </span>
+            <span class="was">
+              <span class:list={['pille', pilleArt(g.status)]}>{STATUS_TEXT[g.status]}</span>
+              <span class="leise klein">{SCHRITT_TEXT[g.schritt] ?? g.schritt}{g.heiss ? ' · heiß' : ''}</span>
+            </span>
+            <span class="wann leise klein">
+              {g.letzte_eingang_am ? `Zuletzt geantwortet ${wann(g.letzte_eingang_am)}` : `Angelegt ${wann(g.erstellt_am)}`}
+            </span>
+            {g.fehler && <span class="fehler klein"><Icon name="warnung" groesse={16} />{g.fehler.slice(0, 90)}</span>}
+          </a>
+        </li>
+      ))}
+    </ul>
+  )}
+</App>
+
+<style>
+  .filter { display: flex; flex-wrap: wrap; gap: var(--raum-2); margin-bottom: var(--raum-6); }
+  .filter a { display: inline-flex; gap: var(--raum-2); align-items: center; padding: 6px 12px; border: 1px solid var(--n-300); color: inherit; text-decoration: none; font-size: var(--text-sm); }
+  .filter a[aria-current='page'] { border-color: var(--farbe-text); font-weight: 600; }
+  .zahl { color: var(--farbe-text-leise); }
+  .liste { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-2); max-width: 1200px; }
+  .zeile { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: var(--raum-4); align-items: center; padding: var(--raum-4) var(--raum-6); color: inherit; text-decoration: none; }
+  .zeile:hover { background: var(--n-050); }
+  .wer, .was { display: grid; gap: 2px; justify-items: start; }
+  .wann { text-align: right; }
+  .fehler { grid-column: 1 / -1; display: flex; gap: var(--raum-2); align-items: center; color: var(--farbe-fehler); }
+  .leer { padding: var(--raum-6); max-width: 720px; }
+  @media (max-width: 800px) {
+    .zeile { grid-template-columns: 1fr; gap: var(--raum-2); }
+    .wann { text-align: left; }
+  }
+</style>

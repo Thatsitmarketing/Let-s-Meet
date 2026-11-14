@@ -11,6 +11,7 @@ import { herkunft } from './herkunft';
 import { crmMelden } from './crm';
 import { kontaktAusBuchung } from './kontakte';
 import { playbookZugaengeAufraeumen } from './playbooks';
+import { whatsappImCron } from './whatsapp/bot';
 import { base64Utf8, mailGastBestaetigung, mailGastgeberNeu, mailSenden, mailStorno, terminDetailsVon } from './mail';
 import { ORT_LABEL, type Buchung, type Nutzer, type Terminart } from './typen';
 import { formatDatumLang } from './zeit';
@@ -316,9 +317,13 @@ export async function cronLauf() {
     console.error('Playbook Zugänge aufräumen fehlgeschlagen', fehler);
     return 0;
   });
+  const whatsapp = await whatsappImCron().catch((fehler) => {
+    console.error('WhatsApp Bot im Cron fehlgeschlagen', fehler);
+    return null;
+  });
   const google = await googleAbgleichBuero().catch((fehler) => {
     console.error('Google Abgleich im Cron fehlgeschlagen', fehler);
     return null;
   });
-  return { arbeitsablaeufe: ablaeufe, geloescht: geloescht.meta?.changes ?? 0, playbookZugaenge, googleTermine: google };
+  return { arbeitsablaeufe: ablaeufe, geloescht: geloescht.meta?.changes ?? 0, playbookZugaenge, whatsapp, googleTermine: google };
 }

@@ -38,6 +38,11 @@ interface ScheduledController {
   noRetry(): void;
 }
 
+/** Workers AI, hier nur für Whisper (Sprachnachrichten im WhatsApp Bot) */
+interface Ai {
+  run(modell: string, eingabe: Record<string, unknown>): Promise<unknown>;
+}
+
 declare namespace Cloudflare {
   interface Env {}
 }
