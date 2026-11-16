@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>WhatsApp Setting Bot</title>
+<style>
+@font-face { font-family: 'League Spartan'; src: url('../../public/fonts/league-spartan-var.woff2') format('woff2'); font-weight: 100 900; }
+@font-face { font-family: 'Montserrat'; src: url('../../public/fonts/montserrat-latin.woff2') format('woff2'); font-weight: 300 700; }
+@font-face { font-family: 'Barlow Condensed'; src: url('../../public/fonts/barlow-condensed-300-latin.woff2') format('woff2'); font-weight: 300; }
+@font-face { font-family: 'Barlow Condensed'; src: url('../../public/fonts/barlow-condensed-500-latin.woff2') format('woff2'); font-weight: 500; }
+
+:root {
+  --schwarz: #0E0E0E; --orange: #DC9832; --weiss: #FFFFFF;
+  --n050: #FAFAF8; --n100: #F2F2EF; --n200: #E5E5E3; --n300: #C8C8C8; --n400: #9A9A9A; --n500: #6E6E6E; --n600: #4A4A4A; --n700: #2B2B2B; --n800: #1A1A1A;
+  --gruen: #2F8F5F; --rot: #C4382C;
+  --display: 'League Spartan', Arial, sans-serif;
+  --text: 'Montserrat', Arial, sans-serif;
+  --label: 'Barlow Condensed', Arial, sans-serif;
+}
+@page { size: 1920px 1080px; margin: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--n100); }
+body { font-family: var(--text); color: var(--schwarz); -webkit-font-smoothing: antialiased; }
+
+.folie { width: 1920px; height: 1080px; position: relative; overflow: hidden; background: var(--weiss); padding: 110px 140px 0; page-break-after: always; break-after: page; display: flex; flex-direction: column; }
+.folie:last-child { page-break-after: auto; break-after: auto; }
+.folie--dunkel { background: var(--schwarz); color: var(--weiss); }
+.folie--hell { background: var(--n050); }
+
+.label { font-family: var(--label); font-weight: 500; font-size: 24px; letter-spacing: 0.4em; text-transform: uppercase; color: var(--orange); margin-bottom: 30px; }
+.folie--dunkel .label { color: var(--orange); }
+h1, h2 { font-family: var(--display); font-weight: 900; line-height: 1.02; letter-spacing: -0.01em; }
+h1 { font-size: 120px; max-width: 1640px; }
+h2 { font-size: 78px; max-width: 1500px; }
+.punkt { display: inline-block; width: 0.17em; height: 0.17em; background: var(--orange); margin-left: 0.06em; vertical-align: baseline; }
+.unter { font-size: 30px; line-height: 1.5; color: var(--n600); max-width: 1180px; margin-top: 34px; }
+.folie--dunkel .unter { color: var(--n300); }
+
+/* Fuß jeder Folie */
+.fuss { position: absolute; left: 140px; right: 140px; bottom: 54px; display: flex; align-items: center; justify-content: space-between; font-family: var(--label); font-weight: 500; font-size: 19px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--n400); }
+.fuss img { height: 34px; display: block; }
+.fuss .seite { color: var(--schwarz); }
+.folie--dunkel .fuss .seite { color: var(--weiss); }
+.fuss .seite b { color: var(--orange); font-weight: 500; }
+
+/* Titelfolie */
+.titel { background: var(--schwarz); }
+.titel .foto { position: absolute; inset: 0; background: url('../../public/images/buero/besprechungsraum-2400.webp') center/cover; opacity: 0.32; }
+.titel .verlauf { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(14,14,14,0.96) 0%, rgba(14,14,14,0.78) 55%, rgba(14,14,14,0.35) 100%); }
+.titel .inhalt { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: center; padding-bottom: 60px; }
+.titel .logo { position: absolute; top: 0; left: 0; height: 64px; }
+.titel .balken { width: 120px; height: 10px; background: var(--orange); margin-bottom: 44px; }
+.titel .stand { position: absolute; bottom: 70px; left: 0; font-family: var(--label); font-weight: 500; font-size: 22px; letter-spacing: 0.35em; text-transform: uppercase; color: var(--n400); }
+
+/* Karten */
+.raster { display: grid; gap: 32px; margin-top: 64px; }
+.karte { border: 2px solid var(--n200); background: var(--weiss); padding: 44px 42px; position: relative; }
+.folie--hell .karte { border-color: var(--n200); }
+.folie--dunkel .karte { background: var(--n800); border-color: var(--n700); }
+.karte .nr { font-family: var(--display); font-weight: 900; font-size: 30px; width: 64px; height: 64px; display: grid; place-items: center; background: var(--schwarz); color: var(--weiss); margin-bottom: 30px; }
+.folie--dunkel .karte .nr { background: var(--orange); color: var(--schwarz); }
+.karte h3 { font-family: var(--display); font-weight: 800; font-size: 40px; line-height: 1.08; margin-bottom: 16px; }
+.karte p { font-size: 24px; line-height: 1.5; color: var(--n600); }
+.folie--dunkel .karte p { color: var(--n300); }
+.karte .klein { font-family: var(--label); font-weight: 500; font-size: 20px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--n500); margin-top: 22px; }
+.akzent { border-top: 6px solid var(--orange); padding-top: 40px; }
+
+/* Ablauf in einer Reihe */
+.reihe { display: grid; grid-template-columns: repeat(6, 1fr); margin-top: 80px; position: relative; }
+.reihe::before { content: ''; position: absolute; top: 40px; left: 40px; right: 40px; height: 3px; background: var(--n300); }
+.schritt { position: relative; padding-right: 30px; }
+.schritt .q { width: 80px; height: 80px; display: grid; place-items: center; background: var(--schwarz); color: var(--weiss); font-family: var(--display); font-weight: 900; font-size: 34px; position: relative; }
+.schritt.ziel .q { background: var(--orange); color: var(--schwarz); }
+.schritt h3 { font-family: var(--display); font-weight: 800; font-size: 34px; line-height: 1.08; margin: 36px 0 14px; }
+.schritt p { font-size: 21px; line-height: 1.5; color: var(--n600); }
+
+.weiss-band { margin-top: 70px; background: var(--schwarz); color: var(--weiss); padding: 40px 48px; display: grid; grid-template-columns: 300px 1fr; align-items: center; gap: 30px; }
+.weiss-band .label { line-height: 1.5; letter-spacing: 0.3em; }
+.infos { display: flex; flex-wrap: wrap; gap: 14px; }
+.infos span { border: 2px solid var(--n600); padding: 12px 22px; font-size: 23px; font-weight: 500; }
+/* Gespräch mit Handy */
+.zwei { display: grid; grid-template-columns: 1fr 560px; gap: 90px; flex: 1; }
+.liste { list-style: none; margin-top: 40px; }
+.liste li { display: grid; grid-template-columns: 58px 1fr auto; align-items: center; gap: 22px; padding: 12px 0; border-bottom: 2px solid var(--n200); font-size: 25px; line-height: 1.3; }
+.liste li:first-child { border-top: 2px solid var(--n200); }
+.liste .z { font-family: var(--display); font-weight: 900; font-size: 30px; color: var(--orange); }
+.liste .wie { font-family: var(--label); font-weight: 500; font-size: 18px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--n500); border: 2px solid var(--n200); padding: 6px 12px; white-space: nowrap; }
+.liste .wie.ki { color: var(--schwarz); border-color: var(--orange); }
+.liste small { display: block; font-size: 19px; color: var(--n500); margin-top: 4px; }
+
+.handy { align-self: start; margin-top: 0; width: 440px; height: 860px; position: relative; z-index: 2; background: var(--schwarz); border-radius: 64px; padding: 18px; box-shadow: 0 30px 80px rgba(14,14,14,0.28); justify-self: center; }
+.bildschirm { width: 100%; height: 100%; background: #EFEAE2; border-radius: 48px; overflow: hidden; display: flex; flex-direction: column; }
+.chatkopf { background: var(--schwarz); color: var(--weiss); padding: 52px 26px 20px; display: flex; align-items: center; gap: 16px; }
+.chatkopf .av { width: 52px; height: 52px; border-radius: 50%; background: var(--schwarz); border: 2px solid var(--n700); display: grid; place-items: center; overflow: hidden; }
+.chatkopf .av img { width: 44px; }
+.chatkopf b { display: block; font-size: 19px; font-weight: 600; }
+.chatkopf span { font-size: 14px; color: var(--n400); }
+.chat { flex: 1; padding: 20px 16px; display: flex; flex-direction: column; gap: 10px; font-size: 15.5px; line-height: 1.42; }
+.blase { max-width: 86%; padding: 12px 15px 10px; border-radius: 12px; background: var(--weiss); box-shadow: 0 1px 1px rgba(0,0,0,0.08); }
+.blase .zeit { display: block; text-align: right; font-size: 12px; color: var(--n500); margin-top: 4px; }
+.blase.ich { align-self: flex-end; background: #D9FDD3; }
+.knoepfe { display: grid; gap: 6px; max-width: 86%; margin-top: -6px; }
+.knoepfe span { background: var(--weiss); border-radius: 10px; text-align: center; padding: 10px; font-size: 16px; font-weight: 600; color: #00796B; box-shadow: 0 1px 1px rgba(0,0,0,0.08); }
+
+/* Einwand */
+.fluss { display: grid; grid-template-columns: 430px 80px 1fr; gap: 0 0; align-items: stretch; margin-top: 64px; }
+.knopfspalte { display: grid; gap: 22px; }
+.wahl { border: 2px solid var(--n700); padding: 28px 30px; font-family: var(--display); font-weight: 800; font-size: 34px; display: flex; align-items: center; justify-content: space-between; }
+.wahl small { font-family: var(--label); font-weight: 500; font-size: 18px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--n400); }
+.wahl.gut { border-color: var(--orange); }
+.pfeil { display: grid; place-items: center; color: var(--orange); font-family: var(--display); font-size: 60px; font-weight: 900; }
+.ergebnisse { display: grid; gap: 22px; }
+.ergebnis { background: var(--n800); border-left: 6px solid var(--orange); padding: 26px 34px; }
+.ergebnis h3 { font-family: var(--display); font-weight: 800; font-size: 32px; margin-bottom: 8px; }
+.ergebnis p { font-size: 22px; line-height: 1.5; color: var(--n300); }
+.ergebnis.leise { border-left-color: var(--n500); }
+.zitat { margin-top: 44px; border-top: 2px solid var(--n700); padding-top: 34px; display: grid; grid-template-columns: 430px 1fr; gap: 40px; }
+.zitat .label { margin: 0; font-size: 20px; letter-spacing: 0.3em; line-height: 1.6; padding-top: 6px; }
+.zitat p { font-size: 25px; line-height: 1.55; color: var(--n200); font-style: italic; }
+
+.pillen { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+.pillen span { border: 2px solid var(--n700); padding: 8px 18px; font-size: 19px; color: var(--n300); border-radius: 999px; }
+
+/* Terminregeln */
+.zeitstrahl { margin-top: 56px; border: 2px solid var(--n200); padding: 40px 48px; background: var(--weiss); }
+.zeitstrahl .kopf { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 30px; }
+.zeitstrahl .kopf h3 { font-family: var(--display); font-weight: 800; font-size: 32px; }
+.zeitstrahl .kopf span { font-family: var(--label); font-weight: 500; font-size: 19px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--n500); }
+.tage { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; }
+.tag { border: 2px solid var(--n200); padding: 14px 0 12px; text-align: center; font-size: 19px; color: var(--n500); }
+.tag b { display: block; font-family: var(--display); font-weight: 800; font-size: 28px; color: var(--schwarz); margin-top: 2px; }
+.tag.we { background: repeating-linear-gradient(135deg, var(--n100) 0 8px, var(--weiss) 8px 16px); }
+.tag.start { background: var(--schwarz); border-color: var(--schwarz); color: var(--n400); }
+.tag.start b { color: var(--weiss); }
+.tag.heiss { border-color: var(--orange); border-width: 3px; }
+.tag.normal { background: var(--orange); border-color: var(--orange); color: var(--schwarz); }
+.tag.normal b { color: var(--schwarz); }
+.legende { display: flex; gap: 40px; margin-top: 24px; font-size: 20px; color: var(--n600); }
+.legende i { display: inline-block; width: 20px; height: 20px; vertical-align: -3px; margin-right: 10px; border: 2px solid var(--n200); }
+
+/* Nachfassen */
+.spur { margin-top: 30px; }
+.spur h3 { font-family: var(--display); font-weight: 800; font-size: 30px; margin-bottom: 20px; }
+.punkte { display: grid; grid-template-columns: repeat(3, 1fr); position: relative; }
+.punkte::before { content: ''; position: absolute; top: 15px; left: 15px; right: 15%; height: 3px; background: var(--n300); }
+.pk { position: relative; padding-right: 40px; }
+.pk i { display: block; width: 32px; height: 32px; background: var(--schwarz); margin-bottom: 16px; position: relative; }
+.pk.team i { background: var(--orange); }
+.pk b { font-family: var(--display); font-weight: 900; font-size: 40px; display: block; line-height: 1; }
+.pk p { font-size: 21px; line-height: 1.45; color: var(--n600); margin-top: 8px; }
+.trenner { height: 2px; background: var(--n200); margin: 32px 0 30px; }
+
+.ruhe { display: flex; gap: 24px; margin-top: 34px; }
+.ruhe div { flex: 1; background: var(--schwarz); color: var(--weiss); padding: 26px 32px; display: flex; justify-content: space-between; align-items: baseline; }
+.ruhe span { font-family: var(--label); font-weight: 500; font-size: 20px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--n400); }
+.ruhe b { font-family: var(--display); font-weight: 800; font-size: 34px; }
+
+/* Code und KI */
+.spalten { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 64px; }
+.spalte { padding: 46px 48px; border: 2px solid var(--n700); }
+.spalte.ki { border-color: var(--orange); }
+.spalte h3 { font-family: var(--display); font-weight: 800; font-size: 44px; margin-bottom: 30px; }
+.spalte ul { list-style: none; }
+.spalte li { font-size: 25px; line-height: 1.45; color: var(--n200); padding: 14px 0 14px 40px; position: relative; border-top: 1px solid var(--n700); }
+.spalte li::before { content: ''; position: absolute; left: 0; top: 26px; width: 14px; height: 14px; background: var(--n500); }
+.spalte.ki li::before { background: var(--orange); }
+.band { margin-top: 40px; display: flex; gap: 20px; }
+.band div { flex: 1; font-size: 21px; line-height: 1.45; color: var(--n300); padding-left: 22px; border-left: 3px solid var(--n700); }
+.band b { color: var(--weiss); font-weight: 600; display: block; margin-bottom: 4px; }
+
+/* Setup */
+.setup { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin-top: 44px; }
+.setup .karte { padding: 26px 28px 24px; }
+.setup .karte .nr { width: 46px; height: 46px; font-size: 22px; margin-bottom: 16px; }
+.setup .karte h3 { font-size: 28px; margin-bottom: 10px; }
+.setup .karte p { font-size: 18.5px; line-height: 1.45; }
+.setup .karte .wo { font-family: var(--label); font-weight: 500; font-size: 16px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--orange); margin-top: 12px; }
+.setup .test { background: var(--schwarz); border-color: var(--schwarz); }
+.setup .test h3 { color: var(--weiss); }
+.setup .test p { color: var(--n300); }
+.setup .test .nr { background: var(--orange); color: var(--schwarz); }
+
+/* Stand */
+.stand2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 60px; }
+.stand2 h3 { font-family: var(--label); font-weight: 500; font-size: 24px; letter-spacing: 0.4em; text-transform: uppercase; margin-bottom: 18px; }
+.stand2 .fertig h3 { color: var(--n400); }
+.stand2 .offen h3 { color: var(--orange); }
+.stand2 li { list-style: none; font-size: 26px; line-height: 1.4; padding: 18px 0 18px 54px; border-top: 1px solid var(--n700); position: relative; color: var(--n200); }
+.stand2 li::before { position: absolute; left: 0; top: 18px; width: 32px; height: 32px; display: grid; place-items: center; font-weight: 700; font-size: 20px; }
+.stand2 .fertig li::before { content: '✓'; background: var(--n700); color: var(--weiss); }
+.stand2 .offen li::before { content: ''; border: 3px solid var(--orange); }
+.stand2 small { display: block; font-size: 19px; color: var(--n500); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<!-- 1 Titel -->
+<section class="folie folie--dunkel titel">
+  <div class="foto"></div><div class="verlauf"></div>
+  <div class="inhalt">
+    <img class="logo" src="../../public/images/brand/logo-weiss.png" alt="That's it. Marketing">
+    <div class="balken"></div>
+    <div class="label">WhatsApp Setting Bot</div>
+    <h1>Vom Formular zum Termin.<br>Ganz von allein<span class="punkt"></span></h1>
+    <p class="unter">Der Bot übernimmt das Setting für alle Leads der Landingpage „Kostenloser Website-Entwurf“ und bucht das Strategiegespräch mit Tim direkt in Let's Meet.</p>
+    <div class="stand">Interne Vorstellung · Stand November 2026</div>
+  </div>
+</section>
+
+<!-- 2 Idee -->
+<section class="folie">
+  <div class="label">Die Idee</div>
+  <h2>Schneller beim Lead als jeder Anruf<span class="punkt"></span></h2>
+  <p class="unter">Bisher ruft das Team an, erreicht viele nicht und stimmt den Termin per Mail ab. Jetzt schreibt der Bot direkt nach der Anfrage per WhatsApp, stellt die Settingfragen und trägt den Termin selbst ein.</p>
+  <div class="raster" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="karte akzent"><div class="nr">01</div><h3>Sofort</h3><p>Die erste Nachricht geht direkt nach der Anfrage raus. Kommt sie nachts, plant der Bot sie für den Morgen.</p></div>
+    <div class="karte akzent"><div class="nr">02</div><h3>Qualifiziert</h3><p>Problem, Ziel, Zeitpunkt, Budget und Entscheider stehen fest, bevor Tim ins Gespräch geht.</p></div>
+    <div class="karte akzent"><div class="nr">03</div><h3>Gebucht</h3><p>Der Termin landet mit Google Meet Link in Tims Kalender, inklusive Bestätigungsmail an den Lead.</p></div>
+  </div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>02</b> / 11</span></div>
+</section>
+
+<!-- 3 Weg -->
+<section class="folie folie--hell">
+  <div class="label">Der Weg eines Leads</div>
+  <h2>Sechs Stationen, kein Handgriff vom Team<span class="punkt"></span></h2>
+  <div class="reihe">
+    <div class="schritt"><div class="q">1</div><h3>Anfrage</h3><p>Auf der Landingpage setzt der Lead freiwillig den Haken „Am schnellsten per WhatsApp“.</p></div>
+    <div class="schritt"><div class="q">2</div><h3>Übergabe</h3><p>Die Landingpage gibt den Lead gesichert an Let's Meet weiter, von Server zu Server.</p></div>
+    <div class="schritt"><div class="q">3</div><h3>Erste Nachricht</h3><p>Eine von Meta freigegebene Vorlage mit drei Knöpfen eröffnet den Chat.</p></div>
+    <div class="schritt"><div class="q">4</div><h3>Setting</h3><p>Sieben kurze Fragen, wo immer möglich mit Knöpfen statt Tipparbeit.</p></div>
+    <div class="schritt ziel"><div class="q">5</div><h3>Termin</h3><p>Strategiegespräch mit Tim, 60 Minuten per Google Meet, Bestätigung per Mail.</p></div>
+    <div class="schritt"><div class="q">6</div><h3>Erinnerung</h3><p>Am Vortag per WhatsApp, zusätzlich zu den Erinnerungsmails.</p></div>
+  </div>
+  <div class="weiss-band">
+    <div class="label" style="margin:0">Im Termin weiß Tim schon</div>
+    <div class="infos"><span>Was stört</span><span>Ziel der Website</span><span>Startzeitpunkt</span><span>Budgetrahmen</span><span>Entscheider</span><span>Lieblingswebsite</span></div>
+  </div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>03</b> / 11</span></div>
+</section>
+
+<!-- 4 Gespräch -->
+<section class="folie">
+  <div class="zwei">
+    <div>
+      <div class="label">Das Gespräch</div>
+      <h2>Schritt für Schritt<span class="punkt"></span></h2>
+      <ul class="liste">
+        <li><span class="z">1</span><span>Was stört dich an eurer Website?<small>Ohne Website: Wie kommen eure Kunden auf euch?</small></span><span class="wie">Knöpfe</span></li>
+        <li><span class="z">2</span><span>Was soll die neue Website erreichen?</span><span class="wie ki">Freitext</span></li>
+        <li><span class="z">3</span><span>Wann wollt ihr starten?</span><span class="wie">Knöpfe</span></li>
+        <li><span class="z">4</span><span>Ablauf erklären, Rahmen ab 5.000 €</span><span class="wie">Knöpfe</span></li>
+        <li><span class="z">5</span><span>Einwandbehandlung<small>nur wenn der Rahmen nicht sofort passt</small></span><span class="wie ki">Freitext</span></li>
+        <li><span class="z">6</span><span>Termin: zwei Vorschläge oder Wunschzeit</span><span class="wie">Knöpfe</span></li>
+        <li><span class="z">7</span><span>Entscheidest du allein?</span><span class="wie">Knöpfe</span></li>
+        <li><span class="z">8</span><span>Eine Website, die dir gefällt<small>Link als Inspiration für den Entwurf</small></span><span class="wie ki">Freitext</span></li>
+      </ul>
+    </div>
+    <div class="handy">
+      <div class="bildschirm">
+        <div class="chatkopf"><div class="av"><img src="../../public/images/brand/logo-weiss.png" alt=""></div><div><b>That's it. Marketing</b><span>Unternehmenskonto</span></div></div>
+        <div class="chat">
+          <div class="blase">Hi Max, hier ist das Team von That's it. Marketing 👋 Danke für deine Anfrage zum kostenlosen Website-Entwurf für die Testbau GmbH! Damit wir den Entwurf genau auf euch zuschneiden: Was stört dich an eurer jetzigen Website am meisten?<span class="zeit">10:02</span></div>
+          <div class="knoepfe"><span>Wirkt veraltet</span><span>Bringt kaum Anfragen</span><span>Etwas anderes</span></div>
+          <div class="blase ich">Bringt kaum Anfragen<span class="zeit">10:04 ✓✓</span></div>
+          <div class="blase">Verstehe, dann ist die Website gerade eher Visitenkarte als Vertriebskanal. Genau da setzt der Entwurf an.<br><br>Und was soll die neue Website für euch erreichen? Zum Beispiel mehr Anfragen, mehr Bewerber oder einfach ein moderner Auftritt.<span class="zeit">10:04</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>04</b> / 11</span></div>
+</section>
+
+<!-- 5 Einwand -->
+<section class="folie folie--dunkel">
+  <div class="label">Einwandbehandlung</div>
+  <h2>Ehrlich bleiben, nicht drücken<span class="punkt"></span></h2>
+  <div class="fluss">
+    <div class="knopfspalte">
+      <div class="wahl gut">Ja, das passt <small>Knopf</small></div>
+      <div class="wahl">Kommt drauf an <small>Knopf</small></div>
+      <div class="wahl">Eher zu viel <small>Knopf</small></div>
+    </div>
+    <div class="pfeil">→</div>
+    <div class="ergebnisse">
+      <div class="ergebnis"><h3>Direkt weiter zum Termin</h3><p>Zwei Terminvorschläge mit Tim, auf Wunsch auch eine eigene Wunschzeit.</p></div>
+      <div class="ergebnis"><h3>Einwand nach unserem Setting Skript</h3><p>Höchstens zwei Anläufe, etwa: Was ist ein neuer Kunde für euch wert? Bleibt der Lead unsicher, bekommt er trotzdem einen Termin.</p></div>
+      <div class="ergebnis leise"><h3>Klares Nein: höfliche Verabschiedung</h3><p>Kein Nachbohren. Der Lead kann sich jederzeit wieder melden.</p></div>
+    </div>
+  </div>
+  <div class="zitat">
+    <div class="label">So verabschiedet sich der Bot</div>
+    <p>„Danke dir für die ehrliche Antwort, Max! Dann ist der Entwurf gerade vermutlich nicht der richtige Schritt für euch, und wir möchten dir nicht unnötig Zeit stehlen. Falls sich bei euch etwas ändert, schreib uns einfach hier, wir sind gern für dich da.“</p>
+  </div>
+  <div class="fuss"><img src="../../public/images/brand/logo-weiss.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>05</b> / 11</span></div>
+</section>
+
+<!-- 6 Termine -->
+<section class="folie">
+  <div class="label">Terminlogik</div>
+  <h2>Termine, die wirklich passen<span class="punkt"></span></h2>
+  <div class="raster" style="grid-template-columns: repeat(4, 1fr); margin-top: 52px;">
+    <div class="karte"><h3>Normal</h3><p>Frühestens 7 Tage nach der Anfrage. So viel Zeit braucht der Entwurf.</p></div>
+    <div class="karte akzent"><h3>Heiß</h3><p>„So schnell es geht“ und das Budget passt: schon nach 3 Werktagen.</p></div>
+    <div class="karte"><h3>Ausgeschlossen</h3><p>Keine Wochenenden, keine Feiertage in NRW, keine belegten Zeiten in Tims Kalender.</p></div>
+    <div class="karte"><h3>Wunschzeit</h3><p>„Donnerstag nachmittags“ versteht der Bot und sucht die passenden freien Zeiten.</p></div>
+  </div>
+  <div class="zeitstrahl">
+    <div class="kopf"><h3>Beispiel: Anfrage am Samstag, 14. November</h3><span>Aus dem Testlauf</span></div>
+    <div class="tage">
+      <div class="tag start">Sa<b>14.</b></div>
+      <div class="tag we">So<b>15.</b></div>
+      <div class="tag">Mo<b>16.</b></div>
+      <div class="tag">Di<b>17.</b></div>
+      <div class="tag heiss">Mi<b>18.</b></div>
+      <div class="tag">Do<b>19.</b></div>
+      <div class="tag">Fr<b>20.</b></div>
+      <div class="tag we">Sa<b>21.</b></div>
+      <div class="tag we">So<b>22.</b></div>
+      <div class="tag normal">Mo<b>23.</b></div>
+    </div>
+    <div class="legende"><span><i style="background:var(--schwarz);border-color:var(--schwarz)"></i>Anfrage</span><span><i style="border:3px solid var(--orange)"></i>Erster Vorschlag, heißer Lead</span><span><i style="background:var(--orange);border-color:var(--orange)"></i>Erster Vorschlag, normaler Lead</span><span><i class="we" style="background:repeating-linear-gradient(135deg,var(--n100) 0 4px,#fff 4px 8px)"></i>Wochenende</span></div>
+  </div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>06</b> / 11</span></div>
+</section>
+
+<!-- 7 Nachfassen -->
+<section class="folie folie--hell">
+  <div class="label">Nachfassen</div>
+  <h2>Niemand fällt durchs Raster<span class="punkt"></span></h2>
+  <div class="spur" style="margin-top: 44px;">
+    <h3>Der Lead antwortet nicht auf die erste Nachricht</h3>
+    <div class="punkte">
+      <div class="pk"><i></i><b>Sofort</b><p>Erste Nachricht mit Knöpfen, direkt nach der Anfrage.</p></div>
+      <div class="pk"><i></i><b>Nach 3 Stunden</b><p>Kurze Erinnerung: „Passt es gerade?“ mit zwei Knöpfen.</p></div>
+      <div class="pk team"><i></i><b>Nach 24 Stunden</b><p>Mail ans Team: bitte anrufen. Ab hier übernimmt ein Mensch.</p></div>
+    </div>
+  </div>
+  <div class="trenner"></div>
+  <div class="spur" style="margin-top: 0;">
+    <h3>Der Lead wird mitten im Gespräch still</h3>
+    <div class="punkte">
+      <div class="pk"><i></i><b>Nach 2 Stunden</b><p>Kurz nachgehakt, die offene Frage wird wiederholt.</p></div>
+      <div class="pk"><i></i><b>Nach 18 Stunden</b><p>Zweites, letztes Nachhaken im Chat.</p></div>
+      <div class="pk team"><i></i><b>Danach</b><p>Mail ans Team mit allen Antworten bis hierhin.</p></div>
+    </div>
+  </div>
+  <div class="ruhe">
+    <div><span>Schreibt von sich aus Mo bis Fr</span><b>8 bis 21 Uhr</b></div>
+    <div><span>Schreibt von sich aus am Wochenende</span><b>10 bis 20 Uhr</b></div>
+  </div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>07</b> / 11</span></div>
+</section>
+
+<!-- 8 Team -->
+<section class="folie">
+  <div class="label">Kontrolle</div>
+  <h2>Das Team hat immer das letzte Wort<span class="punkt"></span></h2>
+  <div class="raster" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="karte akzent"><h3>Team schreibt selbst</h3><p>Antwortet jemand aus der WhatsApp Business App in den Chat, pausiert der Bot dort sofort.</p></div>
+    <div class="karte akzent"><h3>Lead will einen Menschen</h3><p>Der Bot sagt Bescheid, gibt per Mail an das Team weiter und schweigt ab da.</p></div>
+    <div class="karte akzent"><h3>„Stopp“</h3><p>Die Nummer wird nie wieder angeschrieben, auch nicht bei einer neuen Anfrage.</p></div>
+    <div class="karte"><h3>Normale Kundenchats</h3><p>Fremde Nummern ignoriert der Bot komplett und speichert nichts davon.</p></div>
+    <div class="karte"><h3>Backoffice Let's Meet</h3><p>Jeder Chat mit Verlauf, Status und allen Antworten. Bot pausieren oder fortsetzen mit einem Klick.</p></div>
+    <div class="karte"><h3>Termin verschieben</h3><p>Will der Lead umbuchen, schickt der Bot den Link, über den er es selbst erledigt.</p></div>
+  </div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>08</b> / 11</span></div>
+</section>
+
+<!-- 9 Code und KI -->
+<section class="folie folie--dunkel">
+  <div class="label">Technik</div>
+  <h2>Fest im Ablauf, klug im Gespräch<span class="punkt"></span></h2>
+  <div class="spalten">
+    <div class="spalte">
+      <h3>Fest im Code</h3>
+      <ul>
+        <li>Alle Fragen und ihre Reihenfolge</li>
+        <li>Knöpfe, Terminregeln und Sendezeiten</li>
+        <li>Fakten: ab 5.000 €, über 350 Websites, Tim als Geschäftsführer</li>
+        <li>Keine anderen Preise, Rabatte oder Versprechen</li>
+      </ul>
+    </div>
+    <div class="spalte ki">
+      <h3>Claude im Chat</h3>
+      <ul>
+        <li>Versteht freie Antworten und Wunschtermine</li>
+        <li>Beantwortet Rückfragen zum Angebot</li>
+        <li>Führt die Einwandbehandlung nach dem Setting Skript</li>
+        <li>Sprachnachrichten werden vorher in Text umgewandelt</li>
+      </ul>
+    </div>
+  </div>
+  <div class="band">
+    <div><b>Ausfallsicher</b>Ist die KI nicht erreichbar, laufen alle Knöpfe weiter. Kein Lead geht verloren.</div>
+    <div><b>Freiwillig</b>Die WhatsApp Einwilligung ist nicht vorausgewählt, ohne Haken ruft das Team an.</div>
+    <div><b>Transparent</b>Das Profil sagt, dass digital unterstützt wird. Auf Nachfrage sagt der Bot es offen.</div>
+  </div>
+  <div class="fuss"><img src="../../public/images/brand/logo-weiss.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>09</b> / 11</span></div>
+</section>
+
+<!-- 10 Startklar -->
+<section class="folie folie--hell">
+  <div class="label">Einrichtung</div>
+  <h2>So wird der Bot startklar<span class="punkt"></span></h2>
+  <div class="setup">
+    <div class="karte"><div class="nr">1</div><h3>Nummer verbinden</h3><p>Firmennummer per Coexistence an die Cloud API anbinden, QR Code in der Business App scannen.</p><div class="wo">Meta</div></div>
+    <div class="karte"><div class="nr">2</div><h3>Zugang anlegen</h3><p>Systemnutzer mit dauerhaftem Token, dazu das App Secret und die Phone number ID notieren.</p><div class="wo">Meta Business</div></div>
+    <div class="karte"><div class="nr">3</div><h3>Vorlagen einreichen</h3><p>Vier Nachrichtenvorlagen mit festem Text und Knöpfen, Freigabe durch Meta abwarten.</p><div class="wo">WhatsApp Manager</div></div>
+    <div class="karte"><div class="nr">4</div><h3>Profil anpassen</h3><p>Beschreibung mit dem Hinweis auf digitale Unterstützung, das Team liest jede Nachricht mit.</p><div class="wo">WhatsApp Manager</div></div>
+    <div class="karte"><div class="nr">5</div><h3>Schlüssel setzen</h3><p>Sechs Secrets im Worker von Let's Meet, ein gemeinsamer Schlüssel bei der Landingpage.</p><div class="wo">Cloudflare</div></div>
+    <div class="karte"><div class="nr">6</div><h3>Webhook eintragen</h3><p>Rückruf Adresse von Let's Meet hinterlegen, beide Felder für Nachrichten abonnieren.</p><div class="wo">Meta App</div></div>
+    <div class="karte"><div class="nr">7</div><h3>Live schalten</h3><p>Den neuen Stand von Let's Meet und Landingpage veröffentlichen.</p><div class="wo">GitHub · Cloudflare</div></div>
+    <div class="karte test"><div class="nr">8</div><h3>Testlauf</h3><p>Mit eigener Nummer anfragen, Verlauf im Backoffice prüfen, Testtermin absagen, „Stopp“ senden.</p></div>
+  </div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>10</b> / 11</span></div>
+</section>
+
+<!-- 11 Stand -->
+<section class="folie folie--dunkel">
+  <div class="label">Stand heute</div>
+  <h2>Gebaut. Jetzt fehlt nur noch Meta<span class="punkt"></span></h2>
+  <div class="stand2">
+    <div class="fertig">
+      <h3>Erledigt</h3>
+      <ul>
+        <li>Bot mit kompletter Settinglogik in Let's Meet</li>
+        <li>Direkte Buchung ins Strategiegespräch mit Tim</li>
+        <li>Landingpage übergibt Leads mit WhatsApp Haken</li>
+        <li>Übersicht im Backoffice unter „WhatsApp Bot“</li>
+        <li>Ablauf bis zur Buchung im Test durchgespielt</li>
+      </ul>
+    </div>
+    <div class="offen">
+      <h3>Offen</h3>
+      <ul>
+        <li>Einrichtung bei Meta und Freigabe der Vorlagen</li>
+        <li>Schlüssel in Cloudflare setzen und live schalten</li>
+        <li>Erster echter Testlauf mit eigener Nummer</li>
+        <li>Löschfrist für Chats festlegen<small>Vorschlag: 12 Monate wie bei Buchungen</small></li>
+        <li>Datenschutzerklärung juristisch prüfen lassen</li>
+      </ul>
+    </div>
+  </div>
+  <div class="fuss"><img src="../../public/images/brand/logo-weiss.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>11</b> / 11</span></div>
+</section>
+
+</body>
+</html>
