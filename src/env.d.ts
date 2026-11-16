@@ -16,6 +16,7 @@ declare namespace Cloudflare {
     TURNSTILE_SECRET_KEY?: string;
     /** Gemeinsamer Schlüssel der vier Playbook Landingpages für /api/playbook/anfordern */
     PLAYBOOK_SCHLUESSEL?: string;
+    ANFRAGE_SCHLUESSEL?: string;
     /** Close Automat (thatsit-close-automat), siehe src/lib/crm.ts */
     CRM_WEBHOOK_URL?: string;
     CRM_WEBHOOK_SECRET?: string;

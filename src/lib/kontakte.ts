@@ -39,19 +39,27 @@ export async function kontaktAusBuchung(nutzerId: string, name: string, email: s
  * Nach einer Playbook Anfrage: Kontakt anlegen oder Telefon und Unternehmen ergänzen.
  * Vorhandene Angaben bleiben, ein entfernter Kontakt kommt zurück. Gibt die Kontakt ID zurück.
  */
-export async function kontaktAusPlaybook(nutzerId: string, name: string, email: string, telefon: string | null, unternehmen: string | null) {
+export async function kontaktAusPlaybook(
+  nutzerId: string,
+  name: string,
+  email: string,
+  telefon: string | null,
+  unternehmen: string | null,
+  /** 'playbook' (Playbook Landingpages) oder 'anfrage' (übrige Landingpages, src/lib/anfragen.ts) */
+  quelle: 'playbook' | 'anfrage' = 'playbook',
+) {
   const jetzt = jetztIso();
   await ausfuehren(
     `INSERT INTO kontakte (id, nutzer_id, name, email, telefon, unternehmen, quelle, erstellt_am, aktualisiert_am)
-     VALUES (?, ?, ?, ?, ?, ?, 'playbook', ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (nutzer_id, email) WHERE email IS NOT NULL DO UPDATE SET
        name = CASE WHEN kontakte.quelle = 'google' OR kontakte.ausgeblendet = 1 THEN excluded.name ELSE kontakte.name END,
-       quelle = CASE WHEN kontakte.quelle = 'google' THEN 'playbook' ELSE kontakte.quelle END,
+       quelle = CASE WHEN kontakte.quelle = 'google' THEN excluded.quelle ELSE kontakte.quelle END,
        telefon = COALESCE(kontakte.telefon, excluded.telefon),
        unternehmen = COALESCE(kontakte.unternehmen, excluded.unternehmen),
        ausgeblendet = 0,
        aktualisiert_am = excluded.aktualisiert_am`,
-    neueId(), nutzerId, name, emailNorm(email), telefon, unternehmen, jetzt, jetzt,
+    neueId(), nutzerId, name, emailNorm(email), telefon, unternehmen, quelle, jetzt, jetzt,
   );
   const k = await eins<{ id: string }>('SELECT id FROM kontakte WHERE nutzer_id = ? AND email = ?', nutzerId, emailNorm(email));
   return k?.id ?? null;

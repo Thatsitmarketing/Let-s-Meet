@@ -5,6 +5,7 @@ import KontaktFormular from '../../../components/KontaktFormular.astro';
 import Icon from '../../../components/ui/Icon.astro';
 import { kontaktAusFormular, kontaktEntfernen, kontaktMitMeetings, kontaktSpeichern, meetingsVon, type KontaktWerte } from '../../../lib/kontakte';
 import { meldungAusUrl } from '../../../lib/meldungen';
+import { ANFRAGE_QUELLEN, anfrageAntworten, anfragenVonKontakt, istAnfrageQuelle } from '../../../lib/anfragen';
 import { antwortenLesen, istPlaybook, PLAYBOOK_GUELTIG_TAGE, PLAYBOOKS, zugaengeVonKontakt, zugangSperren, zugangStatus, zugangVerlaengern } from '../../../lib/playbooks';
 import { formatDatumMittel, formatZeit } from '../../../lib/zeit';
 
@@ -46,9 +47,9 @@ if (Astro.request.method === 'POST') {
 }
 
 const tz = nutzer.zeitzone;
-const [meetings, zugaenge] = await Promise.all([meetingsVon(nutzer.id, kontakt.email), zugaengeVonKontakt(kontakt.id)]);
+const [meetings, zugaenge, anfragen] = await Promise.all([meetingsVon(nutzer.id, kontakt.email), zugaengeVonKontakt(kontakt.id), anfragenVonKontakt(kontakt.id)]);
 const jetzt = new Date().toISOString();
-const QUELLE: Record<string, string> = { buchung: 'Buchung über Let\'s Meet', google: 'Gast im Google Kalender', import: 'CSV Import', manuell: 'Von Hand angelegt', playbook: 'Playbook angefordert' };
+const QUELLE: Record<string, string> = { buchung: 'Buchung über Let\'s Meet', google: 'Gast im Google Kalender', import: 'CSV Import', manuell: 'Von Hand angelegt', playbook: 'Playbook angefordert', anfrage: 'Anfrage über eine Landingpage' };
 
 // Termin für den Kontakt buchen: Buchungsseite mit vorausgefülltem Formular (Fragment geht an keinen Server)
 const vorbelegung = new URLSearchParams({ name: kontakt.name, ...(kontakt.email ? { email: kontakt.email } : {}), ...(kontakt.telefon ? { telefon: kontakt.telefon } : {}), quelle: 'backoffice' });
@@ -154,6 +155,28 @@ const wann = (iso: string) => `${formatDatumMittel(iso, tz)}, ${formatZeit(iso, 
                       </form>
                     )}
                   </div>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
+
+      {anfragen.length > 0 && (
+        <section class="karte block" aria-labelledby="k-anfragen" id="anfragen">
+          <h2 id="k-anfragen" class="klein-titel">Anfragen</h2>
+          <ol class="playbooks" role="list">
+            {anfragen.map((a) => {
+              const angaben = anfrageAntworten(a);
+              return (
+                <li>
+                  <strong>{istAnfrageQuelle(a.quelle) ? ANFRAGE_QUELLEN[a.quelle].name : a.quelle}</strong>
+                  <span class="leise klein">Eingegangen am {wann(a.erstellt_am)}{a.dublette ? ', wiederholte Anfrage' : ''}</span>
+                  {angaben.length > 0 && (
+                    <dl class="pb-antworten" aria-label="Angaben im Funnel">
+                      {angaben.map((x) => <div><dt>{x.frage}</dt><dd>{x.antwort}</dd></div>)}
+                    </dl>
+                  )}
                 </li>
               );
             })}
