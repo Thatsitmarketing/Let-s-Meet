@@ -28,6 +28,7 @@ declare namespace Cloudflare {
     WHATSAPP_API_VERSION?: string;
     WHATSAPP_VORLAGEN_SPRACHE?: string;
     WHATSAPP_TERMINART?: string;
+    WHATSAPP_KI_TAGESLIMIT?: string;
     WHATSAPP_TEAM_EMAIL?: string;
     WHATSAPP_KI_MODELL?: string;
     ANTHROPIC_API_KEY?: string;

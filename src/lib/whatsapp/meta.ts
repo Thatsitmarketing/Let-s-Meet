@@ -89,15 +89,21 @@ export async function gelesenUndTippt(messageId: string) {
 }
 
 /** Sprachnachricht oder andere Datei von Meta laden (zwei Schritte: URL holen, dann Datei). */
-export async function medienLaden(mediaId: string): Promise<{ daten: ArrayBuffer; mime: string } | null> {
+export async function medienLaden(mediaId: string, maxBytes = Infinity): Promise<{ daten: ArrayBuffer; mime: string } | null> {
   if (!waAktiv()) return null;
   const kopf = { authorization: `Bearer ${env.WHATSAPP_TOKEN!.trim()}` };
   const info = await fetch(graph(mediaId), { headers: kopf, signal: AbortSignal.timeout(10000) });
   if (!info.ok) throw new Error(`Medien Info ${info.status}`);
-  const { url, mime_type } = (await info.json()) as { url: string; mime_type: string };
+  const { url, mime_type, file_size } = (await info.json()) as { url: string; mime_type: string; file_size?: number };
+  // Zu große Dateien gar nicht erst laden
+  if (file_size && file_size > maxBytes) return null;
+  // Nur von Meta laden, nie von einer anderen Adresse
+  if (!/^https:\/\/[a-z0-9.-]+\.(fbsbx|facebook|whatsapp)\.(com|net)\//i.test(url)) throw new Error('Unerwartete Medienadresse');
   const datei = await fetch(url, { headers: kopf, signal: AbortSignal.timeout(20000) });
   if (!datei.ok) throw new Error(`Medien Download ${datei.status}`);
-  return { daten: await datei.arrayBuffer(), mime: mime_type };
+  const daten = await datei.arrayBuffer();
+  if (daten.byteLength > maxBytes) return null;
+  return { daten, mime: mime_type };
 }
 
 /** X-Hub-Signature-256 = "sha256=" + HMAC-SHA256(App Secret, roher Body) */

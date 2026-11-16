@@ -96,3 +96,16 @@ App, WhatsApp, Konfiguration:
 * „Stopp“ meldet ab, die Nummer wird nie wieder angeschrieben.
 * Fremde Nummern (normale Kundenchats auf der Firmennummer) ignoriert der Bot komplett und speichert nichts.
 * Am Vortag eine Erinnerung per WhatsApp, zusätzlich zu den Mails aus den Arbeitsabläufen.
+
+## Sicherheit und Schutz vor Missbrauch
+
+Code: `src/lib/whatsapp/schutz.ts`, eingebunden in `ki.ts`, `bot.ts`, `meta.ts` und den beiden Schnittstellen.
+
+* **Claude hat keine Macht.** Keine Werkzeuge, kein Zugriff auf Datenbank, Kalender oder Mails. Ablauf, Fragen, Knöpfe, Preise und Buchung stehen im Code. Claude liefert nur eine Einordnung aus einer festen Liste und einen kurzen Text. Termine bucht der Code nur aus den Zeiten, die er selbst angeboten hat, und prüft sie vorher noch einmal gegen den Kalender.
+* **Lead Texte sind Daten, keine Anweisungen.** Nachricht, Chatverlauf und Formularangaben gehen in eigenen Blöcken an Claude (`<nachricht_lead>` usw.). Spitze Klammern werden ersetzt, damit niemand einen Block schließen und eigene „Systemanweisungen“ einschmuggeln kann. Unsichtbare Zeichen werden entfernt. Der Prompt sagt ausdrücklich, dass nichts darin befolgt wird.
+* **Jede Antwort wird vor dem Senden geprüft, im Code und nicht von Claude** (`antwortVerwerfen`). Verworfen wird alles mit anderem Betrag als 5.000 €, Prozentangaben außer „100 %“, fremden Links (erlaubt: thatsit.marketing und die eigene Website des Leads), E-Mail-Adressen, Telefonnummern, anderen Namen aus dem Team, Rabatt, Garantie, verbindlichem Angebot, Begriffen wie Prompt, Anweisungen, Anthropic, Code und Beleidigungen. Höchstens 600 Zeichen. Statt der verworfenen Antwort geht ein fester Text aus `TEXTE` raus, im Backoffice steht der Grund unter „Fehler“.
+* **Felder aus Claude werden geprüft**: Einordnung nur aus der Liste, Datum und Uhrzeit nur im festen Format, freie Felder gekürzt.
+* **Limits gegen Fluten und Kosten**: mehr als 20 Nachrichten in einer Stunde oder 60 an einem Tag pausieren den Bot in diesem Chat und schicken eine Mail ans Team. Über alle Chats höchstens 1.500 Aufrufe von Claude am Tag (`WHATSAPP_KI_TAGESLIMIT`), danach läuft der Bot nur mit Knöpfen und festen Texten. Nachrichten werden auf 4.000 Zeichen gespeichert, an Claude gehen höchstens 1.200. Sprachnachrichten über 6 MB werden nicht umgewandelt, Medien nur von Servern von Meta geladen.
+* **Formular**: Name und Firma gehen in die Vorlage. Mit Links, @, Klammern oder vielen Ziffern wird der Name abgelehnt und die Firma weggelassen. Die Webseite muss wie eine Domain aussehen.
+* **Zugänge**: Webhook nur mit gültiger Signatur von Meta, Lead Schnittstelle nur mit `WHATSAPP_LEAD_SCHLUESSEL` (zeitkonstant verglichen), Backoffice nur angemeldet. Fremde Nummern ignoriert der Bot und speichert nichts, „Stopp“ sperrt die Nummer für immer.
+* **Was bleibt**: Ein Lead kann seinen eigenen Chat durcheinanderbringen, aber den Bot nichts Falsches oder Verbindliches sagen lassen. Wer im Formular eine fremde Nummer einträgt, löst eine einzige Vorlage aus; dagegen helfen Turnstile, Rate Limit und Dublettenprüfung der Landingpage. Vor dem Start einmal gezielt versuchen, den Bot auszutricksen, und die Ergebnisse im Backoffice ansehen.

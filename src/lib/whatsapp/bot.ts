@@ -24,6 +24,7 @@ import { datumInZone, teileInZone } from '../zeit';
 import { kiAktiv, kiVerstehen, type KiErgebnis } from './ki';
 import { gelesenUndTippt, sendeKnoepfe, sendeVorlage, type Knopf } from './meta';
 import { botTerminart, slotKurz, slotLang, tagLang, vorschlaegeZumWunsch, zweiVorschlaege } from './termine';
+import { KI_TAGESLIMIT_STANDARD, LIMIT_PRO_STUNDE, LIMIT_PRO_TAG, MAX_EINGANG, saeubern } from './schutz';
 
 const TZ = 'Europe/Berlin';
 
@@ -331,6 +332,15 @@ export async function eingangVerarbeiten(telefon: string, e: Eingang) {
     return g.id;
   }
   if (!aktiv) return g.id;
+  // Missbrauch: wer den Bot mit Nachrichten flutet, bekommt keine Antworten mehr, das Team übernimmt
+  const stunde = await eins<{ n: number }>("SELECT COUNT(*) AS n FROM wa_nachrichten WHERE gespraech_id = ? AND richtung = 'ein' AND erstellt_am >= ?", g.id, new Date(Date.now() - 3600_000).toISOString());
+  const tag = await eins<{ n: number }>("SELECT COUNT(*) AS n FROM wa_nachrichten WHERE gespraech_id = ? AND richtung = 'ein' AND erstellt_am >= ?", g.id, new Date(Date.now() - 86400_000).toISOString());
+  if ((stunde?.n ?? 0) > LIMIT_PRO_STUNDE || (tag?.n ?? 0) > LIMIT_PRO_TAG) {
+    await ausfuehren("UPDATE wa_nachrichten SET verarbeitet = 1 WHERE gespraech_id = ? AND richtung = 'ein'", g.id);
+    await setzen(g.id, { status: 'mensch', fehler: 'Auffällig viele Nachrichten, Bot pausiert' });
+    await teamInformieren(g, 'Auffällig viele Nachrichten in kurzer Zeit. Der Bot antwortet in diesem Chat nicht mehr, bitte selbst prüfen.');
+    return g.id;
+  }
   if (g.status === 'anrufen' && !g.buchung_id) await setzen(g.id, { status: 'offen' });
   if (e.art !== 'knopf') await gelesenUndTippt(e.waId);
   await abarbeiten(g.id);
@@ -422,6 +432,13 @@ function aufgabe(g: Gespraech, schritt: string) {
 
 async function verstehen(g: Gespraech, schritt: string, text: string): Promise<KiErgebnis | null> {
   if (!kiAktiv()) return null;
+  // Kostenbremse über alle Chats: ab dem Tageslimit läuft der Bot ohne Claude weiter (nur Knöpfe und feste Texte)
+  const limit = Number(env.WHATSAPP_KI_TAGESLIMIT) || KI_TAGESLIMIT_STANDARD;
+  const heute = await eins<{ n: number }>("SELECT COUNT(*) AS n FROM wa_nachrichten WHERE richtung = 'ein' AND art != 'knopf' AND erstellt_am >= ?", `${datumInZone(jetzt(), 'UTC')}T00:00:00`);
+  if ((heute?.n ?? 0) > limit) {
+    console.warn('Tageslimit für Claude erreicht');
+    return null;
+  }
   const verlauf = await alle<WaNachricht>('SELECT * FROM wa_nachrichten WHERE gespraech_id = ? ORDER BY erstellt_am DESC LIMIT 14', g.id);
   return kiVerstehen({
     aufgabe: aufgabe(g, schritt),
@@ -435,8 +452,12 @@ async function verstehen(g: Gespraech, schritt: string, text: string): Promise<K
       budget: g.budget,
     },
     verlauf: bisherigerVerlauf(verlauf.reverse()),
-    eingang: text,
+    eingang: saeubern(text, MAX_EINGANG),
     heute: new Intl.DateTimeFormat('de-DE', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(jetzt()) + ` (${datumInZone(jetzt(), TZ)})`,
+  }).then(async (ki) => {
+    // Verworfene Antworten sieht das Team im Backoffice unter "Fehler"
+    if (ki?.verworfen) await setzen(g.id, { fehler: `Antwort von Claude verworfen (${ki.verworfen}), fester Text gesendet` });
+    return ki;
   });
 }
 

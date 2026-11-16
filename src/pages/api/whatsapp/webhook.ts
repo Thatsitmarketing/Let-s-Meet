@@ -11,6 +11,9 @@ import { sprachnachrichtZuText } from '../../../lib/whatsapp/ki';
 import { eingangVerarbeiten, teamNachricht, type Eingang } from '../../../lib/whatsapp/bot';
 import { medienLaden, signaturGueltig } from '../../../lib/whatsapp/meta';
 import { schluesselGleich } from '../../../lib/playbooks';
+import { MAX_AUDIO_BYTES } from '../../../lib/whatsapp/schutz';
+
+const MAX_GESPEICHERT = 4000;
 
 export const GET: APIRoute = ({ url }) => {
   const token = env.WHATSAPP_VERIFY_TOKEN?.trim();
@@ -39,15 +42,17 @@ interface MetaEcho {
 }
 
 async function eingangLesen(n: MetaNachricht): Promise<Eingang> {
-  if (n.type === 'text') return { waId: n.id, art: 'text', text: n.text?.body ?? '', knopf: null };
+  // Gespeichert wird höchstens MAX_GESPEICHERT Zeichen, an Claude geht noch weniger (schutz.ts)
+  if (n.type === 'text') return { waId: n.id, art: 'text', text: (n.text?.body ?? '').slice(0, MAX_GESPEICHERT), knopf: null };
   if (n.type === 'button') return { waId: n.id, art: 'knopf', text: n.button?.text ?? '', knopf: n.button?.payload ?? null };
   if (n.type === 'interactive') {
     const r = n.interactive?.button_reply ?? n.interactive?.list_reply;
-    return { waId: n.id, art: 'knopf', text: r?.title ?? '', knopf: r?.id ?? null };
+    return { waId: n.id, art: 'knopf', text: (r?.title ?? '').slice(0, 100), knopf: (r?.id ?? '').slice(0, 40) || null };
   }
   if (n.type === 'audio' && n.audio?.id) {
-    const datei = await medienLaden(n.audio.id).catch(() => null);
-    const text = datei ? await sprachnachrichtZuText(datei.daten) : null;
+    const datei = await medienLaden(n.audio.id, MAX_AUDIO_BYTES).catch(() => null);
+    // Sehr lange Aufnahmen werden nicht umgewandelt (Kosten), das Team sieht sie im Backoffice
+    const text = datei && datei.daten.byteLength <= MAX_AUDIO_BYTES ? (await sprachnachrichtZuText(datei.daten))?.slice(0, MAX_GESPEICHERT) : null;
     return { waId: n.id, art: 'sprache', text: text ? `(Sprachnachricht) ${text}` : '(Sprachnachricht, nicht verständlich)', knopf: null };
   }
   return { waId: n.id, art: 'sonstiges', text: `(${n.type})`, knopf: null };

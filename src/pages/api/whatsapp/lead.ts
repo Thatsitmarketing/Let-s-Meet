@@ -10,6 +10,7 @@ import { emailGueltig, json, trimmen } from '../../../lib/eingabe';
 import { schluesselGleich } from '../../../lib/playbooks';
 import { leadAnlegen } from '../../../lib/whatsapp/bot';
 import { waNummer } from '../../../lib/whatsapp/meta';
+import { namenPruefen, saeubern } from '../../../lib/whatsapp/schutz';
 
 function berechtigt(request: Request) {
   const geheim = env.WHATSAPP_LEAD_SCHLUESSEL?.trim();
@@ -35,13 +36,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json(400, { fehler: 'Ungültige Anfrage' });
   }
 
-  const name = trimmen(d.name, 120);
+  // Name und Firma landen in der WhatsApp Vorlage und im Prompt: nur, was nach einem Namen aussieht
+  const nameRoh = trimmen(d.name, 120);
+  const name = namenPruefen(nameRoh, 120) ?? '';
+  const firma = namenPruefen(trimmen(d.firma, 160), 160);
+  const webseiteRoh = saeubern(trimmen(d.webseite, 200), 200);
+  const webseite = /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(\/[^\s<>"']*)?$/i.test(webseiteRoh) ? webseiteRoh : null;
   const telefon = waNummer(trimmen(d.telefon, 40));
   const email = trimmen(d.email, 180).toLowerCase();
   const hinweise = Array.isArray(d.hinweise) ? d.hinweise.map((h) => trimmen(h, 300)).filter(Boolean).join('\n') : trimmen(d.hinweise, 1500);
 
   const felder: Record<string, string> = {};
-  if (name.length < 2) felder.name = 'Name fehlt';
+  if (name.length < 2) felder.name = nameRoh ? 'Name ungültig' : 'Name fehlt';
   // Nur Deutschland, Österreich und Schweiz, wie im Formular der Landingpage
   if (!/^(49|43|41)\d{6,13}$/.test(telefon)) felder.telefon = 'Telefonnummer ungültig';
   if (email && !emailGueltig(email)) felder.email = 'E Mail ungültig';
@@ -50,11 +56,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const ergebnis = await leadAnlegen(
     {
       name,
-      firma: trimmen(d.firma, 160) || null,
-      webseite: trimmen(d.webseite, 200) || null,
+      firma,
+      webseite,
       telefon,
       email: email || null,
-      hatWebsite: hatWebsite(d.hat_website, trimmen(d.webseite, 200)),
+      hatWebsite: hatWebsite(d.hat_website, webseiteRoh),
       hinweise: hinweise || null,
       quelle: trimmen(d.quelle, 80) || 'landingpage entwurf',
     },
