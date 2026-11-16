@@ -111,32 +111,99 @@ export const PLATZHALTER: { name: string; text: string }[] = [
 
 const intern = (aktion: Aktion) => aktion !== 'mail_gast';
 
-/** Vorschlag für Betreff, Überschrift und Text, je nach Auslöser und Empfänger */
-export function vorlage(ausloeser: Ausloeser, aktion: Aktion): { betreff: string; ueberschrift: string; text: string } {
+/** Erinnerungen bis 4 Stunden vorher bekommen die kurze Fassung („heute um …“), frühere die lange */
+export const KURZ_BIS_MIN = 240;
+export const vorlageVariante = (ausloeser: Ausloeser, versatz: number) =>
+  ausloeser === 'vor_beginn' ? (versatz <= KURZ_BIS_MIN ? 'kurz' : 'lang') : '';
+
+const GRUSS = "Dein Team von That's it. Marketing";
+const TEL = '0209 36660644';
+
+/**
+ * Vorschlag für Betreff, Überschrift und Text, je nach Auslöser, Empfänger und bei Erinnerungen nach Zeitpunkt.
+ * Ton (seit 2026-11-16): du, nahbar, klar, mit konkretem nächsten Schritt und echter Hilfe statt Floskeln.
+ * Zeilen mit „* “ werden in der Mail zur Liste mit orangenen Punkten, **so** wird fett.
+ */
+export function vorlage(ausloeser: Ausloeser, aktion: Aktion, versatz = 0): { betreff: string; ueberschrift: string; text: string } {
+  const t = (betreff: string, ueberschrift: string, ...absaetze: string[]) => ({ betreff, ueberschrift, text: absaetze.join('\n\n') });
   if (intern(aktion)) {
-    const T = {
-      nach_buchung: ['Neue Buchung: {name}, {terminart} {wann}', '{name} hat gebucht', 'Hallo,\n\n{name} hat {terminart} am {datum} um {uhrzeit} Uhr gebucht.\n\nE Mail: {email}\nTelefon: {telefon}\nNachricht: {nachricht}'],
-      vor_beginn: ['Gleich: {terminart} mit {name} {wann}', '{terminart} mit {name}', 'Hallo,\n\n{terminart} mit {name} beginnt {wann}.\n\nE Mail: {email}\nTelefon: {telefon}'],
-      nach_ende: ['Nachfassen: {name}, {terminart}', 'Zeit zum Nachfassen', 'Hallo,\n\n{terminart} mit {name} ist vorbei. Denkt an das Angebot oder die nächsten Schritte.\n\nE Mail: {email}\nTelefon: {telefon}'],
-      bei_absage: ['Abgesagt: {name}, {terminart} am {datum}', '{name} hat abgesagt', 'Hallo,\n\nder Termin {terminart} mit {name} am {datum} um {uhrzeit} Uhr ist abgesagt.\n\nGrund: {absagegrund}'],
-      nicht_erschienen: ['Nicht erschienen: {name}, {terminart}', '{name} ist nicht erschienen', 'Hallo,\n\n{name} ist zu {terminart} am {datum} nicht erschienen. Vielleicht kurz anrufen?\n\nE Mail: {email}\nTelefon: {telefon}'],
-    }[ausloeser];
-    return { betreff: T[0], ueberschrift: T[1], text: T[2] };
+    const daten = 'E Mail: {email}\nTelefon: {telefon}\nNachricht: {nachricht}';
+    switch (ausloeser) {
+      case 'nach_buchung':
+        return t('Neue Buchung: {name}, {terminart} {wann}', '{name} hat gebucht',
+          'Hallo Team,', 'neuer Termin im Kalender: **{name}** hat **{terminart}** am {datum} um {uhrzeit} Uhr gebucht.', daten,
+          'Tipp: Schaut euch vorab Website und Kanäle an. Dann starten wir im Gespräch nicht bei null, sondern direkt bei den Ideen.');
+      case 'vor_beginn':
+        return t('Steht an: {terminart} mit {name} {wann}', 'Gleich seid ihr dran',
+          'Hallo Team,', '**{terminart}** mit **{name}** startet {wann} um {uhrzeit} Uhr.',
+          'Kurzer Check vorab:\n* Nachricht und Notizen gelesen?\n* Website und Kanäle angeschaut?\n* Ziel für das Gespräch klar?', daten);
+      case 'nach_ende':
+        return t('Jetzt nachfassen: {name}, {terminart}', 'Jetzt zählt Tempo',
+          'Hallo Team,', '**{terminart}** mit **{name}** ist vorbei. Solange alles frisch ist:',
+          '* Zusammenfassung mit den wichtigsten Punkten schicken\n* Nächsten Schritt festlegen und im CRM eintragen\n* Angebot oder Fahrplan vorbereiten',
+          'E Mail: {email}\nTelefon: {telefon}');
+      case 'bei_absage':
+        return t('Abgesagt: {name}, {terminart} am {datum}', 'Termin mit {name} abgesagt',
+          'Hallo Team,', '**{terminart}** mit **{name}** am {datum} um {uhrzeit} Uhr ist abgesagt.', 'Grund: {absagegrund}',
+          'Ein kurzer Anruf lohnt sich oft. Wer jetzt freundlich nachfragt, bekommt meist doch noch einen Termin.',
+          'Telefon: {telefon}\nE Mail: {email}');
+      case 'nicht_erschienen':
+        return t('Nicht erschienen: {name}, {terminart}', '{name} war nicht da',
+          'Hallo Team,', '**{name}** ist zu **{terminart}** am {datum} um {uhrzeit} Uhr nicht erschienen.',
+          'Am besten heute noch kurz anrufen. Der Kontakt ist noch warm und meistens steckt einfach ein voller Kalender dahinter.',
+          'Telefon: {telefon}\nE Mail: {email}');
+    }
   }
-  const T = {
-    nach_buchung: ['Kurz vor deinem Termin: {terminart}', 'Schön, dass du gebucht hast', 'Hallo {vorname},\n\nwir freuen uns auf {terminart} am {datum} um {uhrzeit} Uhr. Überleg dir gern vorab, was dir am wichtigsten ist, dann holen wir das Meiste aus der Zeit heraus.'],
-    vor_beginn: ['Erinnerung: {terminart} {wann}', 'Wir sehen uns {wann}', 'Hallo {vorname},\n\nkurze Erinnerung an deinen Termin. Falls etwas dazwischenkommt, buche einfach um.'],
-    nach_ende: ['Danke für das Gespräch', 'Danke für deine Zeit', 'Hallo {vorname},\n\ndanke für das Gespräch. Wir melden uns in Kürze mit den nächsten Schritten. Bis dahin: Antworte einfach auf diese Mail, wenn dir noch etwas einfällt.'],
-    bei_absage: ['Schade, dass es nicht klappt', 'Neuer Termin gefällig?', 'Hallo {vorname},\n\ndein Termin {terminart} am {datum} ist abgesagt. Wenn du magst, such dir einfach eine neue Zeit aus.'],
-    nicht_erschienen: ['Schade, dass es nicht geklappt hat', 'Wir haben dich vermisst', 'Hallo {vorname},\n\nzu deinem Termin {terminart} am {datum} haben wir uns leider verpasst. Kein Problem: Such dir einfach eine neue Zeit aus, wir freuen uns auf das Gespräch.'],
-  }[ausloeser];
-  return { betreff: T[0], ueberschrift: T[1], text: T[2] };
+  switch (ausloeser) {
+    case 'nach_buchung':
+      return t('{vorname}, so holen wir das Maximum aus unserem Gespräch', 'Wir bereiten uns schon auf dich vor',
+        'Hallo {vorname},',
+        'dein Termin steht und wir freuen uns richtig drauf. Damit wir in {dauer} Minuten nicht bei null anfangen, schauen wir uns schon vorab an, wo du gerade stehst.',
+        'Wenn du magst, überleg dir bis dahin kurz drei Dinge:\n* Was soll sich in den nächsten Monaten konkret verändern?\n* Was hast du schon ausprobiert und was hat nicht funktioniert?\n* Woran würdest du merken, dass sich die Zusammenarbeit gelohnt hat?',
+        'Du hast Links, Zahlen oder Ideen, die wir kennen sollten? Antworte einfach auf diese Mail. Sie landet direkt bei uns im Team, nicht in einem Ticketsystem.',
+        `Bis bald\n${GRUSS}`);
+    case 'vor_beginn':
+      return vorlageVariante(ausloeser, versatz) === 'kurz'
+        ? t('{vorname}, heute um {uhrzeit} Uhr geht es los', 'Heute ist es so weit',
+          'Hallo {vorname},',
+          'heute um {uhrzeit} Uhr sprechen wir uns. Wir sind vorbereitet und freuen uns auf dich.',
+          'So bist du in zehn Sekunden drin:\n* Kurz vor {uhrzeit} Uhr unten auf „Zum Meeting“ klicken\n* Kamera und Mikro freigeben\n* That\'s it.',
+          `Du kommst nicht rein oder irgendwo hakt es? Ruf uns direkt an unter **${TEL}**, wir helfen dir sofort.`,
+          `Bis später\n${GRUSS}`)
+        : t('{vorname}, wir sehen uns {wann}', 'Der Countdown läuft',
+          'Hallo {vorname},',
+          '{wann} um {uhrzeit} Uhr ist es so weit: **{terminart}**. Wir haben uns die Zeit fest geblockt und schauen uns vorab schon an, wo du gerade stehst.',
+          'Damit es ganz entspannt wird:\n* Den Link zum Meeting findest du unten. Läuft direkt im Browser, du musst nichts installieren.\n* Bring mit, was dich gerade am meisten beschäftigt. Genau darum geht es.\n* Unterlagen, Links oder Zahlen, die wir kennen sollten? Antworte einfach auf diese Mail.',
+          'Etwas dazwischengekommen? Kein Stress, unten kannst du mit zwei Klicks umbuchen.',
+          `Bis bald\n${GRUSS}`);
+    case 'nach_ende':
+      return t('Danke dir, {vorname}. So geht es jetzt weiter', 'Danke für deine Zeit',
+        'Hallo {vorname},',
+        'danke für das Gespräch und dein Vertrauen. Wir haben direkt danach zusammengesessen und sortieren gerade, was wir mitgenommen haben.',
+        'So geht es weiter:\n* Wir fassen die wichtigsten Punkte für dich zusammen\n* Du bekommst einen konkreten Vorschlag mit den nächsten Schritten\n* Wir melden uns in den nächsten Tagen persönlich bei dir',
+        'Dir ist noch etwas eingefallen? Antworte einfach auf diese Mail, wir lesen alles.',
+        `Bis bald\n${GRUSS}`);
+    case 'bei_absage':
+      return t('Schade, {vorname}. Lass uns einen neuen Termin finden', 'Aufgeschoben ist nicht aufgehoben',
+        'Hallo {vorname},',
+        'dein Termin **{terminart}** am {datum} ist abgesagt. Kein Problem, so etwas passiert.',
+        'Dein Thema läuft ja nicht weg und wir sind weiter gern für dich da. Such dir unten einfach eine neue Zeit aus, das dauert keine Minute.',
+        'Gerade passt gar nichts? Antworte auf diese Mail und schreib uns, wann es bei dir besser aussieht. Wir finden eine Lösung.',
+        `Bis bald\n${GRUSS}`);
+    case 'nicht_erschienen':
+      return t('{vorname}, wir haben dich vermisst', 'Wir haben dich vermisst',
+        'Hallo {vorname},',
+        'zu **{terminart}** am {datum} um {uhrzeit} Uhr haben wir uns leider verpasst. Kein Problem, manchmal kommt einfach etwas dazwischen.',
+        'Dein Thema ist uns trotzdem wichtig. Such dir unten einfach eine neue Zeit aus, das dauert keine Minute.',
+        `Lieber kurz telefonieren? Antworte auf diese Mail oder ruf uns an unter **${TEL}**.`,
+        `Bis bald\n${GRUSS}`);
+  }
 }
 
 const EYEBROW: Record<Ausloeser, [string, string]> = {
   nach_buchung: ['Dein Termin', 'Neuer Termin'],
   vor_beginn: ['Erinnerung', 'Termin steht an'],
-  nach_ende: ['Nach dem Termin', 'Nach dem Termin'],
+  nach_ende: ['Danke', 'Nach dem Termin'],
   bei_absage: ['Termin abgesagt', 'Termin abgesagt'],
   nicht_erschienen: ['Termin verpasst', 'Nicht erschienen'],
 };
@@ -200,7 +267,7 @@ export const STANDARD_ABLAUF: ArbeitsablaufWerte = {
   versatz_min: 1440,
   aktion: 'mail_gast',
   empfaenger: '',
-  ...vorlage('vor_beginn', 'mail_gast'),
+  ...vorlage('vor_beginn', 'mail_gast', 1440),
   alle_terminarten: 1,
   aktiv: 1,
   terminarten: [],

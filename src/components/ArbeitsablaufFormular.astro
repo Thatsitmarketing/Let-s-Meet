@@ -1,7 +1,7 @@
 ---
 import Icon from './ui/Icon.astro';
 import {
-  AKTIONEN, AUSLOESER, PLATZHALTER, VERSATZ, dauerText, vorlage,
+  AKTIONEN, AUSLOESER, KURZ_BIS_MIN, PLATZHALTER, VERSATZ, dauerText, vorlage, vorlageVariante,
   type Aktion, type ArbeitsablaufWerte, type Ausloeser,
 } from '../lib/arbeitsablaeufe';
 import type { Terminart } from '../lib/typen';
@@ -15,13 +15,15 @@ interface Props {
 }
 const { werte: w, fehler, neu, terminarten, bueroEmail } = Astro.props;
 const f = (name: string) => (fehler[name] ? { 'aria-invalid': 'true' as const, 'aria-describedby': `fehler-${name}` } : {});
-// Vorschläge für alle Kombinationen, das Skript tauscht sie beim Wechsel, solange der Text unverändert ist
+// Vorschläge für alle Kombinationen (Erinnerungen kurz und lang), das Skript tauscht sie beim Wechsel, solange der Text unverändert ist
 const vorlagen: Record<string, ReturnType<typeof vorlage>> = {};
-for (const a of AUSLOESER) for (const k of AKTIONEN) vorlagen[`${a.wert}:${k.wert}`] = vorlage(a.wert as Ausloeser, k.wert as Aktion);
+for (const a of AUSLOESER) for (const k of AKTIONEN) for (const m of VERSATZ[a.wert as Ausloeser]) {
+  vorlagen[`${a.wert}:${k.wert}:${vorlageVariante(a.wert as Ausloeser, m)}`] = vorlage(a.wert as Ausloeser, k.wert as Aktion, m);
+}
 const versatzText = (a: Ausloeser, m: number) =>
   m === 0 ? (a === 'nach_ende' ? 'Direkt nach Ende' : 'Sofort') : `${dauerText(m)} ${a === 'vor_beginn' ? 'vorher' : 'danach'}`;
 ---
-<form method="post" class="ab-form" id="ab-form" novalidate data-vorlagen={JSON.stringify(vorlagen)}>
+<form method="post" class="ab-form" id="ab-form" novalidate data-vorlagen={JSON.stringify(vorlagen)} data-kurz-bis={KURZ_BIS_MIN}>
   {Object.keys(fehler).length > 0 && (
     <p class="hinweis hinweis--fehler" role="alert"><Icon name="warnung" />Bitte prüf die markierten Felder.</p>
   )}
@@ -112,7 +114,7 @@ const versatzText = (a: Ausloeser, m: number) =>
           <label for="text">Text<span class="pflicht" aria-hidden="true">*</span></label>
           <textarea id="text" name="text" class="textfeld text-gross" maxlength="5000" data-platz {...f('text')}>{w.text}</textarea>
           {fehler.text && <p class="fehlertext" id="fehler-text">{fehler.text}</p>}
-          <p class="hilfe">Unter dem Text ergänzen wir automatisch die Termindaten und passende Knöpfe: für den Gast „Zum Meeting“ und „Umbuchen oder absagen“ vor dem Termin, „Neuen Termin buchen“ danach, für das Büro „Im Backoffice öffnen“. Zeilen wie „Telefon: {'{telefon}'}“ fallen weg, wenn der Wert leer ist.</p>
+          <p class="hilfe">Unter dem Text ergänzen wir automatisch die Termindaten und passende Knöpfe: für den Gast „Zum Meeting“ und „Umbuchen oder absagen“ vor dem Termin, „Neuen Termin buchen“ danach, für das Büro „Im Backoffice öffnen“. Zeilen wie „Telefon: {'{telefon}'}“ fallen weg, wenn der Wert leer ist. Zeilen mit „* “ am Anfang werden zur Liste mit orangenen Punkten, {'**so**'} wird fett.</p>
         </div>
         <div class="platzhalter">
           <p class="feld-label">Platzhalter einfügen</p>
@@ -144,12 +146,20 @@ const versatzText = (a: Ausloeser, m: number) =>
     text: form.querySelector<HTMLTextAreaElement>('#text')!,
   };
   const wert = (name: string) => form.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`)?.value ?? '';
-  let schluessel = `${wert('ausloeser')}:${wert('aktion')}`;
+  const kurzBis = Number(form.dataset.kurzBis || 240);
+  const variante = () => {
+    const a = wert('ausloeser');
+    if (a !== 'vor_beginn') return '';
+    const m = Number(form.querySelector<HTMLSelectElement>(`select[name="versatz_${a}"]`)?.value);
+    return m <= kurzBis ? 'kurz' : 'lang';
+  };
+  const schluesselJetzt = () => `${wert('ausloeser')}:${wert('aktion')}:${variante()}`;
+  let schluessel = schluesselJetzt();
 
   // Vorschlag übernehmen, solange der Text noch dem alten Vorschlag entspricht oder leer ist
   const vorschlag = (erzwingen: boolean) => {
     const alt = vorlagen[schluessel];
-    schluessel = `${wert('ausloeser')}:${wert('aktion')}`;
+    schluessel = schluesselJetzt();
     const neu = vorlagen[schluessel];
     if (!neu) return;
     (Object.keys(felder) as (keyof typeof felder)[]).forEach((k) => {
@@ -167,7 +177,7 @@ const versatzText = (a: Ausloeser, m: number) =>
     });
     document.getElementById('feld-empfaenger')!.hidden = wert('aktion') !== 'mail_an';
   };
-  form.querySelectorAll('input[name="ausloeser"], input[name="aktion"]').forEach((r) =>
+  form.querySelectorAll('input[name="ausloeser"], input[name="aktion"], .versatz select').forEach((r) =>
     r.addEventListener('change', () => { anzeigen(); vorschlag(false); }),
   );
   anzeigen();

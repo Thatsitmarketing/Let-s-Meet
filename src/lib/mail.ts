@@ -147,18 +147,37 @@ ${d.meetingUrl ? zeile('Link', `<a href="${m(d.meetingUrl)}" style="color:${MARK
 </table>`;
 }
 
+const vorname = (name: string) => name.trim().split(/\s+/)[0] || name;
+const gruss = (zeile = 'Bis bald') => absatz(`${zeile}<br>Dein Team von ${MARKE.name}`);
+const telefonFett = `<strong style="white-space:nowrap;">${MARKE.telefon}</strong>`;
+
+/** Bestätigung an den Gast (neu oder umgebucht). Ton wie die Arbeitsabläufe: du, nahbar, konkrete Hilfe. */
 export function mailGastBestaetigung(basis: string, d: TerminDetails & { gastName: string; verwaltenUrl: string; umgebucht?: boolean; zusatz?: string | null }) {
+  const schritte = [
+    d.umgebucht
+      ? 'Die Kalenderdatei im Anhang ersetzt den alten Eintrag in deinem Kalender'
+      : 'Öffne die Kalenderdatei im Anhang, dann steht der Termin direkt in deinem Kalender',
+    ...(d.meetingUrl ? ['Zum Termin einfach auf „Zum Meeting“ klicken. Läuft direkt im Browser, du musst nichts installieren'] : []),
+    'Du hast Links, Zahlen oder Fragen für uns? Antworte einfach auf diese Mail, sie landet direkt bei uns im Team',
+  ];
   return rahmen(
     basis,
-    `${d.terminTitel} am ${d.wann}`,
+    d.umgebucht ? `Alles klar, dein neuer Termin steht: ${d.wann}` : `Wir freuen uns auf dich: ${d.terminTitel} am ${d.wann}`,
     `${eyebrow(d.umgebucht ? 'Termin umgebucht' : 'Termin bestätigt')}
 ${titel(d.umgebucht ? 'Dein neuer Termin steht' : 'Dein Termin steht')}
-${absatz(`Hallo ${m(d.gastName)},`)}
-${absatz(d.umgebucht ? 'du hast deinen Termin verschoben. Hier sind die neuen Daten. Die Kalenderdatei im Anhang ersetzt den alten Eintrag.' : 'danke für deine Buchung. Hier sind alle Daten auf einen Blick. Die Kalenderdatei im Anhang kannst du direkt übernehmen.')}
+${absatz(`Hallo ${m(vorname(d.gastName))},`)}
+${absatz(
+  d.umgebucht
+    ? 'alles klar, dein Termin ist verschoben. Wir haben uns die neue Zeit fest für dich geblockt.'
+    : 'danke für deine Buchung. Wir haben uns die Zeit fest für dich geblockt und freuen uns richtig auf das Gespräch.',
+)}
 ${details(d)}
 ${d.zusatz ? absatz(m(d.zusatz).replace(/\n/g, '<br>')) : ''}
+<p style="margin:0 0 8px;">So geht es weiter:</p>
+${liste(schritte)}
 ${d.meetingUrl ? knopf(d.meetingUrl, 'Zum Meeting', 'gruen') : ''}${knopf(d.verwaltenUrl, 'Umbuchen oder absagen', 'rahmen')}
-${absatz(`<span style="font-size:13px;color:${MARKE.grau};">Fragen vorab? Antworte einfach auf diese Mail.</span>`)}`,
+<p style="margin:14px 0 14px;">Etwas dazwischengekommen? Kein Stress, über „Umbuchen oder absagen“ geht das mit zwei Klicks.</p>
+${gruss()}`,
   );
 }
 
@@ -182,33 +201,101 @@ ${knopf(d.backofficeUrl, 'Im Backoffice öffnen', 'schwarz')}`,
   );
 }
 
-export function mailStorno(basis: string, d: TerminDetails & { anName: string; grund?: string | null; vonGast: boolean; anGast: boolean; neuBuchenUrl?: string }) {
-  const wer = d.vonGast ? (d.anGast ? 'Du hast' : `${d.gastgeber} hat`) : d.anGast ? `${d.gastgeber} hat` : 'Du hast';
+/**
+ * Absage an Gast und Büro. Der Gast bekommt je nach Absender passende Worte und immer einen Weg zurück
+ * (neuer Termin, Antwort, Telefon), das Büro die Kontaktdaten und einen Tipp zum Nachfassen.
+ */
+export function mailStorno(
+  basis: string,
+  d: TerminDetails & { anName: string; grund?: string | null; vonGast: boolean; anGast: boolean; neuBuchenUrl?: string; gastEmail?: string; gastTelefon?: string | null },
+) {
+  const grund = d.grund
+    ? `<p style="margin:0 0 4px;font-size:13px;color:${MARKE.grau};">Grund</p><p style="margin:0 0 20px;white-space:pre-wrap;border-left:3px solid ${MARKE.orange};padding-left:12px;">${m(d.grund)}</p>`
+    : '';
+  const neu = d.neuBuchenUrl ? knopf(d.neuBuchenUrl, 'Neuen Termin buchen', 'orange') : '';
+  // Der Meetinglink eines abgesagten Termins führt nur in die Irre
+  const ohneLink = { ...d, meetingUrl: null, ort: d.meetingUrl ? 'Google Meet' : d.ort };
+  if (d.anGast) {
+    const vonUns = !d.vonGast;
+    return rahmen(
+      basis,
+      vonUns ? `Wir müssen deinen Termin leider absagen: ${d.terminTitel}` : `Deine Absage ist angekommen: ${d.terminTitel}`,
+      `${eyebrow('Termin abgesagt')}
+${titel(vonUns ? 'Wir müssen leider absagen' : 'Schade, aber kein Problem')}
+${absatz(`Hallo ${m(vorname(d.anName))},`)}
+${absatz(
+  vonUns
+    ? 'es tut uns wirklich leid, aber wir müssen deinen Termin absagen. Das ist nicht unser Anspruch und wir wollen es wiedergutmachen.'
+    : 'deine Absage ist bei uns angekommen und der Termin ist aus unserem Kalender raus. Die Kalenderdatei im Anhang entfernt ihn auch aus deinem.',
+)}
+${details(ohneLink)}
+${grund}
+${absatz(
+  vonUns
+    ? 'Such dir direkt eine neue Zeit aus. Passt keine davon? Antworte einfach auf diese Mail, dann finden wir gemeinsam einen Termin, auch außerhalb der freien Zeiten.'
+    : 'Dein Thema läuft ja nicht weg. Wenn es zeitlich wieder passt, such dir einfach eine neue Zeit aus, das dauert keine Minute.',
+)}
+${neu}
+<p style="margin:14px 0 14px;">Lieber kurz sprechen? Antworte auf diese Mail oder ruf uns an unter ${telefonFett}.</p>
+${gruss()}`,
+    );
+  }
+  const kontakt = [d.gastEmail, d.gastTelefon].filter(Boolean).join(', ');
   return rahmen(
     basis,
-    `Abgesagt: ${d.terminTitel} am ${d.wann}`,
+    `Abgesagt: ${d.gastgeber}, ${d.terminTitel} am ${d.wann}`,
     `${eyebrow('Termin abgesagt')}
-${titel('Termin abgesagt')}
-${absatz(`Hallo ${m(d.anName)},`)}
-${absatz(`${m(wer)} den folgenden Termin abgesagt.`)}
-${details(d)}
-${d.grund ? `<p style="margin:0 0 4px;font-size:13px;color:${MARKE.grau};">Grund</p><p style="margin:0 0 20px;white-space:pre-wrap;border-left:3px solid ${MARKE.orange};padding-left:12px;">${m(d.grund)}</p>` : ''}
-${d.neuBuchenUrl ? knopf(d.neuBuchenUrl, 'Neuen Termin buchen', 'orange') : ''}`,
+${titel(d.vonGast ? `${d.gastgeber} hat abgesagt` : 'Termin abgesagt')}
+${absatz('Hallo Team,')}
+${absatz(d.vonGast ? `${m(d.gastgeber)} hat den folgenden Termin abgesagt. Der Slot ist wieder frei.` : 'ihr habt den folgenden Termin abgesagt. Der Gast hat eine Mail mit Entschuldigung und Link für einen neuen Termin bekommen.')}
+${details({ ...ohneLink, gastgeber: kontakt ? `${d.gastgeber}, ${kontakt}` : d.gastgeber })}
+${grund}
+${d.vonGast ? absatz('Tipp: Ein kurzer Anruf lohnt sich oft. Wer jetzt freundlich nachfragt, bekommt meist doch noch einen Termin.') : ''}`,
   );
 }
 
-/** Freier Text aus einem Arbeitsablauf: maskiert, Absätze und Zeilenumbrüche, Links klickbar */
+/** Zeile aus einem Arbeitsablauf: maskiert, Links klickbar, **fett** */
+function zeileHtml(text: string) {
+  return m(text)
+    .replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)]/g, (url) => `<a href="${url}" style="color:${MARKE.schwarz};">${url}</a>`)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Telefonnummern nicht umbrechen
+    .replace(/(\d) (?=\d)/g, '$1&nbsp;');
+}
+
+/** Liste mit orangenem Quadrat wie im Logo, als Tabelle, damit Outlook und Gmail sie gleich zeigen */
+function liste(punkte: string[]) {
+  const zeilen = punkte
+    .map(
+      (p) => `<tr><td style="width:18px;padding:9px 0 0;vertical-align:top;font-size:0;line-height:0;"><div style="width:6px;height:6px;${GOLD}font-size:0;line-height:0;">&nbsp;</div></td><td style="padding:0 0 8px;vertical-align:top;">${zeileHtml(p)}</td></tr>`,
+    )
+    .join('');
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 14px;">${zeilen}</table>`;
+}
+
+/** Freier Text aus einem Arbeitsablauf: Absätze, Zeilenumbrüche, Listen mit „* “, Links klickbar, **fett** */
 export function textAlsHtml(text: string) {
   return text
     .trim()
     .split(/\n{2,}/)
-    .map((absatzText) =>
-      absatz(
-        m(absatzText)
-          .replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)]/g, (url) => `<a href="${url}" style="color:${MARKE.schwarz};">${url}</a>`)
-          .replace(/\n/g, '<br>'),
-      ),
-    )
+    .map((block) => {
+      // Zeilen in Gruppen aus Text und Listenpunkten teilen
+      const gruppen: { liste: boolean; zeilen: string[] }[] = [];
+      for (const zeile of block.split('\n')) {
+        const punkt = zeile.match(/^\s*[*•]\s+(.*)$/);
+        const letzte = gruppen.at(-1);
+        if (letzte && letzte.liste === Boolean(punkt)) letzte.zeilen.push(punkt ? punkt[1]! : zeile);
+        else gruppen.push({ liste: Boolean(punkt), zeilen: [punkt ? punkt[1]! : zeile] });
+      }
+      return gruppen
+        .map((g, i) => {
+          if (g.liste) return liste(g.zeilen);
+          // Einleitung direkt vor einer Liste rückt näher an sie heran
+          const abstand = gruppen[i + 1]?.liste ? 8 : 14;
+          return `<p style="margin:0 0 ${abstand}px;">${g.zeilen.map(zeileHtml).join('<br>')}</p>`;
+        })
+        .join('\n');
+    })
     .join('\n');
 }
 
