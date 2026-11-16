@@ -197,18 +197,48 @@ ${d.neuBuchenUrl ? knopf(d.neuBuchenUrl, 'Neuen Termin buchen', 'orange') : ''}`
   );
 }
 
-/** Freier Text aus einem Arbeitsablauf: maskiert, Absätze und Zeilenumbrüche, Links klickbar */
+/** Zeile aus einem Arbeitsablauf: maskiert, Links klickbar, **fett** */
+function zeileHtml(text: string) {
+  return m(text)
+    .replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)]/g, (url) => `<a href="${url}" style="color:${MARKE.schwarz};">${url}</a>`)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Telefonnummern nicht umbrechen
+    .replace(/(\d) (?=\d)/g, '$1&nbsp;');
+}
+
+/** Liste mit orangenem Quadrat wie im Logo, als Tabelle, damit Outlook und Gmail sie gleich zeigen */
+function liste(punkte: string[]) {
+  const zeilen = punkte
+    .map(
+      (p) => `<tr><td style="width:18px;padding:9px 0 0;vertical-align:top;font-size:0;line-height:0;"><div style="width:6px;height:6px;${GOLD}font-size:0;line-height:0;">&nbsp;</div></td><td style="padding:0 0 8px;vertical-align:top;">${zeileHtml(p)}</td></tr>`,
+    )
+    .join('');
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 14px;">${zeilen}</table>`;
+}
+
+/** Freier Text aus einem Arbeitsablauf: Absätze, Zeilenumbrüche, Listen mit „* “, Links klickbar, **fett** */
 export function textAlsHtml(text: string) {
   return text
     .trim()
     .split(/\n{2,}/)
-    .map((absatzText) =>
-      absatz(
-        m(absatzText)
-          .replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)]/g, (url) => `<a href="${url}" style="color:${MARKE.schwarz};">${url}</a>`)
-          .replace(/\n/g, '<br>'),
-      ),
-    )
+    .map((block) => {
+      // Zeilen in Gruppen aus Text und Listenpunkten teilen
+      const gruppen: { liste: boolean; zeilen: string[] }[] = [];
+      for (const zeile of block.split('\n')) {
+        const punkt = zeile.match(/^\s*[*•]\s+(.*)$/);
+        const letzte = gruppen.at(-1);
+        if (letzte && letzte.liste === Boolean(punkt)) letzte.zeilen.push(punkt ? punkt[1]! : zeile);
+        else gruppen.push({ liste: Boolean(punkt), zeilen: [punkt ? punkt[1]! : zeile] });
+      }
+      return gruppen
+        .map((g, i) => {
+          if (g.liste) return liste(g.zeilen);
+          // Einleitung direkt vor einer Liste rückt näher an sie heran
+          const abstand = gruppen[i + 1]?.liste ? 8 : 14;
+          return `<p style="margin:0 0 ${abstand}px;">${g.zeilen.map(zeileHtml).join('<br>')}</p>`;
+        })
+        .join('\n');
+    })
     .join('\n');
 }
 
