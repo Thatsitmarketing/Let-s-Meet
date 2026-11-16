@@ -2,7 +2,7 @@
 
 Der Bot schreibt Leads der Landingpage „Kostenloser Website-Entwurf“ an, die im Formular den Haken für WhatsApp gesetzt haben, stellt die Settingfragen und bucht das Strategiegespräch mit Tim direkt in Let's Meet (Google Meet). Code: `src/lib/whatsapp/`, Schnittstellen `/api/whatsapp/lead` und `/api/whatsapp/webhook`, Übersicht im Backoffice unter **WhatsApp Bot**.
 
-Präsentation zum Vorstellen im Team: `docs/praesentation/WhatsApp-Setting-Bot.pdf` (11 Folien, 16:9). Quelle ist `docs/praesentation/whatsapp-bot.html`, gerendert mit Playwright als PDF im Format 1920 × 1080; bei Änderungen am Ablauf beide nachziehen.
+Präsentation zum Vorstellen im Team: `docs/praesentation/WhatsApp-Setting-Bot.pdf` (15 Folien, 16:9, mit dem Chat im Wortlaut aus `TEXTE`). Quelle ist `docs/praesentation/whatsapp-bot.html`, gerendert mit Playwright als PDF im Format 1920 × 1080; bei Änderungen am Ablauf beide nachziehen.
 
 ## 1. Firmennummer mit der Cloud API verbinden (Coexistence)
 

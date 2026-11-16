@@ -78,6 +78,24 @@ h2 { font-size: 78px; max-width: 1500px; }
 .weiss-band .label { line-height: 1.5; letter-spacing: 0.3em; }
 .infos { display: flex; flex-wrap: wrap; gap: 14px; }
 .infos span { border: 2px solid var(--n600); padding: 12px 22px; font-size: 23px; font-weight: 500; }
+
+/* Chat im Wortlaut */
+.wortlaut { padding-top: 90px; }
+.wortlaut h2 { font-size: 60px; }
+.paar { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; margin-top: 40px; }
+.paar.breit-rechts { grid-template-columns: 0.82fr 1.18fr; }
+.stufe .was { font-family: var(--label); font-weight: 500; font-size: 20px; letter-spacing: 0.35em; text-transform: uppercase; color: var(--orange); }
+.stufe h3 { font-family: var(--display); font-weight: 800; font-size: 34px; line-height: 1.1; margin: 8px 0 10px; }
+.stufe .warum { font-size: 19px; line-height: 1.5; color: var(--n600); min-height: 58px; }
+.verlauf { margin-top: 18px; background: #EFEAE2; padding: 24px 24px; display: flex; flex-direction: column; gap: 10px; font-size: 18.5px; line-height: 1.45; }
+.verlauf .blase { max-width: 90%; }
+.verlauf .knoepfe { max-width: 90%; grid-template-columns: repeat(var(--n, 1), 1fr); }
+.verlauf .knoepfe span { font-size: 17px; padding: 9px 6px; }
+.verlauf .blase .ki { display: inline-block; font-family: var(--label); font-weight: 500; font-size: 14px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--orange); border: 1.5px solid var(--orange); padding: 1px 8px; margin-bottom: 6px; }
+.verlauf .sprach { color: var(--n500); font-size: 15px; display: block; margin-bottom: 2px; }
+.verlauf .notiz { align-self: center; background: rgba(255,255,255,0.7); border-radius: 8px; padding: 6px 14px; font-size: 15px; color: var(--n600); text-align: center; }
+.danach { margin-top: 18px; font-size: 19px; line-height: 1.5; color: var(--n600); border-left: 4px solid var(--orange); padding: 4px 0 4px 18px; }
+.danach b { color: var(--schwarz); }
 /* Gespräch mit Handy */
 .zwei { display: grid; grid-template-columns: 1fr 560px; gap: 90px; flex: 1; }
 .liste { list-style: none; margin-top: 40px; }
@@ -217,7 +235,7 @@ h2 { font-size: 78px; max-width: 1500px; }
     <div class="karte akzent"><div class="nr">02</div><h3>Qualifiziert</h3><p>Problem, Ziel, Zeitpunkt, Budget und Entscheider stehen fest, bevor Tim ins Gespräch geht.</p></div>
     <div class="karte akzent"><div class="nr">03</div><h3>Gebucht</h3><p>Der Termin landet mit Google Meet Link in Tims Kalender, inklusive Bestätigungsmail an den Lead.</p></div>
   </div>
-  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>02</b> / 11</span></div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"></span></div>
 </section>
 
 <!-- 3 Weg -->
@@ -236,7 +254,7 @@ h2 { font-size: 78px; max-width: 1500px; }
     <div class="label" style="margin:0">Im Termin weiß Tim schon</div>
     <div class="infos"><span>Was stört</span><span>Ziel der Website</span><span>Startzeitpunkt</span><span>Budgetrahmen</span><span>Entscheider</span><span>Lieblingswebsite</span></div>
   </div>
-  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>03</b> / 11</span></div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"></span></div>
 </section>
 
 <!-- 4 Gespräch -->
@@ -268,7 +286,129 @@ h2 { font-size: 78px; max-width: 1500px; }
       </div>
     </div>
   </div>
-  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>04</b> / 11</span></div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"></span></div>
+</section>
+
+
+<!-- Chat im Wortlaut 1 -->
+<section class="folie wortlaut">
+  <div class="label">Der Chat im Wortlaut · 1 von 4</div>
+  <h2>Einstieg und Ziel<span class="punkt"></span></h2>
+  <div class="paar">
+    <div class="stufe">
+      <div class="was">Nachricht 1 · Vorlage</div>
+      <h3>Was stört dich?</h3>
+      <p class="warum">Geht direkt nach dem Formular raus, in zwei Fassungen, weil das Formular schon fragt, ob es eine Website gibt.</p>
+      <div class="verlauf">
+        <div class="blase">Hi Max, hier ist das Team von That's it. Marketing 👋 Danke für deine Anfrage zum kostenlosen Website-Entwurf für Testbau GmbH! Damit wir den Entwurf genau auf euch zuschneiden: Was stört dich an eurer jetzigen Website am meisten?<span class="zeit">10:02</span></div>
+        <div class="knoepfe"><span>Wirkt veraltet</span><span>Bringt kaum Anfragen</span><span>Etwas anderes</span></div>
+        <div class="notiz">Ohne Website: „Wie kommen eure Kunden aktuell auf euch?“<br>[Über Empfehlungen] [Über Social Media] [Anders]</div>
+      </div>
+    </div>
+    <div class="stufe">
+      <div class="was">Frage 2 · Freitext</div>
+      <h3>Das Ziel in seinen Worten</h3>
+      <p class="warum">Kurzform des GAP Findings: Tim bekommt das Ziel so, wie der Lead es selbst sagt. Sprachnachrichten werden in Text umgewandelt.</p>
+      <div class="verlauf">
+        <div class="blase ich">Bringt kaum Anfragen<span class="zeit">10:04 ✓✓</span></div>
+        <div class="blase">Verstehe, dann ist die Website gerade eher Visitenkarte als Vertriebskanal. Genau da setzt der Entwurf an.<br><br>Und was soll die neue Website für euch erreichen? Zum Beispiel mehr Anfragen, mehr Bewerber oder einfach ein moderner Auftritt.<span class="zeit">10:04</span></div>
+        <div class="notiz">Bei „Etwas anderes“: „Erzähl mir kurz, was dich stört. Ein, zwei Sätze reichen völlig 🙂“</div>
+      </div>
+    </div>
+  </div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"></span></div>
+</section>
+
+<!-- Chat im Wortlaut 2 -->
+<section class="folie wortlaut">
+  <div class="label">Der Chat im Wortlaut · 2 von 4</div>
+  <h2>Zeitpunkt und Budget<span class="punkt"></span></h2>
+  <div class="paar breit-rechts">
+    <div class="stufe">
+      <div class="was">Frage 3 · Knöpfe</div>
+      <h3>Wann soll es losgehen?</h3>
+      <p class="warum">Daran erkennt der Bot heiße Leads: „So schnell es geht“ plus passendes Budget heißt Termin schon nach 3 Werktagen.</p>
+      <div class="verlauf">
+        <div class="blase ich"><span class="sprach">🎤 Sprachnachricht 0:12</span>Wir wollen mehr Anfragen aus der Region, vor allem für Badsanierungen.<span class="zeit">10:06 ✓✓</span></div>
+        <div class="blase"><span class="ki">Claude formuliert</span><br>Mehr Anfragen aus der Region für Badsanierungen, das ist ein klares Ziel.<br><br>Wann möchtet ihr mit der neuen Website starten?<span class="zeit">10:06</span></div>
+        <div class="knoepfe"><span>So schnell es geht</span><span>In 1 bis 3 Monaten</span><span>Noch offen</span></div>
+      </div>
+    </div>
+    <div class="stufe">
+      <div class="was">Frage 4 · Knöpfe</div>
+      <h3>Erst der Nutzen, dann der Rahmen</h3>
+      <p class="warum">Gefragt wird nicht „Habt ihr das Budget?“, sondern ob 5.000 € ein Rahmen wären, wenn der Entwurf überzeugt.</p>
+      <div class="verlauf">
+        <div class="blase ich">So schnell es geht<span class="zeit">10:07 ✓✓</span></div>
+        <div class="blase">Danke dir! Kurz zum Ablauf: Wir erstellen dir den Entwurf kostenlos und Tim, unser Geschäftsführer, stellt ihn dir in einem Strategiegespräch von 60 Minuten vor. Wenn er dich überzeugt, setzen wir die komplette Website für euch um.<br><br>Damit du es einordnen kannst: Unsere Websites starten ab 5.000 €, weil wir sie individuell bauen, mit Struktur, Texten und Technik. Über 350 Unternehmen haben wir so schon begleitet. Wäre das ein Rahmen, der für euch passt, wenn dich der Entwurf überzeugt?<span class="zeit">10:07</span></div>
+        <div class="knoepfe"><span>Ja, das passt</span><span>Kommt drauf an</span><span>Eher zu viel</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"></span></div>
+</section>
+
+<!-- Chat im Wortlaut 3 -->
+<section class="folie wortlaut">
+  <div class="label">Der Chat im Wortlaut · 3 von 4</div>
+  <h2>Einwand und Termin<span class="punkt"></span></h2>
+  <div class="paar">
+    <div class="stufe">
+      <div class="was">Nur bei Zögern · Einwandbehandlung</div>
+      <h3>„Kommt drauf an“ ist kein Nein</h3>
+      <p class="warum">Der Knopf ist mit Absicht dabei: Unentschlossene landen in der Einwandbehandlung statt im Nein. Höchstens zwei Anläufe.</p>
+      <div class="verlauf">
+        <div class="blase ich">Kommt drauf an<span class="zeit">10:08 ✓✓</span></div>
+        <div class="blase"><span class="ki">Claude formuliert</span><br>Verstehe ich gut. Lass mich kurz fragen: Was ist ein neuer Kunde für euch wert? Oft machen schon zwei, drei zusätzliche Kunden im Jahr die Website bezahlt. Wenn dich der Entwurf zu 100 % überzeugt und du siehst, was er bringt, wäre das dann grundsätzlich drin?<span class="zeit">10:08</span></div>
+        <div class="knoepfe" style="--n:2"><span>Ja, dann schon</span><span>Eher nicht</span></div>
+      </div>
+    </div>
+    <div class="stufe">
+      <div class="was">Termin · Knöpfe</div>
+      <h3>Zwei Vorschläge aus Tims Kalender</h3>
+      <p class="warum">Freie Zeiten kommen live aus Let's Meet, an zwei verschiedenen Tagen. „Andere Zeit“ fragt nach dem Wunschtag.</p>
+      <div class="verlauf">
+        <div class="blase ich">Ja, dann schon<span class="zeit">10:09 ✓✓</span></div>
+        <div class="blase">Sehr gut, dann schauen wir uns das gemeinsam an.<br><br>Dann lass uns den Termin festmachen, in dem dir Tim den Entwurf vorstellt. 60 Minuten per Google Meet, auf Wunsch auch bei uns im Büro in Gelsenkirchen. Welcher Termin passt dir?<span class="zeit">10:09</span></div>
+        <div class="knoepfe"><span>Mo 23.11. 09:00</span><span>Di 24.11. 14:00</span><span>Andere Zeit</span></div>
+        <div class="notiz">Bei „Andere Zeit“: „Klar! Wann passt es dir am besten? Schreib mir einfach Tag und ungefähre Uhrzeit, zum Beispiel „Donnerstag nachmittags“.“</div>
+      </div>
+    </div>
+  </div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"></span></div>
+</section>
+
+<!-- Chat im Wortlaut 4 -->
+<section class="folie wortlaut">
+  <div class="label">Der Chat im Wortlaut · 4 von 4</div>
+  <h2>Gebucht, Entscheider und Briefing<span class="punkt"></span></h2>
+  <div class="paar">
+    <div class="stufe">
+      <div class="was">Nach der Buchung · Knöpfe</div>
+      <h3>Wer entscheidet mit?</h3>
+      <p class="warum">Der Termin steht schon im Kalender. Wer mitentscheidet, kommt als Notiz an die Buchung, damit Tim Bescheid weiß.</p>
+      <div class="verlauf">
+        <div class="blase ich">Mo 23.11. 09:00<span class="zeit">10:10 ✓✓</span></div>
+        <div class="blase">Perfekt, dann ist Montag, 23. November um 09:00 Uhr für dich eingetragen 🙌 Die Bestätigung mit dem Google Meet Link kommt gleich per Mail an max@testbau.de.<br><br>Kurze Frage noch: Entscheidest du das Thema Website allein, oder ist noch jemand mit dabei?<span class="zeit">10:10</span></div>
+        <div class="knoepfe" style="--n:2"><span>Nur ich</span><span>Noch jemand</span></div>
+        <div class="notiz">Bei „Noch jemand“: „Super, bring die Person gern mit! Leite die Einladung aus deiner Mail einfach weiter. Wer ist es denn, damit Tim Bescheid weiß?“</div>
+      </div>
+      <p class="danach"><b>Danach</b> meldet sich der Bot nur noch am Tag vor dem Termin mit einer Erinnerung.</p>
+    </div>
+    <div class="stufe">
+      <div class="was">Briefing · freiwillig</div>
+      <h3>Eine Website, die gefällt</h3>
+      <p class="warum">Der Link landet als Notiz an der Buchung und hilft beim Entwurf. Wer keine im Kopf hat, tippt einfach auf den Knopf.</p>
+      <div class="verlauf">
+        <div class="blase ich">Nur ich<span class="zeit">10:11 ✓✓</span></div>
+        <div class="blase">Letzte Frage, damit der Entwurf richtig gut wird: Gibt es eine Website, die dir richtig gut gefällt? Schick mir einfach den Link. Wenn dir keine einfällt, ist das auch völlig okay.<span class="zeit">10:11</span></div>
+        <div class="knoepfe"><span>Keine im Kopf</span></div>
+        <div class="blase ich">www.beispiel-bad.de<span class="zeit">10:13 ✓✓</span></div>
+        <div class="blase">Danke dir, Max! Dann legen wir mit deinem Entwurf los. Wir sehen uns Montag, 23. November um 09:00 Uhr 🙌<span class="zeit">10:13</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"></span></div>
 </section>
 
 <!-- 5 Einwand -->
@@ -292,7 +432,7 @@ h2 { font-size: 78px; max-width: 1500px; }
     <div class="label">So verabschiedet sich der Bot</div>
     <p>„Danke dir für die ehrliche Antwort, Max! Dann ist der Entwurf gerade vermutlich nicht der richtige Schritt für euch, und wir möchten dir nicht unnötig Zeit stehlen. Falls sich bei euch etwas ändert, schreib uns einfach hier, wir sind gern für dich da.“</p>
   </div>
-  <div class="fuss"><img src="../../public/images/brand/logo-weiss.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>05</b> / 11</span></div>
+  <div class="fuss"><img src="../../public/images/brand/logo-weiss.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"></span></div>
 </section>
 
 <!-- 6 Termine -->
@@ -321,7 +461,7 @@ h2 { font-size: 78px; max-width: 1500px; }
     </div>
     <div class="legende"><span><i style="background:var(--schwarz);border-color:var(--schwarz)"></i>Anfrage</span><span><i style="border:3px solid var(--orange)"></i>Erster Vorschlag, heißer Lead</span><span><i style="background:var(--orange);border-color:var(--orange)"></i>Erster Vorschlag, normaler Lead</span><span><i class="we" style="background:repeating-linear-gradient(135deg,var(--n100) 0 4px,#fff 4px 8px)"></i>Wochenende</span></div>
   </div>
-  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>06</b> / 11</span></div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"></span></div>
 </section>
 
 <!-- 7 Nachfassen -->
@@ -349,7 +489,7 @@ h2 { font-size: 78px; max-width: 1500px; }
     <div><span>Schreibt von sich aus Mo bis Fr</span><b>8 bis 21 Uhr</b></div>
     <div><span>Schreibt von sich aus am Wochenende</span><b>10 bis 20 Uhr</b></div>
   </div>
-  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>07</b> / 11</span></div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"></span></div>
 </section>
 
 <!-- 8 Team -->
@@ -364,7 +504,7 @@ h2 { font-size: 78px; max-width: 1500px; }
     <div class="karte"><h3>Backoffice Let's Meet</h3><p>Jeder Chat mit Verlauf, Status und allen Antworten. Bot pausieren oder fortsetzen mit einem Klick.</p></div>
     <div class="karte"><h3>Termin verschieben</h3><p>Will der Lead umbuchen, schickt der Bot den Link, über den er es selbst erledigt.</p></div>
   </div>
-  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>08</b> / 11</span></div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"></span></div>
 </section>
 
 <!-- 9 Code und KI -->
@@ -396,7 +536,7 @@ h2 { font-size: 78px; max-width: 1500px; }
     <div><b>Freiwillig</b>Die WhatsApp Einwilligung ist nicht vorausgewählt, ohne Haken ruft das Team an.</div>
     <div><b>Transparent</b>Das Profil sagt, dass digital unterstützt wird. Auf Nachfrage sagt der Bot es offen.</div>
   </div>
-  <div class="fuss"><img src="../../public/images/brand/logo-weiss.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>09</b> / 11</span></div>
+  <div class="fuss"><img src="../../public/images/brand/logo-weiss.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"></span></div>
 </section>
 
 <!-- 10 Startklar -->
@@ -413,7 +553,7 @@ h2 { font-size: 78px; max-width: 1500px; }
     <div class="karte"><div class="nr">7</div><h3>Live schalten</h3><p>Den neuen Stand von Let's Meet und Landingpage veröffentlichen.</p><div class="wo">GitHub · Cloudflare</div></div>
     <div class="karte test"><div class="nr">8</div><h3>Testlauf</h3><p>Mit eigener Nummer anfragen, Verlauf im Backoffice prüfen, Testtermin absagen, „Stopp“ senden.</p></div>
   </div>
-  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>10</b> / 11</span></div>
+  <div class="fuss"><img src="../../public/images/brand/logo-schwarz.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"></span></div>
 </section>
 
 <!-- 11 Stand -->
@@ -442,8 +582,12 @@ h2 { font-size: 78px; max-width: 1500px; }
       </ul>
     </div>
   </div>
-  <div class="fuss"><img src="../../public/images/brand/logo-weiss.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"><b>11</b> / 11</span></div>
+  <div class="fuss"><img src="../../public/images/brand/logo-weiss.png" alt=""><span>WhatsApp Setting Bot</span><span class="seite"></span></div>
 </section>
 
+<script>
+const folien = [...document.querySelectorAll('.folie')];
+folien.forEach((f, i) => { const z = f.querySelector('.fuss .seite'); if (z) z.innerHTML = `<b>${String(i + 1).padStart(2, '0')}</b> / ${folien.length}`; });
+</script>
 </body>
 </html>
