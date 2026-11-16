@@ -95,6 +95,36 @@ export interface PlaybookZugang {
   downloads: number;
   gesperrt: number;
   link_versendet: number;
+  /** JSON [{ frage, antwort }] aus dem Formular der Landingpage, siehe antwortenLesen */
+  antworten: string | null;
+}
+
+export interface PlaybookAntwort {
+  frage: string;
+  antwort: string;
+}
+
+/**
+ * Antworten aus dem Formular der Landingpage prüfen: höchstens 10, Frage bis 60 und Antwort bis
+ * 300 Zeichen, leere fallen weg. Die Fragen bestimmt die Landingpage (`daten/letsmeet.ts` dort).
+ */
+export function antwortenPruefen(roh: unknown): PlaybookAntwort[] {
+  if (!Array.isArray(roh)) return [];
+  const text = (w: unknown, max: number) => (typeof w === 'string' ? w.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+  return roh
+    .slice(0, 10)
+    .map((a) => ({ frage: text((a as PlaybookAntwort)?.frage, 60), antwort: text((a as PlaybookAntwort)?.antwort, 300) }))
+    .filter((a) => a.frage && a.antwort);
+}
+
+/** Gespeicherte Antworten eines Zugangs lesen, defekte Daten ergeben eine leere Liste */
+export function antwortenLesen(z: Pick<PlaybookZugang, 'antworten'>): PlaybookAntwort[] {
+  if (!z.antworten) return [];
+  try {
+    return antwortenPruefen(JSON.parse(z.antworten));
+  } catch {
+    return [];
+  }
 }
 
 export type ZugangStatus = 'gueltig' | 'abgelaufen' | 'gesperrt';
@@ -128,6 +158,7 @@ export interface PlaybookAnfrage {
   email: string;
   telefon: string | null;
   unternehmen: string | null;
+  antworten?: PlaybookAntwort[];
 }
 
 /**
@@ -143,9 +174,10 @@ export async function zugangAnlegen(nutzerId: string, a: PlaybookAnfrage, linkVe
   const jetzt = new Date();
   const gueltigBis = new Date(jetzt.getTime() + PLAYBOOK_GUELTIG_TAGE * 86_400_000).toISOString();
   await ausfuehren(
-    `INSERT INTO playbook_zugaenge (id, nutzer_id, kontakt_id, playbook, name, email, telefon, unternehmen, erstellt_am, gueltig_bis, link_versendet)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO playbook_zugaenge (id, nutzer_id, kontakt_id, playbook, name, email, telefon, unternehmen, erstellt_am, gueltig_bis, link_versendet, antworten)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id, nutzerId, kontaktId, a.playbook, a.name, email, a.telefon, a.unternehmen, jetzt.toISOString(), gueltigBis, linkVersendet ? 1 : 0,
+    a.antworten?.length ? JSON.stringify(a.antworten) : null,
   );
   return { id, gueltigBis, kontaktId };
 }
@@ -257,7 +289,12 @@ export function gespraechLink(z: PlaybookZugang, basis = '') {
   p.set('name', z.name);
   p.set('email', z.email);
   if (z.telefon) p.set('telefon', z.telefon);
-  p.set('nachricht', [z.unternehmen && `Unternehmen: ${z.unternehmen}`, `Playbook angefordert: ${pb.name}`].filter(Boolean).join('\n'));
+  p.set(
+    'nachricht',
+    [z.unternehmen && `Unternehmen: ${z.unternehmen}`, ...antwortenLesen(z).map((a) => `${a.frage}: ${a.antwort}`), `Playbook angefordert: ${pb.name}`]
+      .filter(Boolean)
+      .join('\n'),
+  );
   p.set('quelle', `playbook ${z.playbook}`);
   return `${basis}/${pb.gespraech}#${p.toString()}`;
 }

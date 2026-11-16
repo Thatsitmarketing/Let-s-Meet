@@ -1,6 +1,6 @@
 /** CSV Export der Leadliste /app/playbook-leads, mit denselben Filtern. */
 import type { APIRoute } from 'astro';
-import { istPlaybook, LEAD_STAND, leadAbfrage, PLAYBOOKS, zugangStatus, type LeadStand } from '../../../lib/playbooks';
+import { antwortenLesen, istPlaybook, LEAD_STAND, leadAbfrage, PLAYBOOKS, zugangStatus, type LeadStand } from '../../../lib/playbooks';
 import { formatDatumMittel, formatZeit } from '../../../lib/zeit';
 
 const zelle = (wert: unknown) => {
@@ -18,11 +18,12 @@ export const GET: APIRoute = async ({ url, locals }) => {
   const zeilen = await leadAbfrage(nutzer.id, { playbook, stand, suche: (p.get('suche') ?? '').trim().slice(0, 100) }).liste(10000, 0);
   const tz = nutzer.zeitzone;
   const wann = (iso: string | null) => (iso ? `${formatDatumMittel(iso, tz)} ${formatZeit(iso, tz)}` : '');
-  const kopf = ['Name', 'E Mail', 'Telefon', 'Unternehmen', 'Playbook', 'Angefordert am', 'Geöffnet', 'Zuletzt geöffnet', 'PDF geladen', 'Zuletzt geladen', 'Link'];
+  const kopf = ['Name', 'E Mail', 'Telefon', 'Unternehmen', 'Angaben', 'Playbook', 'Angefordert am', 'Geöffnet', 'Zuletzt geöffnet', 'PDF geladen', 'Zuletzt geladen', 'Link'];
   const daten = zeilen.map((z) => {
     const st = zugangStatus(z);
     return [
       z.kontakt_name ?? z.name, z.email, z.kontakt_telefon ?? z.telefon, z.kontakt_unternehmen ?? z.unternehmen,
+      antwortenLesen(z).map((a) => `${a.frage}: ${a.antwort}`).join(' | '),
       istPlaybook(z.playbook) ? PLAYBOOKS[z.playbook].name : z.playbook,
       wann(z.erstellt_am), z.aufrufe, wann(z.zuletzt_geoeffnet), z.downloads, wann(z.zuletzt_geladen),
       !z.link_versendet ? 'Alter Downloadlink' : st === 'gueltig' ? `gültig bis ${formatDatumMittel(z.gueltig_bis, tz)}` : st === 'gesperrt' ? 'gesperrt' : 'abgelaufen',
