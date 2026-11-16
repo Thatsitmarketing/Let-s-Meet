@@ -1,6 +1,6 @@
 /**
  * Schnittstelle für die vier Playbook Landingpages (serverseitig, nie aus dem Browser).
- * POST JSON { playbook, name, email, telefon?, unternehmen? } mit Authorization: Bearer PLAYBOOK_SCHLUESSEL.
+ * POST JSON { playbook, name, email, telefon?, unternehmen?, antworten?: [{ frage, antwort }] } mit Authorization: Bearer PLAYBOOK_SCHLUESSEL.
  * Antwort { link, gueltigBis }. Legt Kontakt und persönlichen Zugang an, die Mail schickt die Landingpage.
  */
 import type { APIRoute } from 'astro';
@@ -8,7 +8,7 @@ import { buero } from '../../../lib/abfragen';
 import { basisUrl } from '../../../lib/buchungen';
 import { emailGueltig, json, telefonGueltig, trimmen } from '../../../lib/eingabe';
 import { crmMelden } from '../../../lib/crm';
-import { anfrageBerechtigt, istPlaybook, PLAYBOOKS, playbookDateien, zugangAnlegen } from '../../../lib/playbooks';
+import { anfrageBerechtigt, antwortenPruefen, istPlaybook, PLAYBOOKS, playbookDateien, zugangAnlegen } from '../../../lib/playbooks';
 
 export const POST: APIRoute = async ({ request, url, locals }) => {
   if (!anfrageBerechtigt(request)) return json(401, { fehler: 'Nicht berechtigt' });
@@ -25,6 +25,8 @@ export const POST: APIRoute = async ({ request, url, locals }) => {
   const email = trimmen(d.email, 180).toLowerCase();
   const telefonRoh = trimmen(d.telefon, 40);
   const unternehmen = trimmen(d.unternehmen, 160) || null;
+  // Optionale Fragen der Landingpage (z. B. Website, Teamgröße), ungültige Einträge fallen still weg
+  const antworten = antwortenPruefen(d.antworten);
 
   const felder: Record<string, string> = {};
   if (!istPlaybook(playbook)) felder.playbook = 'Unbekanntes Playbook';
@@ -40,7 +42,7 @@ export const POST: APIRoute = async ({ request, url, locals }) => {
 
   // Noch keine Dateien hinterlegt: Lead trotzdem erfassen, die Landingpage nimmt ihren bisherigen Downloadlink
   const mitDateien = Boolean(playbookDateien(playbook));
-  const { id, gueltigBis } = await zugangAnlegen(gastgeber.id, { playbook, name, email, telefon, unternehmen }, mitDateien);
+  const { id, gueltigBis } = await zugangAnlegen(gastgeber.id, { playbook, name, email, telefon, unternehmen, antworten }, mitDateien);
   // Lead in Close (Close Automat), im Hintergrund nach der Antwort
   locals.cfContext.waitUntil(
     crmMelden('playbook.angefordert', {
@@ -52,6 +54,7 @@ export const POST: APIRoute = async ({ request, url, locals }) => {
       email,
       telefon: telefonRoh || null,
       unternehmen,
+      antworten,
       zeit: new Date().toISOString(),
     }),
   );

@@ -5,7 +5,7 @@ import KontaktFormular from '../../../components/KontaktFormular.astro';
 import Icon from '../../../components/ui/Icon.astro';
 import { kontaktAusFormular, kontaktEntfernen, kontaktMitMeetings, kontaktSpeichern, meetingsVon, type KontaktWerte } from '../../../lib/kontakte';
 import { meldungAusUrl } from '../../../lib/meldungen';
-import { istPlaybook, PLAYBOOK_GUELTIG_TAGE, PLAYBOOKS, zugaengeVonKontakt, zugangSperren, zugangStatus, zugangVerlaengern } from '../../../lib/playbooks';
+import { antwortenLesen, istPlaybook, PLAYBOOK_GUELTIG_TAGE, PLAYBOOKS, zugaengeVonKontakt, zugangSperren, zugangStatus, zugangVerlaengern } from '../../../lib/playbooks';
 import { formatDatumMittel, formatZeit } from '../../../lib/zeit';
 
 const nutzer = Astro.locals.gastgeber!;
@@ -117,10 +117,16 @@ const wann = (iso: string) => `${formatDatumMittel(iso, tz)}, ${formatZeit(iso, 
           <ol class="playbooks" role="list">
             {zugaenge.map((z) => {
               const st = zugangStatus(z);
+              const antworten = antwortenLesen(z);
               return (
                 <li>
                   <strong>{istPlaybook(z.playbook) ? PLAYBOOKS[z.playbook].name : z.playbook}</strong>
                   <span class="leise klein">Angefordert am {wann(z.erstellt_am)}</span>
+                  {antworten.length > 0 && (
+                    <dl class="pb-antworten" aria-label="Angaben im Formular">
+                      {antworten.map((a) => <div><dt>{a.frage}</dt><dd>{a.antwort}</dd></div>)}
+                    </dl>
+                  )}
                   <dl class="pb-stand">
                     <div class:list={{ ja: z.aufrufe > 0 }}>
                       <dt><Icon name="auge" groesse={16} />Geöffnet</dt>
@@ -189,6 +195,11 @@ const wann = (iso: string) => `${formatDatumMittel(iso, tz)}, ${formatZeit(iso, 
   .m-wann { display: flex; gap: var(--raum-2); align-items: center; font-size: var(--text-sm); font-weight: 600; color: var(--farbe-text-2); }
   .m-wann .badge { padding: 1px 8px; font-size: 0.75rem; }
   .playbooks { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-3); }
+  .pb-antworten { margin: 0; display: grid; gap: 2px; font-size: var(--text-sm); }
+  .pb-antworten div { display: flex; flex-wrap: wrap; gap: 0 6px; }
+  .pb-antworten dt { color: var(--farbe-text-leise); }
+  .pb-antworten dt::after { content: ':'; }
+  .pb-antworten dd { margin: 0; overflow-wrap: anywhere; }
   .playbooks li { display: grid; gap: var(--raum-2); padding: var(--raum-3) var(--raum-4); border: 1px solid var(--farbe-rahmen); border-left: 4px solid var(--farbe-akzent); }
   .pb-stand { margin: 0; display: grid; gap: 4px; }
   .pb-stand div { display: flex; flex-wrap: wrap; gap: 2px var(--raum-2); font-size: var(--text-sm); color: var(--farbe-text-leise); }
