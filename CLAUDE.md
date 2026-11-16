@@ -230,7 +230,7 @@ Der vierstufige Kontakt Funnel der Homepage (`Thatsitmarketing/thatsit_homepage_
 
 ## Offene Punkte
 
-* **`ANFRAGE_SCHLUESSEL` setzen** (Stand 2026-11-16 noch offen, das Setzen war aus der Sitzung nicht erlaubt): denselben zufälligen Wert (mindestens 24 Zeichen) als Secret im Worker `let-s-meet` und im Pages Projekt `ads-web-entwurf`, danach das Pages Projekt neu deployen. Bis dahin kommen die Anfragen des Website Entwurf Funnels nur per Mail, nicht in Let's Meet und nicht in Close
+* **Website Entwurf Funnel Ende zu Ende prüfen:** `ANFRAGE_SCHLUESSEL` ist seit 2026-11-16 im Worker `let-s-meet` und im Pages Projekt `ads-web-entwurf` gesetzt (gleicher Wert, zufällig erzeugt, nirgends gespeichert; neu setzen heißt beide gleichzeitig ändern), das Pages Projekt ist danach neu deployt (Deployment `f1af9409`, Schlüssel gebunden). Ein echter Probelauf über website-entwurf.thatsit.marketing steht noch aus: einmal den Funnel abschicken, dann unter Anfragen und in Close (Quelle „Website Entwurf“) nachsehen und den Testlead entfernen
 
 * **Gastro Playbook Seite 51** heißt „Der kostenlose Sichtbarkeits-Check“ (Restaurant, Google Profil), der QR-Code führt jetzt wie Mail und Playbook Seite zum Strategiegespräch Social Media Marketing (`/sichtbarkeits-check` ist inaktiv). Entweder die Seite in der Vorlage auf das Strategiegespräch umschreiben oder den Sichtbarkeits-Check wieder aktivieren und `GESPRAECH` in `scripts/playbook-qr.py` sowie `PLAYBOOKS.gastro` umstellen
 * Seite 30 des Website Playbooks nennt noch „Website-Conversion Playbook 2026“ und „ERSTGESRÄCH“ (Tippfehler), Seite 11 und 12 verlinken `web.thatsit.marketing`. Nur in der Vorlage zu ändern
