@@ -147,18 +147,37 @@ ${d.meetingUrl ? zeile('Link', `<a href="${m(d.meetingUrl)}" style="color:${MARK
 </table>`;
 }
 
+const vorname = (name: string) => name.trim().split(/\s+/)[0] || name;
+const gruss = (zeile = 'Bis bald') => absatz(`${zeile}<br>Dein Team von ${MARKE.name}`);
+const telefonFett = `<strong style="white-space:nowrap;">${MARKE.telefon}</strong>`;
+
+/** Bestätigung an den Gast (neu oder umgebucht). Ton wie die Arbeitsabläufe: du, nahbar, konkrete Hilfe. */
 export function mailGastBestaetigung(basis: string, d: TerminDetails & { gastName: string; verwaltenUrl: string; umgebucht?: boolean; zusatz?: string | null }) {
+  const schritte = [
+    d.umgebucht
+      ? 'Die Kalenderdatei im Anhang ersetzt den alten Eintrag in deinem Kalender'
+      : 'Öffne die Kalenderdatei im Anhang, dann steht der Termin direkt in deinem Kalender',
+    ...(d.meetingUrl ? ['Zum Termin einfach auf „Zum Meeting“ klicken. Läuft direkt im Browser, du musst nichts installieren'] : []),
+    'Du hast Links, Zahlen oder Fragen für uns? Antworte einfach auf diese Mail, sie landet direkt bei uns im Team',
+  ];
   return rahmen(
     basis,
-    `${d.terminTitel} am ${d.wann}`,
+    d.umgebucht ? `Alles klar, dein neuer Termin steht: ${d.wann}` : `Wir freuen uns auf dich: ${d.terminTitel} am ${d.wann}`,
     `${eyebrow(d.umgebucht ? 'Termin umgebucht' : 'Termin bestätigt')}
 ${titel(d.umgebucht ? 'Dein neuer Termin steht' : 'Dein Termin steht')}
-${absatz(`Hallo ${m(d.gastName)},`)}
-${absatz(d.umgebucht ? 'du hast deinen Termin verschoben. Hier sind die neuen Daten. Die Kalenderdatei im Anhang ersetzt den alten Eintrag.' : 'danke für deine Buchung. Hier sind alle Daten auf einen Blick. Die Kalenderdatei im Anhang kannst du direkt übernehmen.')}
+${absatz(`Hallo ${m(vorname(d.gastName))},`)}
+${absatz(
+  d.umgebucht
+    ? 'alles klar, dein Termin ist verschoben. Wir haben uns die neue Zeit fest für dich geblockt.'
+    : 'danke für deine Buchung. Wir haben uns die Zeit fest für dich geblockt und freuen uns richtig auf das Gespräch.',
+)}
 ${details(d)}
 ${d.zusatz ? absatz(m(d.zusatz).replace(/\n/g, '<br>')) : ''}
+<p style="margin:0 0 8px;">So geht es weiter:</p>
+${liste(schritte)}
 ${d.meetingUrl ? knopf(d.meetingUrl, 'Zum Meeting', 'gruen') : ''}${knopf(d.verwaltenUrl, 'Umbuchen oder absagen', 'rahmen')}
-${absatz(`<span style="font-size:13px;color:${MARKE.grau};">Fragen vorab? Antworte einfach auf diese Mail.</span>`)}`,
+<p style="margin:14px 0 14px;">Etwas dazwischengekommen? Kein Stress, über „Umbuchen oder absagen“ geht das mit zwei Klicks.</p>
+${gruss()}`,
   );
 }
 
@@ -182,18 +201,56 @@ ${knopf(d.backofficeUrl, 'Im Backoffice öffnen', 'schwarz')}`,
   );
 }
 
-export function mailStorno(basis: string, d: TerminDetails & { anName: string; grund?: string | null; vonGast: boolean; anGast: boolean; neuBuchenUrl?: string }) {
-  const wer = d.vonGast ? (d.anGast ? 'Du hast' : `${d.gastgeber} hat`) : d.anGast ? `${d.gastgeber} hat` : 'Du hast';
+/**
+ * Absage an Gast und Büro. Der Gast bekommt je nach Absender passende Worte und immer einen Weg zurück
+ * (neuer Termin, Antwort, Telefon), das Büro die Kontaktdaten und einen Tipp zum Nachfassen.
+ */
+export function mailStorno(
+  basis: string,
+  d: TerminDetails & { anName: string; grund?: string | null; vonGast: boolean; anGast: boolean; neuBuchenUrl?: string; gastEmail?: string; gastTelefon?: string | null },
+) {
+  const grund = d.grund
+    ? `<p style="margin:0 0 4px;font-size:13px;color:${MARKE.grau};">Grund</p><p style="margin:0 0 20px;white-space:pre-wrap;border-left:3px solid ${MARKE.orange};padding-left:12px;">${m(d.grund)}</p>`
+    : '';
+  const neu = d.neuBuchenUrl ? knopf(d.neuBuchenUrl, 'Neuen Termin buchen', 'orange') : '';
+  // Der Meetinglink eines abgesagten Termins führt nur in die Irre
+  const ohneLink = { ...d, meetingUrl: null, ort: d.meetingUrl ? 'Google Meet' : d.ort };
+  if (d.anGast) {
+    const vonUns = !d.vonGast;
+    return rahmen(
+      basis,
+      vonUns ? `Wir müssen deinen Termin leider absagen: ${d.terminTitel}` : `Deine Absage ist angekommen: ${d.terminTitel}`,
+      `${eyebrow('Termin abgesagt')}
+${titel(vonUns ? 'Wir müssen leider absagen' : 'Schade, aber kein Problem')}
+${absatz(`Hallo ${m(vorname(d.anName))},`)}
+${absatz(
+  vonUns
+    ? 'es tut uns wirklich leid, aber wir müssen deinen Termin absagen. Das ist nicht unser Anspruch und wir wollen es wiedergutmachen.'
+    : 'deine Absage ist bei uns angekommen und der Termin ist aus unserem Kalender raus. Die Kalenderdatei im Anhang entfernt ihn auch aus deinem.',
+)}
+${details(ohneLink)}
+${grund}
+${absatz(
+  vonUns
+    ? 'Such dir direkt eine neue Zeit aus. Passt keine davon? Antworte einfach auf diese Mail, dann finden wir gemeinsam einen Termin, auch außerhalb der freien Zeiten.'
+    : 'Dein Thema läuft ja nicht weg. Wenn es zeitlich wieder passt, such dir einfach eine neue Zeit aus, das dauert keine Minute.',
+)}
+${neu}
+<p style="margin:14px 0 14px;">Lieber kurz sprechen? Antworte auf diese Mail oder ruf uns an unter ${telefonFett}.</p>
+${gruss()}`,
+    );
+  }
+  const kontakt = [d.gastEmail, d.gastTelefon].filter(Boolean).join(', ');
   return rahmen(
     basis,
-    `Abgesagt: ${d.terminTitel} am ${d.wann}`,
+    `Abgesagt: ${d.gastgeber}, ${d.terminTitel} am ${d.wann}`,
     `${eyebrow('Termin abgesagt')}
-${titel('Termin abgesagt')}
-${absatz(`Hallo ${m(d.anName)},`)}
-${absatz(`${m(wer)} den folgenden Termin abgesagt.`)}
-${details(d)}
-${d.grund ? `<p style="margin:0 0 4px;font-size:13px;color:${MARKE.grau};">Grund</p><p style="margin:0 0 20px;white-space:pre-wrap;border-left:3px solid ${MARKE.orange};padding-left:12px;">${m(d.grund)}</p>` : ''}
-${d.neuBuchenUrl ? knopf(d.neuBuchenUrl, 'Neuen Termin buchen', 'orange') : ''}`,
+${titel(d.vonGast ? `${d.gastgeber} hat abgesagt` : 'Termin abgesagt')}
+${absatz('Hallo Team,')}
+${absatz(d.vonGast ? `${m(d.gastgeber)} hat den folgenden Termin abgesagt. Der Slot ist wieder frei.` : 'ihr habt den folgenden Termin abgesagt. Der Gast hat eine Mail mit Entschuldigung und Link für einen neuen Termin bekommen.')}
+${details({ ...ohneLink, gastgeber: kontakt ? `${d.gastgeber}, ${kontakt}` : d.gastgeber })}
+${grund}
+${d.vonGast ? absatz('Tipp: Ein kurzer Anruf lohnt sich oft. Wer jetzt freundlich nachfragt, bekommt meist doch noch einen Termin.') : ''}`,
   );
 }
 

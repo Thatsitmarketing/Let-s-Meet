@@ -211,7 +211,9 @@ async function benachrichtigenNeu(b: Buchung, ta: Terminart, n: Nutzer, basis: s
     mailSenden({
       an: b.gast_email,
       antwortAn: n.email,
-      betreff: `${umgebucht ? 'Umgebucht' : 'Bestätigt'}: ${ta.titel} am ${formatDatumLang(b.start_utc, b.gast_zeitzone)}`,
+      betreff: umgebucht
+        ? `Umgebucht: dein neuer Termin am ${formatDatumLang(b.start_utc, b.gast_zeitzone)}`
+        : `Dein Termin steht: ${ta.titel} am ${formatDatumLang(b.start_utc, b.gast_zeitzone)}`,
       html: mailGastBestaetigung(basis, {
         ...terminDetails(b, ta, n, b.gast_zeitzone),
         gastName: b.gast_name,
@@ -271,7 +273,9 @@ export async function buchungAbsagen(e: {
       mailSenden({
         an: b.gast_email,
         antwortAn: n.email,
-        betreff: `Abgesagt: ${ta.titel} am ${formatDatumLang(b.start_utc, b.gast_zeitzone)}`,
+        betreff: vonGast
+          ? `Deine Absage ist angekommen: ${ta.titel} am ${formatDatumLang(b.start_utc, b.gast_zeitzone)}`
+          : `Wir müssen leider absagen: ${ta.titel} am ${formatDatumLang(b.start_utc, b.gast_zeitzone)}`,
         html: mailStorno(e.basis, {
           ...terminDetails(aktuell, ta, n, b.gast_zeitzone),
           anName: b.gast_name,
@@ -289,6 +293,8 @@ export async function buchungAbsagen(e: {
         html: mailStorno(e.basis, {
           ...terminDetails(aktuell, ta, n, n.zeitzone),
           gastgeber: b.gast_name,
+          gastEmail: b.gast_email,
+          gastTelefon: b.gast_telefon,
           anName: n.name,
           grund: e.grund,
           vonGast,
