@@ -3,7 +3,7 @@ import App from '../../../layouts/App.astro';
 import Avatar from '../../../components/Avatar.astro';
 import KontaktFormular from '../../../components/KontaktFormular.astro';
 import Icon from '../../../components/ui/Icon.astro';
-import { kontaktAusFormular, kontaktEntfernen, kontaktMitMeetings, kontaktSpeichern, meetingsVon, type KontaktWerte } from '../../../lib/kontakte';
+import { kontaktAusFormular, kontaktEntfernen, kontaktMitMeetings, kontaktSperren, kontaktSpeichern, meetingsVon, type KontaktWerte } from '../../../lib/kontakte';
 import { meldungAusUrl } from '../../../lib/meldungen';
 import { ANFRAGE_QUELLEN, anfrageAntworten, anfragenVonKontakt, istAnfrageQuelle } from '../../../lib/anfragen';
 import { antwortenLesen, istPlaybook, PLAYBOOK_GUELTIG_TAGE, PLAYBOOKS, zugaengeVonKontakt, zugangSperren, zugangStatus, zugangVerlaengern } from '../../../lib/playbooks';
@@ -31,6 +31,10 @@ if (Astro.request.method === 'POST') {
     if (aktion === 'playbook-verlaengern') await zugangVerlaengern(nutzer.id, zugangId);
     else await zugangSperren(nutzer.id, zugangId);
     return Astro.redirect(`/app/kontakte/${id}?ok=gespeichert#playbooks`);
+  }
+  if ((aktion === 'sperren' || aktion === 'entsperren') && kontakt.email) {
+    await kontaktSperren(nutzer.id, kontakt.name, kontakt.email, aktion === 'sperren');
+    return Astro.redirect(`/app/kontakte/${id}?ok=${aktion === 'sperren' ? 'gesperrt' : 'entsperrt'}`);
   }
   if (aktion === 'entfernen') {
     await kontaktEntfernen(nutzer.id, id);
@@ -85,6 +89,19 @@ const wann = (iso: string) => `${formatDatumMittel(iso, tz)}, ${formatZeit(iso, 
           <h2 id="k-direkt" class="klein-titel">Direkt</h2>
           {kontakt.email && <a class="knopf knopf--rahmen knopf--breit" href={`mailto:${kontakt.email}`}><Icon name="mail" />E Mail schreiben</a>}
           {kontakt.telefon && <a class="knopf knopf--rahmen knopf--breit" href={`tel:${kontakt.telefon.replace(/[^\d+]/g, '')}`}><Icon name="telefon" />Anrufen</a>}
+        </section>
+      )}
+
+      {kontakt.email && (
+        <section class="karte block" aria-labelledby="k-sperre">
+          <h2 id="k-sperre" class="klein-titel">Buchung</h2>
+          <form method="post" data-rueckfrage={kontakt.gesperrt ? '' : 'Kontakt ausqualifizieren? Mit dieser E Mail Adresse sind keine neuen Buchungen mehr möglich.'}>
+            <input type="hidden" name="aktion" value={kontakt.gesperrt ? 'entsperren' : 'sperren'} />
+            {kontakt.gesperrt
+              ? <p class="hilfe"><strong>Ausqualifiziert.</strong> Dieser Kontakt kann keinen Termin mehr buchen.</p>
+              : <p class="hilfe">Sperrt neue Buchungen über die Buchungsseite und das Widget.</p>}
+            <button class:list={['knopf', 'knopf--breit', kontakt.gesperrt ? 'knopf--rahmen' : 'knopf--gefahr']} type="submit">{kontakt.gesperrt ? 'Sperre aufheben' : 'Buchung sperren'}</button>
+          </form>
         </section>
       )}
 

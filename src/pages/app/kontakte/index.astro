@@ -131,6 +131,7 @@ const importiert = p.get('importiert');
                   <Avatar name={k.name} groesse={32} />
                   <span>{k.name}</span>
                 </a>
+                {k.gesperrt ? <span class="pille pille--fehler pb-marke">Gesperrt</span> : null}
                 {playbookStand.get(k.id) && (
                   <span class:list={['pille', 'pb-marke', `pb-${playbookStand.get(k.id)}`]}>{PLAYBOOK_MARKE[playbookStand.get(k.id)!]}</span>
                 )}

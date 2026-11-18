@@ -118,6 +118,8 @@ export interface Kontakt {
   quelle: 'buchung' | 'google' | 'import' | 'manuell' | 'playbook';
   letztes_meeting: string | null;
   ausgeblendet: number;
+  /** 1 = ausqualifiziert, keine Buchung mehr möglich (seit 0015) */
+  gesperrt: number;
   erstellt_am: string;
   aktualisiert_am: string;
 }

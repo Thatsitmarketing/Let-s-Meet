@@ -2,6 +2,8 @@ import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
 import { buchungNachId, fragenLesen, nutzerNachId, terminartNachId } from '../../lib/abfragen';
 import { basisUrl, buchungAnlegen, SlotVergeben } from '../../lib/buchungen';
+import { KONTAKT } from '../../lib/marke';
+import { kontaktGesperrt } from '../../lib/kontakte';
 import { emailGueltig, json, telefonGueltig, trimmen } from '../../lib/eingabe';
 import { slotFrei } from '../../lib/slots';
 import { gueltigeZone } from '../../lib/zeit';
@@ -63,6 +65,11 @@ export const POST: APIRoute = async ({ request, clientAddress, locals, url }) =>
     if (wert) antworten.push({ label: frage.label, wert });
   }
   if (Object.keys(felder).length) return json(422, { felder });
+
+  // Ausqualifizierte Kontakte buchen nicht mehr (Sperre im Backoffice)
+  if (await kontaktGesperrt(nutzer.id, email)) {
+    return json(403, { fehler: `Für diese E Mail Adresse ist leider keine Online Buchung möglich. Melde dich gern direkt bei uns: ${KONTAKT.email} oder ${KONTAKT.telefon}.` });
+  }
 
   // Umbuchen: alte Buchung muss bestehen, bestätigt sein und zur Terminart passen
   let umbuchenVon = null;

@@ -35,6 +35,26 @@ export async function kontaktAusBuchung(nutzerId: string, name: string, email: s
   );
 }
 
+/** Ist diese E Mail Adresse für Buchungen gesperrt (ausqualifiziert)? */
+export async function kontaktGesperrt(nutzerId: string, email: string) {
+  const k = await eins<{ gesperrt: number }>('SELECT gesperrt FROM kontakte WHERE nutzer_id = ? AND email = ?', nutzerId, emailNorm(email));
+  return Boolean(k?.gesperrt);
+}
+
+/**
+ * Sperrt einen Kontakt für neue Buchungen oder hebt die Sperre auf. Gibt es den Kontakt noch nicht, wird er angelegt.
+ * Die Sperre überlebt "Kontakt entfernen" und neue Buchungsversuche (kontaktAusBuchung berührt sie nie).
+ */
+export async function kontaktSperren(nutzerId: string, name: string, email: string, gesperrt: boolean) {
+  const jetzt = jetztIso();
+  await ausfuehren(
+    `INSERT INTO kontakte (id, nutzer_id, name, email, quelle, gesperrt, erstellt_am, aktualisiert_am)
+     VALUES (?, ?, ?, ?, 'buchung', ?, ?, ?)
+     ON CONFLICT (nutzer_id, email) WHERE email IS NOT NULL DO UPDATE SET gesperrt = excluded.gesperrt, aktualisiert_am = excluded.aktualisiert_am`,
+    neueId(), nutzerId, name, emailNorm(email), gesperrt ? 1 : 0, jetzt, jetzt,
+  );
+}
+
 /**
  * Nach einer Playbook Anfrage: Kontakt anlegen oder Telefon und Unternehmen ergänzen.
  * Vorhandene Angaben bleiben, ein entfernter Kontakt kommt zurück. Gibt die Kontakt ID zurück.
