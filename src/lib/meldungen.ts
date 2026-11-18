@@ -12,6 +12,8 @@ const TEXTE: Record<string, string> = {
   getrennt: 'Verbindung getrennt.',
   passwort: 'Passwort geändert.',
   entfernt: 'Kontakt entfernt.',
+  gesperrt: 'Gast ausqualifiziert: als nicht erschienen markiert und für neue Buchungen gesperrt.',
+  entsperrt: 'Sperre aufgehoben, der Gast kann wieder buchen.',
 };
 
 export function meldungAusUrl(url: URL): { art: 'erfolg' | 'fehler'; text: string } | null {

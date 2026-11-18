@@ -7,6 +7,7 @@ import { ausfuehren, jetztIso } from '../../../lib/db';
 import { trimmen } from '../../../lib/eingabe';
 import { meldungAusUrl } from '../../../lib/meldungen';
 import { formatDatumKurz, formatDatumLang, formatSpanne, formatZeit, zonenName } from '../../../lib/zeit';
+import { kontaktGesperrt, kontaktSperren } from '../../../lib/kontakte';
 import { herkunft } from '../../../lib/herkunft';
 import { AKTIONEN, ablaeufeAusloesen, versandVonBuchung, wennText } from '../../../lib/arbeitsablaeufe';
 
@@ -30,6 +31,16 @@ if (Astro.request.method === 'POST') {
       if (taX && nX) Astro.locals.cfContext.waitUntil(ablaeufeAusloesen('nicht_erschienen', { ...buchung, nicht_erschienen: 1 }, taX, nX, basisUrl(Astro.url)));
     }
     return Astro.redirect(`/app/termine/${buchung.id}?ok=gespeichert`);
+  }
+  if (aktion === 'sperren') {
+    // Ausqualifizieren: als nicht erschienen markieren, Gast für neue Buchungen sperren, keine Mail "neue Zeit anbieten"
+    if (!buchung.nicht_erschienen) await ausfuehren('UPDATE buchungen SET nicht_erschienen = 1, aktualisiert_am = ? WHERE id = ?', jetztIso(), buchung.id);
+    await kontaktSperren(buchung.nutzer_id, buchung.gast_name, buchung.gast_email, true);
+    return Astro.redirect(`/app/termine/${buchung.id}?ok=gesperrt`);
+  }
+  if (aktion === 'entsperren') {
+    await kontaktSperren(buchung.nutzer_id, buchung.gast_name, buchung.gast_email, false);
+    return Astro.redirect(`/app/termine/${buchung.id}?ok=entsperrt`);
   }
   if (aktion === 'absagen' && buchung.status === 'bestaetigt') {
     await buchungAbsagen({
@@ -55,6 +66,7 @@ try {
   antworten = [];
 }
 const versand = await versandVonBuchung(buchung.id);
+const gesperrt = await kontaktGesperrt(buchung.nutzer_id, buchung.gast_email);
 const VERSAND_STATUS: Record<string, string> = { gesendet: 'Gesendet', entfallen: 'Entfallen', fehler: 'Fehler' };
 const umbuchenLink = gastgeber && ta ? `${Astro.url.origin}/${ta.slug}?umbuchen=${buchung.id}` : '';
 ---
@@ -139,6 +151,21 @@ const umbuchenLink = gastgeber && ta ? `${Astro.url.origin}/${ta.slug}?umbuchen=
             <form method="post">
               <input type="hidden" name="aktion" value="erschienen" />
               <button class="knopf knopf--rahmen knopf--breit" type="submit">{buchung.nicht_erschienen ? 'Doch erschienen' : 'Als nicht erschienen markieren'}</button>
+              {!buchung.nicht_erschienen && <p class="hilfe">Der Gast bekommt per Arbeitsablauf eine Mail und kann einen neuen Termin buchen.</p>}
+            </form>
+          )}
+          {begonnen && !gesperrt && (
+            <form method="post" data-rueckfrage="Gast ausqualifizieren? Er wird als nicht erschienen markiert, bekommt keine Mail und kann mit dieser E Mail Adresse keinen Termin mehr buchen.">
+              <input type="hidden" name="aktion" value="sperren" />
+              <button class="knopf knopf--gefahr knopf--breit" type="submit">Nicht erschienen und sperren</button>
+              <p class="hilfe">Ausqualifiziert: keine Mail, keine neue Buchung mehr möglich.</p>
+            </form>
+          )}
+          {gesperrt && (
+            <form method="post">
+              <input type="hidden" name="aktion" value="entsperren" />
+              <p class="hilfe"><strong>Dieser Gast ist für neue Buchungen gesperrt.</strong></p>
+              <button class="knopf knopf--rahmen knopf--breit" type="submit">Sperre aufheben</button>
             </form>
           )}
         </section>
