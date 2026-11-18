@@ -46,6 +46,8 @@ if (Astro.request.method === 'POST') {
 const [ta, gastgeber] = await Promise.all([terminartNachId(buchung.terminart_id), nutzerNachId(buchung.nutzer_id)]);
 const tz = nutzer.zeitzone;
 const vorbei = Date.parse(buchung.ende_utc) < Date.now();
+// „Nicht erschienen“ lässt sich ab Terminbeginn markieren
+const begonnen = Date.parse(buchung.start_utc) <= Date.now();
 let antworten: { label: string; wert: string }[] = [];
 try {
   antworten = JSON.parse(buchung.antworten);
@@ -133,7 +135,7 @@ const umbuchenLink = gastgeber && ta ? `${Astro.url.origin}/${ta.slug}?umbuchen=
           {buchung.meeting_url && !vorbei && <a class="knopf knopf--orange knopf--breit" href={buchung.meeting_url} target="_blank" rel="noopener"><Icon name="video" />Meeting starten</a>}
           {!vorbei && <button type="button" class="knopf knopf--rahmen knopf--breit" data-kopieren={umbuchenLink}><Icon name="umbuchen" />Umbuchungslink kopieren</button>}
           <a class="knopf knopf--rahmen knopf--breit" href={`/termin/${buchung.id}/kalender.ics`}><Icon name="download" />Kalenderdatei</a>
-          {vorbei && (
+          {begonnen && (
             <form method="post">
               <input type="hidden" name="aktion" value="erschienen" />
               <button class="knopf knopf--rahmen knopf--breit" type="submit">{buchung.nicht_erschienen ? 'Doch erschienen' : 'Als nicht erschienen markieren'}</button>
