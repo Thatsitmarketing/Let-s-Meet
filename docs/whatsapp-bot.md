@@ -8,9 +8,35 @@ Präsentation zum Vorstellen im Team: `docs/praesentation/WhatsApp-Setting-Bot.p
 
 1. Meta Business Suite öffnen, unter Einstellungen das Unternehmen prüfen lassen (Unternehmensverifizierung). Ohne sie gilt die Grenze von 250 neuen Kontakten pro Tag, das reicht für den Start.
 2. developers.facebook.com, „App erstellen“, Typ **Business**, Anwendungsfall **WhatsApp**. Die App mit dem Business Portfolio von That's it. Marketing verknüpfen.
-3. In der App unter WhatsApp, „Erste Schritte“, **Bestehende WhatsApp Business App Nummer verbinden** wählen (Coexistence). Auf dem Firmenhandy in der WhatsApp Business App den QR Code scannen und den Chatverlauf übernehmen. Die Nummer bleibt in der App nutzbar, das Team kann weiter normal schreiben.
-4. Wichtig für Coexistence: die WhatsApp Business App mindestens alle 14 Tage einmal öffnen, sonst trennt Meta die Verbindung.
-5. Unter WhatsApp, API Setup die **Phone number ID** notieren (nicht die Telefonnummer selbst).
+3. In der App unter WhatsApp, „Erste Schritte“ bzw. API Setup, „Telefonnummer hinzufügen“: in der Praxis (Stand 2026-11) bietet dieser Dialog nur **SMS** oder **Anruf** an, also eine reine API Registrierung. Das würde die Nummer aus der WhatsApp Business App nehmen. Diesen Weg nicht fortsetzen, wenn die Nummer in der App bleiben soll. Eine Option „Bestehende WhatsApp Business App Nummer verbinden“ direkt im Dashboard war nicht zu finden.
+4. Stattdessen Abschnitt **1a** unten: die interne Seite `/app/whatsapp/coexistence` nutzt Embedded Signup, den einzigen Weg, der Coexistence tatsächlich anbietet. Dort am Firmenhandy in der WhatsApp Business App den QR Code bestätigen und den Chatverlauf übernehmen. Die Nummer bleibt in der App nutzbar, das Team kann weiter normal schreiben.
+5. Wichtig für Coexistence: die WhatsApp Business App mindestens alle 14 Tage einmal öffnen, sonst trennt Meta die Verbindung.
+6. Unter WhatsApp, API Setup die **Phone number ID** notieren (nicht die Telefonnummer selbst), falls die Seite aus Abschnitt 1a sie nicht schon angezeigt hat.
+
+### 1a. Coexistence über die interne Seite /app/whatsapp/coexistence (Embedded Signup)
+
+Seit 2026-11-19 gibt es dafür eine Admin Seite im Backoffice, weil der normale Anmeldedialog im Meta Dashboard keine Coexistence Option bietet (siehe Schritt 3 oben). Der einzige Weg ist **WhatsApp Embedded Signup** mit `featureType: "whatsapp_business_app_onboarding"`.
+
+Voraussetzungen, bevor der Knopf etwas bringt:
+
+* Business Portfolio That's it. Marketing ist bei Meta verifiziert (Unternehmensverifizierung).
+* Eine Meta App mit Anwendungsfall WhatsApp existiert im Portfolio (App „Chat Bot That's it.", App ID in `WHATSAPP_APP_ID`).
+* Eine Facebook Login for Business Konfiguration für Embedded Signup ist angelegt (Konfigurations ID in `WHATSAPP_EMBEDDED_CONFIG_ID`), mit den Rechten `whatsapp_business_management` und `whatsapp_business_messaging`.
+* `WHATSAPP_APP_SECRET` ist als Secret im Worker **let-s-meet** gesetzt (App Einstellungen, Allgemein, App Secret bei Meta).
+* Die WhatsApp Business App am Firmenhandy ist Version 2.24.17 oder neuer, die Nummer ist dort nicht abgemeldet.
+
+Ablauf: `/app/whatsapp/coexistence` öffnen (nur Admins), Knopf „WhatsApp Firmennummer verbinden“. Im Popup von Meta die Option wählen, eine bestehende Nummer aus der WhatsApp Business App zu übernehmen, am Firmenhandy den QR Code bestätigen. Die Seite zeigt den Fortschritt live (aus dem `postMessage` Ereignis `WA_EMBEDDED_SIGNUP` des Popups) und meldet am Ende WABA ID und Phone Number ID.
+
+Technisch: `FB.login()` liefert nach „Fertig“ einen Code, der nur 5 Minuten gültig ist. Die Seite schickt ihn an `POST /api/app/whatsapp/onboarding` (nur angemeldet, nur Admin), die Route tauscht ihn server seitig gegen einen dauerhaften Business Token ein (`GET /oauth/access_token` mit `WHATSAPP_APP_ID` und `WHATSAPP_APP_SECRET`) und meldet die App gleich an der WABA an (`POST /<waba_id>/subscribed_apps`), damit Webhooks ankommen. Der Token selbst geht nie an den Browser und nie ins Protokoll, nur Erfolg oder Fehler.
+
+Die Seite zeigt den Business Token aus dieser Schnittstelle **bewusst nicht an**, auch nicht im Protokoll, nur dass der Austausch geklappt hat. Grund: dieser Token kommt vom automatischen Codeaustausch und ist für die serverseitige Anmeldung des Webhooks gedacht (`subscribed_apps`, macht die Seite gleich mit), nicht zum Abschreiben gemacht. Für den Wert, der als `WHATSAPP_TOKEN` in Cloudflare landet, weiter mit Abschnitt 2 (Systemnutzer): dort zeigt Meta den Token einmal im Klartext zum Kopieren, genau für diesen Zweck.
+
+Danach noch zu tun, damit der Bot wirklich läuft:
+
+1. Abschnitt 2 (Systemnutzer, dauerhafter Token zum Abschreiben) durchgehen und `WHATSAPP_TOKEN` in Cloudflare setzen.
+2. Die **Phone number ID**, die die Seite nach dem Verbinden anzeigt, als `WHATSAPP_PHONE_NUMBER_ID` in Cloudflare setzen.
+3. Weiter mit Abschnitt 3 (Vorlagen einreichen) und Abschnitt 6 (Webhook bei Meta eintragen).
+4. Zahlungsmethode im WhatsApp Manager hinterlegen, sonst sperrt Meta den Versand nach der Testphase.
 
 ## 2. Dauerhaften Zugangsschlüssel anlegen
 

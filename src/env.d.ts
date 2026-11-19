@@ -31,6 +31,9 @@ declare namespace Cloudflare {
     WHATSAPP_KI_TAGESLIMIT?: string;
     WHATSAPP_TEAM_EMAIL?: string;
     WHATSAPP_KI_MODELL?: string;
+    /** Für /app/whatsapp/coexistence (Embedded Signup), nicht geheim */
+    WHATSAPP_APP_ID?: string;
+    WHATSAPP_EMBEDDED_CONFIG_ID?: string;
     ANTHROPIC_API_KEY?: string;
     /** Workers AI, für Sprachnachrichten (Whisper) */
     AI?: Ai;

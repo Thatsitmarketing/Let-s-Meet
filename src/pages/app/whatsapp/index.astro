@@ -18,6 +18,11 @@ const wann = (iso: string | null) => (iso ? `${formatDatumMittel(iso, tz)}, ${fo
 const pilleArt = (s: Gespraech['status']) => (s === 'gebucht' ? 'pille--erfolg' : s === 'anrufen' || s === 'mensch' ? 'pille--fehler' : '');
 ---
 <App titel="WhatsApp Bot" eyebrow="Leads der Landingpage Website-Entwurf">
+  <Fragment slot="aktionen">
+    {Astro.locals.nutzer!.rolle === 'admin' && (
+      <a class="knopf knopf--rahmen knopf--klein" href="/app/whatsapp/coexistence"><Icon name="stecker" groesse={16} />Firmennummer verbinden</a>
+    )}
+  </Fragment>
   <nav class="filter" aria-label="Nach Status filtern">
     <a href="/app/whatsapp" aria-current={!gueltig ? 'page' : undefined}>Alle <span class="zahl">{[...anzahl.values()].reduce((a, b) => a + b, 0)}</span></a>
     {(Object.keys(STATUS_TEXT) as Gespraech['status'][]).map((s) => (
