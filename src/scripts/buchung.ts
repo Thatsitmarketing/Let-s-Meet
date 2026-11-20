@@ -468,7 +468,7 @@ export function starteBuchung() {
       }
       if (turnstileId && window.turnstile) window.turnstile.reset(turnstileId);
     } catch {
-      formFehler.textContent = 'Keine Verbindung. Bitte prüf dein Internet und versuch es noch einmal. Alternativ erreichst du uns unter 0209 36660644.';
+      formFehler.textContent = 'Keine Verbindung. Bitte prüf dein Internet und versuch es noch einmal. Alternativ erreichst du uns unter 0209 51303350.';
       formFehler.hidden = false;
     } finally {
       absenden.dataset.laedt = 'false';

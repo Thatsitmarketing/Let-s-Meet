@@ -117,7 +117,7 @@ export const vorlageVariante = (ausloeser: Ausloeser, versatz: number) =>
   ausloeser === 'vor_beginn' ? (versatz <= KURZ_BIS_MIN ? 'kurz' : 'lang') : '';
 
 const GRUSS = "Dein Team von That's it. Marketing";
-const TEL = '0209 36660644';
+const TEL = '0209 51303350';
 
 /**
  * Vorschlag für Betreff, Überschrift und Text, je nach Auslöser, Empfänger und bei Erinnerungen nach Zeitpunkt.

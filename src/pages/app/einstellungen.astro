@@ -8,12 +8,11 @@ import { ausfuehren, eins, jetztIso } from '../../lib/db';
 import { emailGueltig, trimmen, urlGueltig } from '../../lib/eingabe';
 import { slugPruefen } from '../../lib/konten';
 import { meldungAusUrl } from '../../lib/meldungen';
-import { STANDARD_BEGRUESSUNG } from '../../lib/marke';
 
 const nutzer = Astro.locals.nutzer!;
 const gastgeber = Astro.locals.gastgeber!;
 const istAdmin = nutzer.rolle === 'admin';
-const b = { name: gastgeber.name, begruessung: gastgeber.begruessung ?? '' };
+const b = { name: gastgeber.name };
 const fehler: Record<string, string> = {};
 const w = { name: nutzer.name, email: nutzer.email, slug: nutzer.slug, position: nutzer.position ?? '', begruessung: nutzer.begruessung ?? '', avatar_url: nutzer.avatar_url ?? '' };
 
@@ -46,10 +45,9 @@ if (Astro.request.method === 'POST') {
   }
   if (aktion === 'buero' && istAdmin) {
     b.name = trimmen(form.get('buero_name'), 120);
-    b.begruessung = trimmen(form.get('buero_begruessung'), 1000);
     if (b.name.length < 2) fehler.buero_name = 'Bitte gib einen Namen an.';
     if (!Object.keys(fehler).length) {
-      await ausfuehren('UPDATE nutzer SET name = ?, begruessung = ?, aktualisiert_am = ? WHERE id = ?', b.name, b.begruessung || null, jetztIso(), gastgeber.id);
+      await ausfuehren('UPDATE nutzer SET name = ?, aktualisiert_am = ? WHERE id = ?', b.name, jetztIso(), gastgeber.id);
       return Astro.redirect('/app/einstellungen?ok=gespeichert');
     }
   }
@@ -77,10 +75,6 @@ const ff = (n: string) => (fehler[n] ? { 'aria-invalid': 'true' as const, 'aria-
           <label for="buero_name">Name als Gastgeber in Mails und Kalender</label>
           <input id="buero_name" name="buero_name" class="eingabe" value={b.name} required maxlength="120" {...ff('buero_name')} />
           {fehler.buero_name && <p class="fehlertext" id="fehler-buero_name">{fehler.buero_name}</p>}
-        </div>
-        <div class="feld">
-          <label for="buero_begruessung">Text unter „Lass uns reden.“<span class="leise"> (optional)</span></label>
-          <textarea id="buero_begruessung" name="buero_begruessung" class="textfeld" maxlength="1000" placeholder={STANDARD_BEGRUESSUNG}>{b.begruessung}</textarea>
         </div>
         <div><button type="submit" class="knopf knopf--orange">Buchungsseite speichern</button></div>
       </form>
