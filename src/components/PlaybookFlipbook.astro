@@ -5,8 +5,9 @@
  * erweitert auf beliebig viele Seiten und Querformat.
  *
  * Modell wie dort: Blätter mit Vorder- und Rückseite, umgeschlagene Blätter stehen auf
- * rotateY(-180deg). Hochformat zeigt ab 560 Pixeln Bühnenbreite eine Doppelseite, Querformat
- * (die Playbooks sind Folien 16 zu 9) immer eine Seite mit halber Drehung beim Blättern.
+ * rotateY(-180deg). Seit 2026-11-20 zeigt jedes Playbook immer eine Seite mit halber Drehung beim
+ * Blättern, Querformat (Folien 16 zu 9) wie Hochformat (Website Conversion Playbook), damit alle
+ * Playbooks gleich aussehen. Die Doppelseite ist im Code noch vorhanden, wird aber nicht mehr genutzt.
  *
  * Die Seitenbilder kommen einzeln über /playbook/{id}/seite/{nr} (nur mit gültigem Link) und
  * werden erst in der Nähe der aktuellen Seite geladen, damit beim Öffnen nicht alle 50 Seiten
@@ -228,7 +229,7 @@ const quelle = (nr: number) => `/playbook/${id}/seite/${nr + 1}`;
   .flipbook__vollbild[hidden] { display: none; }
   .flipbook__vollbild:hover, .flipbook__sprung select:hover { border-color: var(--farbe-akzent); }
 
-  /* Eine Seite: Querformat immer, Hochformat auf schmaler Bühne */
+  /* Eine Seite: jedes Playbook, Querformat wie Hochformat */
   .flipbook__buch[data-modus='einzeln'] {
     inline-size: min(100%, calc(var(--buch-hoehe) * var(--verhaeltnis)));
     aspect-ratio: var(--verhaeltnis);
@@ -290,8 +291,6 @@ const quelle = (nr: number) => `/playbook/${id}/seite/${nr + 1}`;
 
 <script>
   const FLIP_DAUER = 760;
-  /* Doppelseite nur im Hochformat und ab dieser Bühnenbreite */
-  const DOPPELSEITE_AB = 560;
   /* So viele Seiten um die aktuelle herum werden vorab geladen */
   const VORLADEN = 3;
 
@@ -301,7 +300,6 @@ const quelle = (nr: number) => `/playbook/${id}/seite/${nr + 1}`;
     if (!buehne || !buch) return;
     wurzel.dataset.bereit = '';
 
-    const quer = wurzel.hasAttribute('data-quer');
     const blaetter = Array.from(buch.querySelectorAll<HTMLElement>('[data-flipbook-blatt]'));
     const flaechen = Array.from(buch.querySelectorAll<HTMLElement>('[data-flipbook-seite]'));
     const zaehler = wurzel.querySelector<HTMLElement>('[data-flipbook-zaehler]');
@@ -450,9 +448,9 @@ const quelle = (nr: number) => `/playbook/${id}/seite/${nr + 1}`;
       blaettere(x < 0 ? 1 : -1);
     }, { passive: true });
 
-    /* Modus nach Bühnenbreite, Querformat bleibt immer bei einer Seite */
-    const pruefeModus = (breite: number) => {
-      const neuEinzeln = quer || breite < DOPPELSEITE_AB;
+    /* Immer eine Seite (Kundenwunsch 2026-11-20: alle Playbooks einheitlich, ohne Bund in der Mitte) */
+    const pruefeModus = (_breite: number) => {
+      const neuEinzeln = true;
       if (neuEinzeln === einzeln) return;
       const seite = aktuelleSeite();
       einzeln = neuEinzeln;
