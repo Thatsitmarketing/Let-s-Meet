@@ -1,0 +1,182 @@
+---
+// Verbindet die Firmennummer per Embedded Signup mit der WhatsApp Cloud API, ohne dass sie aus
+// der WhatsApp Business App verschwindet (Coexistence). Der normale Weg im Meta Dashboard
+// (API Setup, Telefonnummer hinzufügen) bietet dafür keine Option, nur SMS oder Anruf, und das
+// würde die Nummer aus der App nehmen. Siehe docs/whatsapp-bot.md, Abschnitt "Coexistence".
+import { env } from 'cloudflare:workers';
+import App from '../../../layouts/App.astro';
+import Icon from '../../../components/ui/Icon.astro';
+
+if (Astro.locals.nutzer!.rolle !== 'admin') return Astro.redirect('/app/whatsapp');
+
+const appId = env.WHATSAPP_APP_ID?.trim() || '';
+const configId = env.WHATSAPP_EMBEDDED_CONFIG_ID?.trim() || '';
+const apiVersion = (env.WHATSAPP_API_VERSION || 'v24.0').trim();
+const bereit = Boolean(appId && configId && env.WHATSAPP_APP_SECRET?.trim());
+---
+<App titel="Firmennummer verbinden" eyebrow="WhatsApp Bot, Coexistence per Embedded Signup">
+  {!bereit && (
+    <p class="hinweis hinweis--fehler">
+      <Icon name="warnung" />
+      WHATSAPP_APP_ID, WHATSAPP_EMBEDDED_CONFIG_ID oder WHATSAPP_APP_SECRET fehlen im Worker. Ohne alle drei kann diese Seite nicht verbinden.
+    </p>
+  )}
+
+  <section class="karte block">
+    <h2>Was hier passiert</h2>
+    <p>
+      Die Firmennummer <strong>+49 174 1693213</strong> läuft bisher nur in der normalen WhatsApp Business App am Firmenhandy.
+      Dieser Knopf verbindet sie zusätzlich mit der Cloud API, damit der WhatsApp Bot über sie schreiben kann, ohne dass sie aus der App verschwindet.
+      Das Team kann danach weiter ganz normal am Handy schreiben, der Bot läuft parallel.
+    </p>
+    <p class="leise klein">
+      Dafür öffnet sich ein Fenster von Meta. Dort die Option wählen, eine bestehende Nummer aus der WhatsApp Business App zu übernehmen, und am Firmenhandy in der App den QR Code bestätigen.
+      Wichtig: dabei nicht den Weg über SMS oder Anruf wählen, der nimmt die Nummer aus der App.
+    </p>
+  </section>
+
+  <section class="karte block">
+    <h2>Verbinden</h2>
+    <button type="button" id="verbinden-knopf" class="knopf knopf--orange" disabled={!bereit}>
+      <Icon name="stecker" />WhatsApp Firmennummer verbinden
+    </button>
+    <p id="status" class="hinweis status" hidden></p>
+    <pre id="ergebnis" class="ergebnis" hidden></pre>
+  </section>
+</App>
+
+<div id="fb-root"></div>
+
+<script define:vars={{ appId, configId, apiVersion }}>
+  // Facebook SDK for JavaScript laden und initialisieren (Standardablauf von Meta)
+  window.fbAsyncInit = function () {
+    window.FB.init({ appId, autoLogAppEvents: true, xfbml: false, version: apiVersion });
+  };
+  (function (d) {
+    if (d.getElementById('facebook-jssdk')) return;
+    const js = d.createElement('script');
+    js.id = 'facebook-jssdk';
+    js.src = 'https://connect.facebook.net/de_DE/sdk.js';
+    js.async = true;
+    js.defer = true;
+    js.crossOrigin = 'anonymous';
+    d.body.appendChild(js);
+  })(document);
+
+  const knopf = document.getElementById('verbinden-knopf');
+  const status = document.getElementById('status');
+  const ergebnis = document.getElementById('ergebnis');
+  // Zwischenspeicher für die IDs aus dem postMessage Ereignis, bis der Code aus FB.login dazukommt
+  let letzteDaten = null;
+
+  function zeige(text, art) {
+    status.textContent = text;
+    status.className = 'hinweis status' + (art ? ' hinweis--' + art : '');
+    status.hidden = false;
+  }
+
+  // Meta meldet den Fortschritt im Popup über ein postMessage Ereignis an dieses Fenster
+  window.addEventListener('message', (event) => {
+    if (!event.origin.endsWith('facebook.com')) return;
+    let data;
+    try {
+      data = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+    if (!data || data.type !== 'WA_EMBEDDED_SIGNUP') return;
+
+    if (data.event === 'ERROR') {
+      zeige(`Meta meldet einen Fehler: ${data.data?.error_message ?? 'unbekannt'} (Code ${data.data?.error_code ?? '?'})`, 'fehler');
+      return;
+    }
+    if (data.event === 'CANCEL') {
+      zeige(`Abgebrochen beim Schritt "${data.data?.current_step ?? '?'}". Du kannst jederzeit neu starten.`, '');
+      return;
+    }
+    // FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING = Coexistence, FINISH = Nummer direkt neu bei der Cloud API angelegt
+    letzteDaten = { ...data.data, ereignis: data.event };
+    const was = data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'
+      ? 'Firmennummer aus der WhatsApp Business App erkannt (Coexistence)'
+      : data.event === 'FINISH'
+        ? 'Achtung: Meta hat eine neue Nummer bei der Cloud API angelegt, nicht die bestehende aus der App übernommen'
+        : data.event;
+    zeige(`${was}. Jetzt im Fenster auf "Fertig" klicken oder es schließen.`, 'erfolg');
+  });
+
+  // Antwort von FB.login selbst: liefert den Code, der server seitig eingetauscht wird
+  function fbLoginCallback(response) {
+    if (!response || !response.authResponse) {
+      zeige('Abgebrochen oder keine Freigabe erteilt.', '');
+      return;
+    }
+    const code = response.authResponse.code;
+    knopf.disabled = true;
+    zeige('Verbindung wird abgeschlossen …', '');
+    fetch('/api/app/whatsapp/onboarding', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        code,
+        waba_id: letzteDaten?.waba_id ?? '',
+        phone_number_id: letzteDaten?.phone_number_id ?? '',
+        business_id: letzteDaten?.business_id ?? '',
+      }),
+    })
+      .then((res) => res.json().then((d) => ({ ok: res.ok, d })))
+      .then(({ ok, d }) => {
+        knopf.disabled = false;
+        if (!ok) {
+          zeige(d.fehler ?? 'Fehler bei der Einrichtung.', 'fehler');
+          return;
+        }
+        zeige(
+          `Verbunden. WABA ID ${d.waba_id ?? '–'}, Phone Number ID ${d.phone_number_id ?? '–'}.` +
+            (d.abonniert ? ' Der Webhook ist für diese Nummer angemeldet.' : ' Die Webhook Anmeldung hat nicht geklappt, siehe unten.'),
+          'erfolg',
+        );
+        ergebnis.hidden = false;
+        ergebnis.textContent = JSON.stringify(d, null, 2);
+      })
+      .catch(() => {
+        knopf.disabled = false;
+        zeige('Keine Verbindung zum Server. Bitte noch einmal versuchen.', 'fehler');
+      });
+  }
+
+  knopf?.addEventListener('click', () => {
+    if (typeof window.FB === 'undefined') {
+      zeige('Facebook SDK lädt noch, bitte kurz warten und noch einmal klicken.', '');
+      return;
+    }
+    letzteDaten = null;
+    ergebnis.hidden = true;
+    zeige('Fenster bei Meta wird geöffnet …', '');
+    window.FB.login(fbLoginCallback, {
+      config_id: configId,
+      response_type: 'code',
+      override_default_response_type: true,
+      extras: {
+        setup: {},
+        // Ohne diese beiden Felder zeigt Meta nicht die Option, eine bestehende Nummer aus der
+        // WhatsApp Business App zu übernehmen. sessionInfoVersion "3" ist der Stand aus Metas
+        // eigenem Beispiel für genau diesen Ablauf (Stand November 2026, siehe docs/whatsapp-bot.md).
+        // Zeigt das Fenster die Coexistence Option trotzdem nicht, zuerst hier sessionInfoVersion
+        // entfernen, Meta kann die Facebook Login Konfiguration inzwischen auf eine neuere Version
+        // gestellt haben, die die Version selbst wählt.
+        featureType: 'whatsapp_business_app_onboarding',
+        sessionInfoVersion: '3',
+      },
+    });
+  });
+</script>
+
+<style>
+  .block { max-width: 760px; display: grid; gap: var(--raum-3); margin-bottom: var(--raum-6); }
+  .block h2 { font-size: var(--text-lg); margin: 0; }
+  .status { margin: 0; }
+  .ergebnis {
+    margin: 0; padding: var(--raum-3); background: var(--n-050); border: 1px solid var(--n-200);
+    font-size: var(--text-sm); white-space: pre-wrap; word-break: break-word;
+  }
+</style>

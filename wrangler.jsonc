@@ -23,11 +23,20 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Workers AI wandelt Sprachnachrichten im WhatsApp Bot in Text um (Whisper)
+  "ai": { "binding": "AI" },
   // Erinnerungsmails und Löschfristen laufen alle 10 Minuten
   "triggers": { "crons": ["*/10 * * * *"] },
   "vars": {
     "SITE_URL": "https://letsmeet.thatsit.marketing",
     "MAIL_FROM": "That's it. Marketing <termine@thatsit.marketing>",
-    "MAIL_REPLY_TO": "info@thatsit.marketing"
+    "MAIL_REPLY_TO": "info@thatsit.marketing",
+    // WhatsApp Bot: Terminart, auf die gebucht wird, und Postfach für "bitte anrufen"
+    "WHATSAPP_TERMINART": "strategiegespraech-webseite",
+    "WHATSAPP_TEAM_EMAIL": "info@thatsit.marketing",
+    // Meta App ID und Facebook Login for Business Konfiguration für /app/whatsapp/coexistence
+    // (Embedded Signup). Beides steht ohnehin öffentlich im Browser, deshalb var statt Secret
+    "WHATSAPP_APP_ID": "1487419926588956",
+    "WHATSAPP_EMBEDDED_CONFIG_ID": "1919227586182298"
   }
 }

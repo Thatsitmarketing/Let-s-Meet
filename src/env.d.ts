@@ -20,6 +20,24 @@ declare namespace Cloudflare {
     /** Close Automat (thatsit-close-automat), siehe src/lib/crm.ts */
     CRM_WEBHOOK_URL?: string;
     CRM_WEBHOOK_SECRET?: string;
+    /** WhatsApp Bot, siehe docs/whatsapp-bot.md */
+    WHATSAPP_TOKEN?: string;
+    WHATSAPP_PHONE_NUMBER_ID?: string;
+    WHATSAPP_APP_SECRET?: string;
+    WHATSAPP_VERIFY_TOKEN?: string;
+    WHATSAPP_LEAD_SCHLUESSEL?: string;
+    WHATSAPP_API_VERSION?: string;
+    WHATSAPP_VORLAGEN_SPRACHE?: string;
+    WHATSAPP_TERMINART?: string;
+    WHATSAPP_KI_TAGESLIMIT?: string;
+    WHATSAPP_TEAM_EMAIL?: string;
+    WHATSAPP_KI_MODELL?: string;
+    /** Für /app/whatsapp/coexistence (Embedded Signup), nicht geheim */
+    WHATSAPP_APP_ID?: string;
+    WHATSAPP_EMBEDDED_CONFIG_ID?: string;
+    ANTHROPIC_API_KEY?: string;
+    /** Workers AI, für Sprachnachrichten (Whisper) */
+    AI?: Ai;
     GOOGLE_CLIENT_ID?: string;
     GOOGLE_CLIENT_SECRET?: string;
   }
