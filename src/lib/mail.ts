@@ -18,7 +18,7 @@ const MARKE = {
   grau: '#6E6E6E',
   linie: '#E5E5E3',
   flaeche: '#F2F2EF',
-  telefon: '0209 36660644',
+  telefon: '0209 51303350',
   email: 'info@thatsit.marketing',
   web: 'thatsit.marketing',
 };

@@ -2,7 +2,7 @@
 /*
  * Zentrale Buchung über das Büro: links Details zum Termin, rechts Kalender, Zeiten und Formular.
  * Genutzt von / und /{terminart}.
- * Außerhalb des Embed Modus liegt darüber ein Kopfbereich auf dem Bürofoto.
+ * Außerhalb des Embed Modus steht darüber nur das Logo (Oeffentlich.astro), keine Überschrift (seit 2026-11-20).
  * Mobil (bis 860px) läuft die Buchung in drei Schritten ohne sichtbare Schrittanzeige (data-schritt am Wurzelelement):
  * tag (Infos und Kalender), zeit (nur die Zeiten des Tages), daten (Übersicht und Formular).
  * Bis 1180px (Infos über dem Kalender) ist die Beschreibung auf drei Zeilen gekürzt („Mehr anzeigen“), damit der Kalender früh sichtbar ist.
@@ -12,7 +12,7 @@ import Icon from './ui/Icon.astro';
 import OrtIcon from './OrtIcon.astro';
 import GespraechTitel from './GespraechTitel.astro';
 import { buchungNachId, fragenLesen } from '../lib/abfragen';
-import { KONTAKT, STANDARD_BEGRUESSUNG } from '../lib/marke';
+import { KONTAKT } from '../lib/marke';
 import { ORT_LABEL, type Nutzer, type Terminart } from '../lib/typen';
 import { formatDatumLang, formatSpanne } from '../lib/zeit';
 
@@ -64,14 +64,7 @@ const absaetze = (terminart.beschreibung ?? '')
       : { titel: '', liste: null, text: zeilen.join('\n') },
   );
 ---
-{!embed && (
-  <section class="held dunkel" aria-labelledby="held-titel">
-    <div class="held-titel">
-      <h1 id="held-titel">Lass uns reden<span class="punkt">.</span></h1>
-    </div>
-    <p class="unterzeile">{gastgeber.begruessung || STANDARD_BEGRUESSUNG}</p>
-  </section>
-)}
+<h1 class="sr-only">{terminart.titel} buchen</h1>
 
 <div class:list={['buchung', 'karte', { 'ohne-details': !detailsZeigen, embed }]} id="buchung" data-schritt="tag" data-konfig={JSON.stringify(konfig)}>
   <div class="bereich">
@@ -227,19 +220,6 @@ const absaetze = (terminart.beschreibung ?? '')
 </script>
 
 <style>
-  /* Kopfbereich auf dem Bürofoto */
-  .held {
-    display: grid;
-    justify-items: center;
-    text-align: center;
-    gap: var(--raum-3);
-    margin: 0 auto var(--raum-6);
-    color: var(--farbe-papier);
-  }
-  .held-titel { display: grid; gap: var(--raum-3); justify-items: center; }
-  .held h1 { font-size: clamp(2.25rem, 1.4rem + 3vw, 3.5rem); color: var(--farbe-papier); }
-  .unterzeile { font-size: var(--text-base); color: rgba(255, 255, 255, 0.82); max-width: 40rem; }
-
   .buchung {
     width: 100%;
     max-width: 1240px;
@@ -280,9 +260,10 @@ const absaetze = (terminart.beschreibung ?? '')
   .kal-nav:hover:not(:disabled) { border-color: var(--n-900); }
   .kal-nav:disabled { opacity: 0.35; cursor: not-allowed; }
   .kal-wochentage, .kal-tage { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  /* Wochentage in derselben Schrift wie der Monatstitel, nur der Anfangsbuchstabe groß */
   .kal-wochentage span {
-    text-align: center; font-family: var(--schrift-label); font-weight: 500; font-size: 0.875rem;
-    letter-spacing: 0.2em; text-transform: uppercase; color: var(--farbe-text-leise); padding-bottom: var(--raum-2);
+    text-align: center; font-family: var(--schrift-text); font-weight: 600; font-size: var(--text-sm);
+    letter-spacing: 0; text-transform: none; color: var(--farbe-text-leise); padding-bottom: var(--raum-2);
   }
   .kal-tage { min-height: 240px; }
   .kal-tage[data-laedt='true'] { opacity: 0.5; }
@@ -291,11 +272,15 @@ const absaetze = (terminart.beschreibung ?? '')
     font: inherit; font-size: var(--text-sm); border: 0; background: transparent; color: var(--n-400);
     border-radius: var(--radius-s);
   }
-  .kal-tage :global(.tag.frei) { background: var(--n-100); color: var(--n-900); font-weight: 700; cursor: pointer; }
-  .kal-tage :global(.tag.frei:hover) { background: var(--n-900); color: var(--farbe-papier); }
-  .kal-tage :global(.tag[aria-pressed='true']) { background: var(--n-900); color: var(--farbe-papier); }
+  /* Freie Tage leicht grün (Erfolgsfarbe), beim Überfahren und ausgewählt kräftig grün */
+  .kal-tage :global(.tag.frei) {
+    background: var(--farbe-erfolg-flaeche); color: var(--farbe-erfolg-text); font-weight: 700; cursor: pointer;
+    transition: background var(--dauer-schnell) var(--kurve), color var(--dauer-schnell) var(--kurve);
+  }
+  .kal-tage :global(.tag.frei:hover),
+  .kal-tage :global(.tag[aria-pressed='true']) { background: var(--farbe-erfolg); color: var(--farbe-papier); }
   .kal-tage :global(.tag[aria-pressed='true']::after) {
-    content: ''; position: absolute; bottom: 4px; width: 5px; height: 5px; background: var(--farbe-akzent);
+    content: ''; position: absolute; bottom: 4px; width: 5px; height: 5px; background: var(--farbe-papier);
   }
   .kal-tage :global(.tag.heute:not([aria-pressed='true'])::before) {
     content: ''; position: absolute; bottom: 4px; width: 4px; height: 4px; background: currentColor;
@@ -402,9 +387,6 @@ const absaetze = (terminart.beschreibung ?? '')
     .zeiten-liste :global(.zeit) { min-height: 52px; font-size: var(--text-base); }
   }
   @media (max-width: 860px) {
-    .held { margin-bottom: var(--raum-4); gap: var(--raum-1); }
-    .held h1 { font-size: clamp(1.75rem, 1.1rem + 3.5vw, 2.5rem); }
-    .unterzeile { font-size: var(--text-sm); line-height: 1.45; }
     .bereich, .info { padding: var(--raum-6); }
     .info { gap: var(--raum-4); }
     .info-block { gap: var(--raum-2); }
