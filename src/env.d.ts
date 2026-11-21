@@ -35,6 +35,8 @@ declare namespace Cloudflare {
     /** Für /app/whatsapp/coexistence (Embedded Signup), nicht geheim */
     WHATSAPP_APP_ID?: string;
     WHATSAPP_EMBEDDED_CONFIG_ID?: string;
+    /** WhatsApp Business Konto für /app/whatsapp/vorlagen, nicht geheim */
+    WHATSAPP_WABA_ID?: string;
     ANTHROPIC_API_KEY?: string;
     /** Workers AI, für Sprachnachrichten (Whisper) */
     AI?: Ai;

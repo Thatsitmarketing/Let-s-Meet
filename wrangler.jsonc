@@ -37,6 +37,9 @@
     // Meta App ID und Facebook Login for Business Konfiguration für /app/whatsapp/coexistence
     // (Embedded Signup). Beides steht ohnehin öffentlich im Browser, deshalb var statt Secret
     "WHATSAPP_APP_ID": "1487419926588956",
-    "WHATSAPP_EMBEDDED_CONFIG_ID": "1919227586182298"
+    "WHATSAPP_EMBEDDED_CONFIG_ID": "1919227586182298",
+    // WhatsApp Business Konto (WABA) für /app/whatsapp/vorlagen. Derzeit das Testkonto der App,
+    // nach dem Verbinden der Firmennummer auf deren WABA ID umstellen (zeigt /app/whatsapp/coexistence)
+    "WHATSAPP_WABA_ID": "28262667900101120"
   }
 }

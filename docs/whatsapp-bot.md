@@ -46,7 +46,9 @@ Danach noch zu tun, damit der Bot wirklich läuft:
 
 ## 3. Vorlagen einreichen
 
-WhatsApp Manager, Nachrichtenvorlagen, „Vorlage erstellen“. Kategorie **Marketing**, Sprache **Deutsch (de)**. Name und Text genau so übernehmen, Variablen als `{{1}}`, `{{2}}`. Knöpfe als **Schnellantwort** in genau dieser Reihenfolge.
+**Seit 2026-11-21 per Knopf:** Backoffice, WhatsApp Bot, „Vorlagen“ (`/app/whatsapp/vorlagen`, nur Admins). Die Seite reicht alle vier Vorlagen über die Graph API (`POST /{waba-id}/message_templates`) bei Meta ein und zeigt ihren Status. Text und Knöpfe kommen direkt aus `TEXTE` in `bot.ts`, es wird also genau eingereicht, was der Bot sendet. Konto ist `WHATSAPP_WABA_ID` (derzeit das Testkonto), auf der Seite überschreibbar. Braucht `WHATSAPP_TOKEN` mit `whatsapp_business_management`. Die Seite ist auch das Video für die App Review dieser Berechtigung.
+
+Von Hand geht es weiter so: WhatsApp Manager, Nachrichtenvorlagen, „Vorlage erstellen“. Kategorie **Marketing**, Sprache **Deutsch (de)**. Name und Text genau so übernehmen, Variablen als `{{1}}`, `{{2}}`. Knöpfe als **Schnellantwort** in genau dieser Reihenfolge.
 
 **entwurf_start_website**
 
