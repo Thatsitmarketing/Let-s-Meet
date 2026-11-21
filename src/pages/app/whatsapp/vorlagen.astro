@@ -1,0 +1,173 @@
+---
+// Nachrichtenvorlagen des WhatsApp Bots bei Meta einreichen und ihren Status sehen.
+// Texte und Namen kommen aus bot.ts (über lib/whatsapp/vorlagen.ts), damit bei Meta genau das
+// eingereicht wird, was der Bot später sendet. Nur Admins.
+import App from '../../../layouts/App.astro';
+import Icon from '../../../components/ui/Icon.astro';
+import {
+  STATUS_TEXT,
+  VORLAGEN_DEFINITION,
+  textGleich,
+  vorlageEinreichen,
+  vorlagenLaden,
+  wabaGueltig,
+  wabaStandard,
+  type MetaVorlage,
+} from '../../../lib/whatsapp/vorlagen';
+
+if (Astro.locals.nutzer!.rolle !== 'admin') return Astro.redirect('/app/whatsapp');
+
+const url = Astro.url;
+let waba = (url.searchParams.get('waba') ?? '').trim() || wabaStandard();
+const meldungen: { art: 'erfolg' | 'fehler'; text: string }[] = [];
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  waba = String(form.get('waba') ?? '').trim() || waba;
+  const aktion = String(form.get('aktion') ?? '');
+  const namen = aktion === 'alle' ? VORLAGEN_DEFINITION.map((d) => d.name) : [String(form.get('name') ?? '')];
+  if (!wabaGueltig(waba)) {
+    meldungen.push({ art: 'fehler', text: 'Die ID des WhatsApp Kontos ist ungültig, sie besteht nur aus Ziffern.' });
+  } else {
+    let vorhanden: MetaVorlage[] = [];
+    try {
+      vorhanden = await vorlagenLaden(waba);
+    } catch (f) {
+      meldungen.push({ art: 'fehler', text: f instanceof Error ? f.message : String(f) });
+    }
+    for (const name of namen) {
+      const d = VORLAGEN_DEFINITION.find((v) => v.name === name);
+      if (!d) continue;
+      if (aktion === 'alle' && vorhanden.some((v) => v.name === name)) continue;
+      try {
+        const status = await vorlageEinreichen(waba, d);
+        meldungen.push({ art: 'erfolg', text: `${d.name} eingereicht, Status: ${STATUS_TEXT[status] ?? status}.` });
+      } catch (f) {
+        meldungen.push({ art: 'fehler', text: `${d.name}: ${f instanceof Error ? f.message : String(f)}` });
+      }
+    }
+    if (aktion === 'alle' && meldungen.length === 0) {
+      meldungen.push({ art: 'erfolg', text: 'Alle vier Vorlagen liegen schon bei Meta, es war nichts mehr einzureichen.' });
+    }
+  }
+}
+
+let vorlagen: MetaVorlage[] = [];
+let ladeFehler = '';
+if (!wabaGueltig(waba)) {
+  ladeFehler = 'Es ist kein WhatsApp Konto hinterlegt. Bitte unten die ID eintragen (WhatsApp, API Setup, Messaging-Konto-ID).';
+} else {
+  try {
+    vorlagen = await vorlagenLaden(waba);
+  } catch (f) {
+    ladeFehler = f instanceof Error ? f.message : String(f);
+  }
+}
+
+const zeilen = VORLAGEN_DEFINITION.map((d) => {
+  const m = vorlagen.find((v) => v.name === d.name);
+  return { d, m, abweichend: m ? !textGleich(d, m) : false };
+});
+const fehlen = zeilen.filter((z) => !z.m).length;
+const pilleArt = (s: string) =>
+  s === 'APPROVED' ? 'pille--erfolg' : s === 'REJECTED' || s === 'DISABLED' || s === 'PAUSED' ? 'pille--fehler' : '';
+const vorschau = (text: string, beispiele: string[]) => beispiele.reduce((t, b, i) => t.replaceAll(`{{${i + 1}}}`, b), text);
+---
+<App titel="Vorlagen" eyebrow="WhatsApp Bot, Nachrichtenvorlagen bei Meta">
+  <Fragment slot="aktionen">
+    <a class="knopf knopf--rahmen knopf--klein" href="/app/whatsapp"><Icon name="zurueck" groesse={16} />Alle Gespräche</a>
+    <a class="knopf knopf--rahmen knopf--klein" href={`/app/whatsapp/vorlagen${waba ? `?waba=${encodeURIComponent(waba)}` : ''}`}>
+      <Icon name="aktualisieren" groesse={16} />Status aktualisieren
+    </a>
+  </Fragment>
+
+  {meldungen.map((m) => (
+    <p class:list={['hinweis', m.art === 'erfolg' ? 'hinweis--erfolg' : 'hinweis--fehler']}>
+      <Icon name={m.art === 'erfolg' ? 'check' : 'warnung'} />{m.text}
+    </p>
+  ))}
+  {ladeFehler && <p class="hinweis hinweis--fehler"><Icon name="warnung" />{ladeFehler}</p>}
+
+  <section class="karte block">
+    <h2>So funktioniert es</h2>
+    <p>
+      Die erste Nachricht des Bots, das Nachfassen und die Erinnerung am Vortag sind Vorlagen. Meta muss jede davon prüfen und freigeben,
+      bevor der Bot sie senden darf. Die Prüfung dauert meist Minuten bis wenige Stunden. Text und Knöpfe kommen direkt aus dem Code des Bots,
+      eingereicht wird also genau das, was der Bot später schickt.
+    </p>
+    <form method="post" class="konto">
+      <div class="feld">
+        <label for="waba">WhatsApp Konto (WABA ID)</label>
+        <input id="waba" class="eingabe" name="waba" value={waba} inputmode="numeric" pattern="[0-9]{5,30}" required />
+      </div>
+      <button type="submit" name="aktion" value="alle" class="knopf knopf--orange" disabled={fehlen === 0 && !ladeFehler}>
+        <Icon name="upload" />{fehlen > 0 ? `${fehlen === 4 ? 'Alle vier' : `${fehlen} fehlende`} Vorlagen einreichen` : 'Alle eingereicht'}
+      </button>
+    </form>
+    <p class="leise klein">Standard ist {wabaStandard() || 'nicht gesetzt'} (Variable WHATSAPP_WABA_ID). Nach dem Verbinden der Firmennummer hier deren Konto eintragen.</p>
+  </section>
+
+  <ul class="liste">
+    {zeilen.map(({ d, m, abweichend }) => (
+      <li class="karte vorlage">
+        <div class="kopf">
+          <div>
+            <h3><code>{d.name}</code></h3>
+            <p class="leise klein">{d.zweck} · {d.kategorie === 'MARKETING' ? 'Marketing' : 'Utility'} · Deutsch</p>
+          </div>
+          {m ? (
+            <span class:list={['pille', pilleArt(m.status)]}>{STATUS_TEXT[m.status] ?? m.status}</span>
+          ) : (
+            <span class="pille">Nicht eingereicht</span>
+          )}
+        </div>
+        <div class="blase">
+          <p>{vorschau(d.text, d.beispiele)}</p>
+          {d.knoepfe.length > 0 && (
+            <div class="knoepfe">{d.knoepfe.map((k) => <span>{k}</span>)}</div>
+          )}
+        </div>
+        <p class="leise klein">Beispielwerte für Meta: {d.beispiele.map((b, i) => `{{${i + 1}}} = ${b}`).join(', ')}</p>
+        {m?.rejected_reason && m.rejected_reason !== 'NONE' && (
+          <p class="hinweis hinweis--fehler"><Icon name="warnung" />Abgelehnt: {m.rejected_reason}</p>
+        )}
+        {abweichend && (
+          <p class="hinweis hinweis--akzent">
+            <Icon name="info" />Der Text bei Meta weicht vom Code ab. Eine eingereichte Vorlage lässt sich unter demselben Namen nicht neu einreichen:
+            im WhatsApp Manager bearbeiten oder löschen und danach hier erneut einreichen.
+          </p>
+        )}
+        {!m && !ladeFehler && (
+          <form method="post">
+            <input type="hidden" name="waba" value={waba} />
+            <input type="hidden" name="name" value={d.name} />
+            <button type="submit" name="aktion" value="einreichen" class="knopf knopf--rahmen knopf--klein">
+              <Icon name="upload" groesse={16} />Diese Vorlage einreichen
+            </button>
+          </form>
+        )}
+      </li>
+    ))}
+  </ul>
+</App>
+
+<style>
+  .block { padding: var(--raum-6); max-width: 1200px; margin-bottom: var(--raum-6); display: grid; gap: var(--raum-4); }
+  .block h2 { margin: 0; }
+  .block p { margin: 0; max-width: 72ch; }
+  .konto { display: flex; flex-wrap: wrap; gap: var(--raum-4); align-items: end; }
+  .konto .feld { min-width: min(100%, 18rem); }
+  .liste { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--raum-4); max-width: 1200px; }
+  .vorlage { padding: var(--raum-6); display: grid; gap: var(--raum-4); }
+  .vorlage > * { margin: 0; }
+  .kopf { display: flex; justify-content: space-between; gap: var(--raum-4); align-items: start; }
+  .kopf h3 { margin: 0 0 var(--raum-1); font-size: var(--text-h4); }
+  .kopf p { margin: 0; }
+  .blase { background: var(--farbe-erfolg-flaeche); border-radius: var(--radius-m); padding: var(--raum-4); max-width: 34rem; color: var(--farbe-text); }
+  .blase p { margin: 0; white-space: pre-line; }
+  .knoepfe { display: grid; gap: var(--raum-1); margin-top: var(--raum-3); }
+  .knoepfe span { background: var(--farbe-papier); border-radius: var(--radius-m); padding: var(--raum-2); text-align: center; color: var(--farbe-info); font-weight: 600; font-size: var(--text-sm); }
+  @media (max-width: 600px) {
+    .kopf { flex-direction: column; }
+  }
+</style>
