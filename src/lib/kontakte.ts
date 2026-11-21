@@ -289,6 +289,9 @@ export async function kontaktSpeichern(nutzerId: string, w: KontaktWerte, id?: s
 export async function kontaktEntfernen(nutzerId: string, id: string) {
   const k = await eins<Kontakt>('SELECT * FROM kontakte WHERE id = ? AND nutzer_id = ?', id, nutzerId);
   if (!k) return;
+  // Anfragen über Landingpages gehören zur Person und gehen mit ihr. Sonst stünde sie
+  // weiter unter Anfragen, und der Link führte auf einen Kontakt, den es nicht mehr gibt.
+  await ausfuehren('DELETE FROM anfragen WHERE kontakt_id = ? AND nutzer_id = ?', id, nutzerId);
   if (!k.email) {
     await ausfuehren('DELETE FROM kontakte WHERE id = ?', id);
     return;

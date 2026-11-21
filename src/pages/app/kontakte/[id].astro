@@ -203,7 +203,7 @@ const wann = (iso: string) => `${formatDatumMittel(iso, tz)}, ${formatZeit(iso, 
 
       <section class="karte block" aria-labelledby="k-entfernen">
         <h2 id="k-entfernen" class="klein-titel">Kontakt entfernen</h2>
-        <p class="leise klein">Entfernt den Kontakt aus der Liste. Buchungen bleiben erhalten. Bucht die Person erneut, steht sie wieder im Kontaktbuch.</p>
+        <p class="leise klein">Entfernt den Kontakt aus der Liste, seine Anfragen über Landingpages werden gelöscht. Buchungen bleiben erhalten. Bucht die Person erneut, steht sie wieder im Kontaktbuch.</p>
         <form method="post" data-rueckfrage={`${kontakt.name} wirklich aus dem Kontaktbuch entfernen?`}>
           <input type="hidden" name="aktion" value="entfernen" />
           <button class="knopf knopf--gefahr knopf--breit" type="submit"><Icon name="loeschen" />Entfernen</button>
