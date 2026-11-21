@@ -12,7 +12,7 @@ import { crmMelden } from './crm';
 import { kontaktAusBuchung } from './kontakte';
 import { playbookZugaengeAufraeumen } from './playbooks';
 import { anfragenAufraeumen } from './anfragen';
-import { whatsappImCron } from './whatsapp/bot';
+import { whatsappAufraeumen, whatsappImCron } from './whatsapp/bot';
 import { base64Utf8, mailGastBestaetigung, mailGastgeberNeu, mailSenden, mailStorno, terminDetailsVon } from './mail';
 import { ORT_LABEL, type Buchung, type Nutzer, type Terminart } from './typen';
 import { formatDatumLang } from './zeit';
@@ -328,6 +328,10 @@ export async function cronLauf() {
     console.error('Anfragen aufräumen fehlgeschlagen', fehler);
     return 0;
   });
+  const whatsappGeloescht = await whatsappAufraeumen().catch((fehler) => {
+    console.error('WhatsApp Gespräche aufräumen fehlgeschlagen', fehler);
+    return 0;
+  });
   const whatsapp = await whatsappImCron().catch((fehler) => {
     console.error('WhatsApp Bot im Cron fehlgeschlagen', fehler);
     return null;
@@ -336,5 +340,5 @@ export async function cronLauf() {
     console.error('Google Abgleich im Cron fehlgeschlagen', fehler);
     return null;
   });
-  return { arbeitsablaeufe: ablaeufe, geloescht: geloescht.meta?.changes ?? 0, playbookZugaenge, anfragen, whatsapp, googleTermine: google };
+  return { arbeitsablaeufe: ablaeufe, geloescht: geloescht.meta?.changes ?? 0, playbookZugaenge, anfragen, whatsapp, whatsappGeloescht, googleTermine: google };
 }

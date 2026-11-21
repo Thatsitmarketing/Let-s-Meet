@@ -886,6 +886,49 @@ export async function botPausieren(id: string, pausieren: boolean) {
   else await setzen(id, { status: g.buchung_id ? 'gebucht' : 'offen', nachfass_stufe: 0, team_informiert_am: null });
 }
 
+/** Aufbewahrung der Gespräche: 12 Monate nach dem letzten Kontakt (so steht es in der Datenschutzerklärung). */
+export const WA_AUFBEWAHRUNG_TAGE = 365;
+
+/**
+ * Ein Gespräch löschen. Nach "Stopp" bleibt nur die Telefonnummer mit Status abgemeldet stehen,
+ * alles andere wird geleert, damit diese Nummer nie wieder angeschrieben wird. Sonst geht alles.
+ */
+export async function gespraechLoeschen(id: string) {
+  const g = await gespraech(id);
+  if (!g) return null;
+  await ausfuehren('DELETE FROM wa_nachrichten WHERE gespraech_id = ?', id);
+  if (g.status === 'abgemeldet') {
+    await sperreBehalten(id);
+    return 'gesperrt' as const;
+  }
+  await ausfuehren('DELETE FROM wa_gespraeche WHERE id = ?', id);
+  return 'geloescht' as const;
+}
+
+/** Abgemeldetes Gespräch auf die Sperre reduzieren: nur Telefonnummer, Status und Zeitstempel bleiben. */
+async function sperreBehalten(id: string) {
+  await ausfuehren(
+    `UPDATE wa_gespraeche SET name = 'Abgemeldet', vorname = '', firma = NULL, webseite = NULL, email = NULL, quelle = NULL,
+       hinweise = NULL, problem = NULL, ziel = NULL, zeitpunkt = NULL, budget = NULL, entscheider = NULL, briefing = NULL,
+       angebotene_slots = NULL, buchung_id = NULL, fehler = NULL WHERE id = ?`,
+    id,
+  );
+}
+
+/** Cron: Gespräche 12 Monate nach dem letzten Kontakt löschen, abgemeldete Nummern bleiben als Sperre. */
+export async function whatsappAufraeumen() {
+  const grenze = new Date(Date.now() - WA_AUFBEWAHRUNG_TAGE * 86_400_000).toISOString();
+  const alt = await alle<{ id: string }>(
+    `SELECT id FROM wa_gespraeche
+     WHERE MAX(aktualisiert_am, COALESCE(letzte_eingang_am, ''), COALESCE(letzte_ausgang_am, '')) < ?
+       AND NOT (status = 'abgemeldet' AND name = 'Abgemeldet' AND vorname = '')
+     LIMIT 200`,
+    grenze,
+  );
+  for (const g of alt) await gespraechLoeschen(g.id);
+  return alt.length;
+}
+
 export const STATUS_TEXT: Record<Gespraech['status'], string> = {
   offen: 'Bot im Gespräch',
   gebucht: 'Termin gebucht',
