@@ -124,7 +124,7 @@ App, WhatsApp, Konfiguration:
 * Keine Antwort: nach 3 Stunden `entwurf_nachfass`, nach 24 Stunden Mail ans Team „bitte anrufen“.
 * Mitten im Gespräch still: nach 2 und nach 18 Stunden nachhaken, danach Mail ans Team.
 * Termine: normal frühestens 7 Tage nach der Anfrage, heiß („So schnell es geht“ und Budget passt) nach 3 Werktagen, nie am Wochenende oder an Feiertagen in NRW. Zwei Vorschläge an verschiedenen Tagen oder Wunschzeit.
-* Budget „Kommt drauf an“ oder „Eher zu viel“: Einwandbehandlung über Claude nach dem Setting Skript, höchstens zwei Anläufe. Klares Nein danach: höfliche Verabschiedung. Weiter unsicher: Termin wird trotzdem angeboten.
+* Budget „Kommt drauf an“ oder „Eher zu viel“: Einwandbehandlung über Claude nach dem Setting Skript, höchstens zwei Anläufe. Klares Nein danach: höfliche Verabschiedung. Weiter unsicher: Termin wird trotzdem angeboten. Der zweite Anlauf wiederholt nie den ersten (`src/lib/whatsapp/einwand.ts`): ohne Claude oder bei verworfener Antwort gibt es je Anlauf einen eigenen festen Text (1 Wert eines neuen Kunden, 2 Entwurf und Gespräch kostenlos und unverbindlich), und eine Antwort, die einer der letzten Nachrichten des Bots gleicht, wird gegen den nächsten Text getauscht.
 * Das Team schreibt aus der App in den Chat: der Bot pausiert dort. Im Backoffice lässt er sich wieder einschalten.
 * „Stopp“ meldet ab, die Nummer wird nie wieder angeschrieben.
 * Fremde Nummern (normale Kundenchats auf der Firmennummer) ignoriert der Bot komplett und speichert nichts. Ausnahme: Interessenten der Landingpage, die selbst zuerst schreiben (nächster Abschnitt).
