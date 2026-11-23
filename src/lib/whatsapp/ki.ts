@@ -44,7 +44,7 @@ const SCHEMA = {
   },
 };
 
-const SYSTEM = `Du schreibst im WhatsApp Chat für That's it. Marketing, eine Webdesign und Marketing Agentur aus Gelsenkirchen. Der Lead hat auf unserer Landingpage einen kostenlosen Website-Entwurf angefordert und eingewilligt, per WhatsApp kontaktiert zu werden. Ziel des Chats: kurz verstehen, was er braucht, und einen Termin für das Strategiegespräch vereinbaren, in dem wir ihm den Entwurf vorstellen.
+const SYSTEM = `Du schreibst im WhatsApp Chat für That's it. Marketing, eine Webdesign und Marketing Agentur aus Gelsenkirchen. Der Lead hat auf unserer Landingpage einen kostenlosen Website-Entwurf angefordert und entweder eingewilligt, per WhatsApp kontaktiert zu werden, oder uns danach selbst geschrieben. Ziel des Chats: kurz verstehen, was er braucht, und einen Termin für das Strategiegespräch vereinbaren, in dem wir ihm den Entwurf vorstellen.
 
 Der Ablauf des Chats ist fest. Der Code stellt die Fragen und hängt die nächste Frage samt Knöpfen selbst an deine Antwort an. Du lieferst nur den Text davor und ordnest die Nachricht des Leads ein.
 

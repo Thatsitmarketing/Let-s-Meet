@@ -122,8 +122,32 @@ App, WhatsApp, Konfiguration:
 * Budget „Kommt drauf an“ oder „Eher zu viel“: Einwandbehandlung über Claude nach dem Setting Skript, höchstens zwei Anläufe. Klares Nein danach: höfliche Verabschiedung. Weiter unsicher: Termin wird trotzdem angeboten.
 * Das Team schreibt aus der App in den Chat: der Bot pausiert dort. Im Backoffice lässt er sich wieder einschalten.
 * „Stopp“ meldet ab, die Nummer wird nie wieder angeschrieben.
-* Fremde Nummern (normale Kundenchats auf der Firmennummer) ignoriert der Bot komplett und speichert nichts.
+* Fremde Nummern (normale Kundenchats auf der Firmennummer) ignoriert der Bot komplett und speichert nichts. Ausnahme: Interessenten der Landingpage, die selbst zuerst schreiben (nächster Abschnitt).
 * Am Vortag eine Erinnerung per WhatsApp, zusätzlich zu den Mails aus den Arbeitsabläufen.
+
+## Interessent schreibt selbst zuerst (seit 2026-11-23)
+
+Wer im Funnel „Per Anruf“ wählt, bekommt auf der Dankesseite und in der Bestätigungsmail einen Knopf, der WhatsApp an die Firmennummer mit diesem Text öffnet:
+
+> Hallo, ich habe gerade meinen kostenlosen Website-Entwurf angefragt (Anfrage XXXXXX). Gerne per WhatsApp weiter.
+
+`XXXXXX` ist die Anfragenummer (sechs Zeichen aus `ABCDEFGHJKMNPQRSTUVWXYZ23456789`). Sie kommt über `/api/anfrage` in den Antworten an (`Anfragenummer`, dazu `Kontaktweg` = `Anruf` oder `WhatsApp`), bei WhatsApp Leads zusätzlich als `referenz` an `/api/whatsapp/lead`. Weil der Kunde zuerst geschrieben hat, ist das Servicefenster von 24 Stunden offen: der Bot antwortet frei, ohne Vorlage und ohne Einwilligung aus dem Formular.
+
+Ablauf bei einer eingehenden Nachricht ohne laufendes Gespräch (`selbstGeschrieben` in `bot.ts`, Suche in `zuordnung.ts`):
+
+1. Absendernummer gegen die Telefonnummer der Anfragen der letzten 30 Tage (normalisiert, „0170 …“ = „+49 170 …“ = wa_id `49170…`).
+2. Sonst die Anfragenummer im Text (`Anfrage XXXXXX`, auch „Anfrage: …“, „Anfragenummer …“), Anfragen der letzten 90 Tage.
+3. Treffer: Gespräch mit Name, Firma, E-Mail und Website aus der Anfrage anlegen, Begrüßung mit Namen und Firma, danach das normale Setting ab „Was stört“. Die Anfrage gilt als „Per WhatsApp übernommen“ (Pille unter Anfragen mit Link zum Chat, `anfragen.whatsapp_gespraech_id`), an Close geht `anfrage.whatsapp_uebernommen`.
+4. Kein Treffer, aber erkennbar der Text der Landingpage (Anfragenummer oder „Website-Entwurf“): der Bot fragt nach Name und Firma (E-Mail darf mit), dann ob es schon eine Website gibt, danach das normale Setting. Im Backoffice steht das Gespräch als „Nicht zugeordnet“. Fehlt bis zur Terminwahl die E-Mail, fragt der Bot vor dem Buchen danach.
+5. Alles andere ist ein normaler Kundenchat: der Bot schweigt und speichert nichts.
+
+Dubletten wie bisher: eine Nummer bekommt in 30 Tagen kein zweites Gespräch, nach „Stopp“ nie wieder. Ein abgeschlossenes Gespräch, das älter als 30 Tage ist, und eine neuere Anfrage ergeben ein neues Setting. Schreibt ein WhatsApp Lead von einer anderen Nummer mit seiner Anfragenummer und hat im ersten Chat noch nicht geantwortet, zieht das Gespräch auf die neue Nummer um, sonst bekommt das Team eine Mail. Schickt jemand den vorausgefüllten Text im laufenden Gespräch noch einmal, wiederholt der Bot nur die offene Frage.
+
+Herkunft je Gespräch: `wa_gespraeche.zuordnung` = `formular`, `nummer`, `anfragenummer` oder `keine`, die Anfragenummer in `referenz`, die Anfrage in `anfrage_id` (Migration `0017_whatsapp_zuordnung.sql`).
+
+**Close Automat:** muss das Ereignis `anfrage.whatsapp_uebernommen` (Felder `anfrage_id`, `name`, `email`, `telefon`, `whatsapp`, `anfragenummer`, `zuordnung`, `chat`) noch verarbeiten, etwa als Notiz und indem die Anrufaufgabe des Leads erledigt wird. Bis dahin sieht man die Übernahme sicher nur in Let's Meet (wie der Automat ein unbekanntes Ereignis behandelt, ist aus diesem Repo nicht geprüft).
+
+Tests: `pnpm test` (Node 24, `tests/zuordnung.test.ts`, prüft beide Zuordnungswege mit der echten SQL gegen SQLite).
 
 ## Sicherheit und Schutz vor Missbrauch
 

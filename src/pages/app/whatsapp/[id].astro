@@ -2,7 +2,7 @@
 import App from '../../../layouts/App.astro';
 import Icon from '../../../components/ui/Icon.astro';
 import { alle, eins } from '../../../lib/db';
-import { botPausieren, gespraechLoeschen, SCHRITT_TEXT, STATUS_TEXT, type Gespraech, type WaNachricht } from '../../../lib/whatsapp/bot';
+import { botPausieren, gespraechLoeschen, SCHRITT_TEXT, STATUS_TEXT, ZUORDNUNG_TEXT, type Gespraech, type WaNachricht } from '../../../lib/whatsapp/bot';
 import { formatDatumMittel, formatZeit } from '../../../lib/zeit';
 
 const tz = 'Europe/Berlin';
@@ -26,6 +26,8 @@ const nachrichten = await alle<WaNachricht>('SELECT * FROM wa_nachrichten WHERE 
 const wann = (iso: string | null) => (iso ? `${formatDatumMittel(iso, tz)}, ${formatZeit(iso, tz)}` : '');
 const angaben: [string, string | null][] = [
   ['Status', STATUS_TEXT[g.status]],
+  ['Herkunft', ZUORDNUNG_TEXT[g.zuordnung] ?? g.zuordnung],
+  ['Anfragenummer', g.referenz],
   ['Schritt', SCHRITT_TEXT[g.schritt] ?? g.schritt],
   ['Telefon', `+${g.telefon}`],
   ['E-Mail', g.email],

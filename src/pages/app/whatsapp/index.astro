@@ -2,7 +2,7 @@
 import App from '../../../layouts/App.astro';
 import Icon from '../../../components/ui/Icon.astro';
 import { alle } from '../../../lib/db';
-import { SCHRITT_TEXT, STATUS_TEXT, type Gespraech } from '../../../lib/whatsapp/bot';
+import { SCHRITT_TEXT, STATUS_TEXT, ZUORDNUNG_TEXT, type Gespraech } from '../../../lib/whatsapp/bot';
 import { formatDatumMittel, formatZeit } from '../../../lib/zeit';
 
 const tz = 'Europe/Berlin';
@@ -34,7 +34,7 @@ const pilleArt = (s: Gespraech['status']) => (s === 'gebucht' ? 'pille--erfolg' 
   </nav>
 
   {gespraeche.length === 0 ? (
-    <p class="karte leer leise">Noch keine Gespräche. Sie entstehen, sobald jemand auf der Landingpage den Haken für WhatsApp setzt.</p>
+    <p class="karte leer leise">Noch keine Gespräche. Sie entstehen, sobald jemand auf der Landingpage WhatsApp wählt oder uns nach der Anfrage selbst schreibt.</p>
   ) : (
     <ul class="liste">
       {gespraeche.map((g) => (
@@ -46,6 +46,8 @@ const pilleArt = (s: Gespraech['status']) => (s === 'gebucht' ? 'pille--erfolg' 
             </span>
             <span class="was">
               <span class:list={['pille', pilleArt(g.status)]}>{STATUS_TEXT[g.status]}</span>
+              {g.zuordnung === 'keine' && <span class="pille pille--fehler" title={ZUORDNUNG_TEXT.keine}>Nicht zugeordnet</span>}
+              {(g.zuordnung === 'nummer' || g.zuordnung === 'anfragenummer') && <span class="leise klein" title={ZUORDNUNG_TEXT[g.zuordnung]}>Selbst geschrieben</span>}
               <span class="leise klein">{SCHRITT_TEXT[g.schritt] ?? g.schritt}{g.heiss ? ' · heiß' : ''}</span>
             </span>
             <span class="wann leise klein">
