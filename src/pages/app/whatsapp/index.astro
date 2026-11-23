@@ -4,6 +4,7 @@ import Icon from '../../../components/ui/Icon.astro';
 import { alle } from '../../../lib/db';
 import { SCHRITT_TEXT, STATUS_TEXT, ZUORDNUNG_TEXT, type Gespraech } from '../../../lib/whatsapp/bot';
 import { formatDatumMittel, formatZeit } from '../../../lib/zeit';
+import { kiTesten } from '../../../lib/whatsapp/ki';
 
 const tz = 'Europe/Berlin';
 const status = Astro.url.searchParams.get('status') ?? '';
@@ -15,6 +16,8 @@ const gespraeche = await alle<Gespraech>(
 const zaehler = await alle<{ status: string; n: number }>('SELECT status, COUNT(*) AS n FROM wa_gespraeche GROUP BY status');
 const anzahl = new Map(zaehler.map((z) => [z.status, z.n]));
 const wann = (iso: string | null) => (iso ? `${formatDatumMittel(iso, tz)}, ${formatZeit(iso, tz)}` : '');
+// Probeaufruf an Claude (nur Admins), Ergebnis direkt über der Liste
+const kiTest = Astro.request.method === 'POST' && Astro.locals.nutzer!.rolle === 'admin' && (await Astro.request.formData()).get('aktion') === 'claude' ? await kiTesten() : null;
 const pilleArt = (s: Gespraech['status']) => (s === 'gebucht' ? 'pille--erfolg' : s === 'anrufen' || s === 'mensch' ? 'pille--fehler' : '');
 ---
 <App titel="WhatsApp Bot" eyebrow="Leads der Landingpage Website-Entwurf">
@@ -25,7 +28,13 @@ const pilleArt = (s: Gespraech['status']) => (s === 'gebucht' ? 'pille--erfolg' 
     {Astro.locals.nutzer!.rolle === 'admin' && (
       <a class="knopf knopf--rahmen knopf--klein" href="/app/whatsapp/vorlagen"><Icon name="dokument" groesse={16} />Vorlagen</a>
     )}
+    {Astro.locals.nutzer!.rolle === 'admin' && (
+      <form method="post"><button class="knopf knopf--rahmen knopf--klein" name="aktion" value="claude"><Icon name="chat" groesse={16} />Claude prüfen</button></form>
+    )}
   </Fragment>
+  {kiTest && (
+    <p class:list={['hinweis', kiTest.ok ? 'hinweis--erfolg' : 'hinweis--fehler']}><Icon name={kiTest.ok ? 'info' : 'warnung'} /><span>{kiTest.text}</span></p>
+  )}
   {Astro.url.searchParams.has('freigeschaltet') && (
     <p class="hinweis hinweis--erfolg"><Icon name="info" /><span>Die Sperre ist aufgehoben. Schickt die Nummer eine neue Anfrage oder schreibt selbst über die Landingpage, startet der Bot von vorn.</span></p>
   )}

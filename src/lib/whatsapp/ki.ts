@@ -10,7 +10,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { env } from 'cloudflare:workers';
 import { antwortVerwerfen, datenBlock, MAX_ANTWORT, MAX_VERLAUF_EINTRAG } from './schutz';
 
-export const EINORDNUNGEN = ['beantwortet', 'frage', 'einwand', 'kein_interesse', 'will_mensch', 'termin_aendern', 'unklar'] as const;
+export const EINORDNUNGEN = ['beantwortet', 'frage', 'einwand', 'kein_interesse', 'will_mensch', 'termin_aendern', 'genervt', 'unklar'] as const;
 
 export interface KiErgebnis {
   einordnung: (typeof EINORDNUNGEN)[number];
@@ -96,13 +96,19 @@ Einordnung der Nachricht:
 * kein_interesse: der Lead will ausdrücklich nicht weitermachen.
 * will_mensch: der Lead will ausdrücklich mit einem Menschen sprechen oder angerufen werden.
 * termin_aendern: der Lead will einen schon gebuchten Termin verschieben oder absagen.
-* unklar: alles andere.
+* genervt: der Lead ist verärgert, beschwert sich über den Chat oder fühlt sich nicht verstanden. "antwort" ist dann eine kurze, ehrliche Entschuldigung ohne Ausreden und ohne Frage, der Code holt jemanden aus dem Team dazu.
+* unklar: alles andere, auch automatische Abwesenheitsnotizen (dann "antwort" leer).
+Bezieht sich die Nachricht auf eine frühere Frage, korrigiert der Lead eine frühere Antwort oder fragt er, warum wir etwas nicht wissen wollen, ordne sie als "frage" ein und geh in "antwort" direkt darauf ein, statt sie zu übergehen. Nimm nie eine Antwort für die aktuelle Frage an, die eigentlich zu einer anderen Frage gehört.
 Felder, die nicht passen, bleiben leer.`;
 
 function client() {
   const key = env.ANTHROPIC_API_KEY?.trim();
   return key ? new Anthropic({ apiKey: key, maxRetries: 1, timeout: 22000 }) : null;
 }
+
+/** Grund, warum der letzte Aufruf kein Ergebnis brachte (für das Backoffice unter "Fehler") */
+let letzterFehler: string | null = null;
+export const kiLetzterFehler = () => letzterFehler;
 
 export function kiAktiv() {
   return Boolean(env.ANTHROPIC_API_KEY?.trim());
@@ -116,7 +122,11 @@ export async function kiVerstehen(e: {
   heute: string;
 }): Promise<KiErgebnis | null> {
   const c = client();
-  if (!c) return null;
+  letzterFehler = null;
+  if (!c) {
+    letzterFehler = 'ANTHROPIC_API_KEY fehlt im Worker';
+    return null;
+  }
   const nutzerText = [
     `Heute ist ${e.heute} (Europe/Berlin).`,
     datenBlock('lead_daten', Object.entries(e.lead).filter(([, w]) => w).map(([k, w]) => `${k}: ${w}`).join('; '), 800),
@@ -143,11 +153,15 @@ export async function kiVerstehen(e: {
     });
     if (res.stop_reason === 'refusal' || res.stop_reason === 'max_tokens') {
       console.error('Claude ohne verwertbare Antwort', res.stop_reason);
+      letzterFehler = `Claude ohne Antwort (${res.stop_reason})`;
       return null;
     }
     const text = res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
     const roh = JSON.parse(text) as KiErgebnis;
-    if (!EINORDNUNGEN.includes(roh.einordnung)) return null;
+    if (!EINORDNUNGEN.includes(roh.einordnung)) {
+      letzterFehler = `Claude mit unbekannter Einordnung (${String(roh.einordnung).slice(0, 40)})`;
+      return null;
+    }
     // Nur Werte aus den erlaubten Listen übernehmen, freie Felder kürzen
     const ergebnis: KiErgebnis = {
       einordnung: roh.einordnung,
@@ -169,8 +183,28 @@ export async function kiVerstehen(e: {
   } catch (fehler) {
     if (fehler instanceof Anthropic.APIError) console.error('Claude Fehler', fehler.status, fehler.message);
     else console.error('Claude fehlgeschlagen', fehler);
+    letzterFehler = `Claude nicht erreichbar (${fehler instanceof Anthropic.APIError ? `${fehler.status ?? 'ohne Status'}: ` : ''}${String((fehler as Error)?.message ?? fehler).slice(0, 200)})`;
     return null;
   }
+}
+
+/**
+ * Probeaufruf für das Backoffice (/app/whatsapp, Knopf "Claude prüfen"): zeigt sofort, ob der
+ * Schlüssel im Worker greift und Claude antwortet. Kostet einen Aufruf.
+ */
+export async function kiTesten(): Promise<{ ok: boolean; text: string }> {
+  if (!kiAktiv()) return { ok: false, text: 'ANTHROPIC_API_KEY ist im Worker let-s-meet nicht gesetzt (Secret, genau dieser Name). Ohne Claude nutzt der Bot nur feste Texte.' };
+  const start = Date.now();
+  const ki = await kiVerstehen({
+    aufgabe: 'Frage: "Und was soll die neue Website für euch erreichen?" Freitext. Spiegle das Ziel kurz in "antwort", ohne Frage.',
+    lead: { vorname: 'Lisa', firma: 'Becker Bau' },
+    verlauf: [],
+    eingang: 'Mehr Anfragen über Google und ein modernerer Auftritt',
+    heute: new Date().toISOString().slice(0, 10),
+  });
+  if (!ki) return { ok: false, text: letzterFehler ?? 'Claude hat nicht geantwortet.' };
+  const dauer = ((Date.now() - start) / 1000).toFixed(1).replace('.', ',');
+  return { ok: true, text: `Claude antwortet (${dauer} Sekunden, Einordnung „${ki.einordnung}“): ${ki.antwort || '(ohne Text)'}` };
 }
 
 /** Gedankenstriche und Markdown raus, falls doch welche durchrutschen. */

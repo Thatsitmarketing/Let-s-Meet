@@ -61,7 +61,7 @@ const nurSperre = g.status === 'abgemeldet' && g.name === 'Abgemeldet' && !g.vor
       {nachrichten.map((n) => (
         <div class:list={['blase', n.richtung === 'ein' ? 'ein' : 'aus', { team: n.richtung === 'team' }]}>
           <p>{n.text}</p>
-          <span class="leise klein">{n.richtung === 'ein' ? g.vorname : n.richtung === 'team' ? 'Team (App)' : n.art === 'vorlage' ? 'Bot, Vorlage' : 'Bot'} · {wann(n.erstellt_am)}</span>
+          <span class="leise klein">{n.richtung === 'ein' ? (n.art === 'auto' ? `${g.vorname}, Abwesenheitsnotiz (vom Bot ignoriert)` : g.vorname) : n.richtung === 'team' ? 'Team (App)' : n.art === 'vorlage' ? 'Bot, Vorlage' : n.art === 'nachfrage' ? 'Bot, Nachfrage' : 'Bot'} · {wann(n.erstellt_am)}</span>
         </div>
       ))}
     </section>

@@ -100,6 +100,8 @@ Worker **let-s-meet**, Einstellungen, Variablen und Geheimnisse, jeweils als **S
 | `WHATSAPP_LEAD_SCHLUESSEL` | frei gewählt, mindestens 24 Zeichen, gleich als `BOT_SCHLUESSEL` bei der Landingpage |
 | `ANTHROPIC_API_KEY` | Schlüssel aus console.anthropic.com (Organisation That's it. Marketing) |
 
+Danach unter `/app/whatsapp` als Admin **„Claude prüfen“** drücken: der Knopf macht einen echten Probeaufruf und zeigt entweder die Antwort von Claude oder den genauen Grund (Schlüssel fehlt, falscher Name, 401, Modell, Zeitüberschreitung). Ohne funktionierendes Claude läuft der Bot nur mit festen Texten, das ist für echte Leads zu starr (Testchat vom 2026-11-23). Läuft ein Schritt ohne Claude, steht der Grund am Gespräch unter „Fehler“ („Ohne Claude: …“), bis Claude wieder antwortet.
+
 Pages Projekt der Landingpage (`ad_web_entwurf_landingpage`): Secret `BOT_SCHLUESSEL` mit demselben Wert wie `WHATSAPP_LEAD_SCHLUESSEL`. `LETSMEET_BOT_URL` steht schon in `wrangler.toml`.
 
 Workers AI (Sprachnachrichten) braucht keinen Schlüssel, die Bindung `AI` steht in `wrangler.jsonc`.
@@ -129,6 +131,11 @@ App, WhatsApp, Konfiguration:
 * „Stopp“ meldet ab, die Nummer wird nie wieder angeschrieben. Ausnahme: Admins können sie unter `/app/whatsapp/{id}` mit „Für den Bot freischalten“ wieder freigeben (`botFreischalten`), etwa wenn der Kunde ausdrücklich doch wieder Nachrichten möchte. Der Bot schreibt danach nicht von sich aus, sondern macht erst weiter, wenn der Kunde schreibt, beim Schritt, bei dem er Stopp geschrieben hat. Nachhaken und „bitte anrufen“ bleiben bis dahin aus. Ist das Gespräch schon gelöscht (nur die Sperre übrig), fällt die Sperre weg und die Nummer startet bei der nächsten Anfrage wie neu.
 * Fremde Nummern (normale Kundenchats auf der Firmennummer) ignoriert der Bot komplett und speichert nichts. Ausnahme: Interessenten der Landingpage, die selbst zuerst schreiben (nächster Abschnitt).
 * Am Vortag eine Erinnerung per WhatsApp, zusätzlich zu den Mails aus den Arbeitsabläufen.
+* Abwesenheitsnotizen aus der WhatsApp Business App des Leads („Vielen Dank für deine Nachricht, ich melde mich während der Geschäftszeiten“) sind keine Antwort: der Bot speichert sie als „Abwesenheitsnotiz (vom Bot ignoriert)“, antwortet nicht und das Nachfassen nach 3 Stunden läuft weiter (`istAutoAntwort` in `src/lib/whatsapp/eingang.ts`).
+* Knöpfe aus älteren Nachrichten beantworten ihre eigene Frage, nie die aktuelle. „Etwas anderes“ aus der ersten Vorlage fragt nach, was genau stört, danach geht es bei der nächsten offenen Frage weiter (schon beantwortete Fragen kommen nicht noch einmal). Ein alter Zeitknopf während der Budgetfrage ändert nur den Zeitpunkt.
+* Nicht verstanden: einmal freundlich nachfragen (bei Knopffragen mit Hinweis auf die Knöpfe, die Budgetfrage dann in Kurzform). Beim zweiten Mal hintereinander entschuldigt sich der Bot, pausiert und das Team bekommt eine Mail. Keine Antwort wird mehr still geraten (früher wurde freier Text bei der Zeitfrage zu „Noch offen“).
+* Ärger über den Chat („Das ist ja komplett fail“, „verstehst du mich nicht“) oder die Einordnung „genervt“ von Claude: Entschuldigung, Bot pausiert, Mail ans Team. Bei freien Antworten (was stört, Ziel) zählt nur Ärger über den Chat selbst, „unsere Website ist eine Katastrophe“ ist dort eine Antwort.
+* Korrektur („ich habe etwas anderes getippt, willst du nicht wissen, was mich stört?“): „Doch, unbedingt, sorry!“ und die Frage nach dem Problem.
 
 ## Interessent schreibt selbst zuerst (seit 2026-11-23)
 

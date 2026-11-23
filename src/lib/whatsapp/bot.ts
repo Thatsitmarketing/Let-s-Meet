@@ -23,7 +23,7 @@ import { buchungNachId, buero } from '../abfragen';
 import { mailArbeitsablauf, mailSenden } from '../mail';
 import { slotFrei } from '../slots';
 import { datumInZone, teileInZone } from '../zeit';
-import { kiAktiv, kiVerstehen, type KiErgebnis } from './ki';
+import { kiAktiv, kiLetzterFehler, kiVerstehen, type KiErgebnis } from './ki';
 import { gelesenUndTippt, sendeKnoepfe, sendeVorlage, type Knopf } from './meta';
 import { botTerminart, slotKurz, slotLang, tagLang, vorschlaegeZumWunsch, zweiVorschlaege } from './termine';
 import { KI_TAGESLIMIT_STANDARD, LIMIT_PRO_STUNDE, LIMIT_PRO_TAG, MAX_EINGANG, namenPruefen, saeubern } from './schutz';
@@ -31,6 +31,7 @@ import { angabenDerAnfrage, anfrageZuordnen, anfrageZurAnfragenummer, anfragenum
 import { crmMelden } from '../crm';
 import { EINWAND_ERSATZ, einwandAntwort } from './einwand';
 import { emailGueltig } from '../eingabe';
+import { budgetAusText, FRUEHE_SCHRITTE, istAutoAntwort, istGenervt, istKorrektur, knopfPasst, knopfSchritt, zeitpunktAusText } from './eingang';
 
 const TZ = 'Europe/Berlin';
 
@@ -146,6 +147,13 @@ export const TEXTE = {
   nachhaken: (v: string) => `Kurz nachgehakt${v ? `, ${v}` : ''} 🙂`,
   umbuchen: (link: string) => `Kein Problem! Hier kannst du den Termin selbst verschieben oder absagen: ${link}`,
   unverstanden: 'Das habe ich nicht ganz verstanden.',
+  knopfHinweis: 'Tipp einfach auf eine der Antworten unten, dann geht es direkt weiter 🙂',
+  budgetKurz: 'Kurz zur Einordnung: Unsere Websites starten ab 5.000 €. Wäre das ein Rahmen, der für euch passt, wenn dich der Entwurf überzeugt?',
+  entschuldigung: 'Sorry, da bin ich gerade nicht gut mitgekommen.',
+  uebergabe: 'Ich gebe dich direkt an unser Team weiter, wir melden uns zeitnah persönlich bei dir.',
+  korrektur: 'Doch, unbedingt, sorry!',
+  schonErledigt: 'Danke, die Frage haben wir schon 🙂',
+  angepasst: 'Alles klar, hab ich angepasst.',
 
   // Interessent schreibt selbst zuerst (Knopf "Per WhatsApp weiter" der Landingpage), keine Vorlage nötig
   selbstStart: (v: string, firma: string) =>
@@ -212,12 +220,13 @@ async function protokoll(g: Gespraech, richtung: WaNachricht['richtung'], art: s
 }
 
 /** Senden mit Protokoll. Fehler landen am Gespräch und beim Team, der Bot bleibt stehen. */
-async function schreiben(g: Gespraech, text: string, knoepfe: Knopf[] = []) {
+async function schreiben(g: Gespraech, text: string, knoepfe: Knopf[] = [], art?: string) {
   try {
     const waId = await sendeKnoepfe(g.telefon, text, knoepfe);
     const anzeige = knoepfe.length ? `${text}\n[${knoepfe.map((k) => k.titel).join(' | ')}]` : text;
-    await protokoll(g, 'aus', knoepfe.length ? 'knopf' : 'text', anzeige, waId);
-    await setzen(g.id, { letzte_ausgang_am: jetztIso(), fehler: null });
+    // art "nachfrage": der Bot hat die Antwort nicht verstanden und fragt noch einmal (zählt für die Übergabe ans Team)
+    await protokoll(g, 'aus', art ?? (knoepfe.length ? 'knopf' : 'text'), anzeige, waId);
+    await gesendet(g.id);
   } catch (fehler) {
     await fehlerMelden(g, fehler);
     throw fehler;
@@ -228,12 +237,20 @@ async function vorlage(g: Gespraech, name: string, parameter: string[], knoepfe:
   try {
     const waId = await sendeVorlage(g.telefon, name, parameter, [...knoepfe]);
     await protokoll(g, 'aus', 'vorlage', anzeige, waId);
-    await setzen(g.id, { letzte_ausgang_am: jetztIso(), fehler: null });
+    await gesendet(g.id);
     return true;
   } catch (fehler) {
     await fehlerMelden(g, fehler);
     return false;
   }
+}
+
+/** Nach dem Senden: Sendefehler sind erledigt, Hinweise zu Claude bleiben stehen, bis Claude wieder antwortet. */
+async function gesendet(id: string) {
+  await ausfuehren(
+    "UPDATE wa_gespraeche SET letzte_ausgang_am = ?, fehler = CASE WHEN fehler LIKE 'Ohne Claude%' OR fehler LIKE 'Antwort von Claude%' THEN fehler ELSE NULL END, aktualisiert_am = ? WHERE id = ?",
+    jetztIso(), jetztIso(), id,
+  );
 }
 
 async function fehlerMelden(g: Gespraech, fehler: unknown) {
@@ -359,6 +376,12 @@ export async function eingangVerarbeiten(telefon: string, e: Eingang) {
     if (neu) return neu;
   }
   const aktiv = g.status === 'offen' || g.status === 'gebucht' || g.status === 'anrufen';
+  // Abwesenheitsnotiz aus der WhatsApp Business App des Leads: nur protokollieren, keine Antwort,
+  // zählt nicht als Rückmeldung (das Nachfassen nach 3 Stunden läuft weiter)
+  if (e.art === 'text' && !e.knopf && istAutoAntwort(e.text)) {
+    await protokoll(g, 'ein', 'auto', e.text, e.waId, null, 1);
+    return g.id;
+  }
   const neu = await protokoll(g, 'ein', e.art, e.text, e.waId, e.knopf, aktiv ? 0 : 1);
   if (!neu) return g.id; // Meta schickt Webhooks bei Zeitüberschreitung doppelt
   await setzen(g.id, { letzte_eingang_am: jetztIso(), nachfass_stufe: 0 });
@@ -393,7 +416,7 @@ export async function eingangVerarbeiten(telefon: string, e: Eingang) {
  * Kein Vorlagenzwang: der Kunde hat zuerst geschrieben, das Servicefenster von 24 Stunden ist offen.
  */
 async function selbstGeschrieben(telefon: string, e: Eingang, nurNeuerAls: string | null = null): Promise<string | null> {
-  if (e.art === 'knopf') return null;
+  if (e.art === 'knopf' || istAutoAntwort(e.text)) return null;
   const z = await anfrageZuordnen(alle, telefon, e.text);
   if (!z) return null;
   if (nurNeuerAls && (!z.anfrage || z.anfrage.erstellt_am <= nurNeuerAls)) return null;
@@ -509,9 +532,15 @@ export async function abarbeiten(id: string, tiefe = 0) {
       const text = offen.map((n) => n.text).join('\n');
       try {
         await schrittVerarbeiten(g, { text, knopf });
+        // Lief der Schritt ohne Claude, steht der Grund im Backoffice (schreiben() leert "fehler" beim Senden)
+        // Leerer Hinweis: Claude hat wieder geantwortet, alter Hinweis fällt weg
+        const hinweis = kiHinweise.get(id);
+        if (hinweis !== undefined) await setzen(id, { fehler: hinweis || null });
       } catch (fehler) {
         console.error('Schritt fehlgeschlagen', id, fehler);
         await setzen(id, { fehler: String((fehler as Error)?.message ?? fehler).slice(0, 500) });
+      } finally {
+        kiHinweise.delete(id);
       }
     }
   } finally {
@@ -570,13 +599,20 @@ function aufgabe(g: Gespraech, schritt: string) {
   }
 }
 
+/** Warum ein Schritt ohne Claude lief, je Gespräch, bis abarbeiten() es speichert */
+const kiHinweise = new Map<string, string>();
+
 async function verstehen(g: Gespraech, schritt: string, text: string): Promise<KiErgebnis | null> {
-  if (!kiAktiv()) return null;
+  if (!kiAktiv()) {
+    kiHinweise.set(g.id, 'Ohne Claude: ANTHROPIC_API_KEY ist im Worker nicht gesetzt, der Bot nutzt nur feste Texte');
+    return null;
+  }
   // Kostenbremse über alle Chats: ab dem Tageslimit läuft der Bot ohne Claude weiter (nur Knöpfe und feste Texte)
   const limit = Number(env.WHATSAPP_KI_TAGESLIMIT) || KI_TAGESLIMIT_STANDARD;
   const heute = await eins<{ n: number }>("SELECT COUNT(*) AS n FROM wa_nachrichten WHERE richtung = 'ein' AND art != 'knopf' AND erstellt_am >= ?", `${datumInZone(jetzt(), 'UTC')}T00:00:00`);
   if ((heute?.n ?? 0) > limit) {
     console.warn('Tageslimit für Claude erreicht');
+    kiHinweise.set(g.id, `Ohne Claude: Tageslimit von ${limit} Aufrufen erreicht`);
     return null;
   }
   const verlauf = await alle<WaNachricht>('SELECT * FROM wa_nachrichten WHERE gespraech_id = ? ORDER BY erstellt_am DESC LIMIT 14', g.id);
@@ -594,9 +630,11 @@ async function verstehen(g: Gespraech, schritt: string, text: string): Promise<K
     verlauf: bisherigerVerlauf(verlauf.reverse()),
     eingang: saeubern(text, MAX_EINGANG),
     heute: new Intl.DateTimeFormat('de-DE', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(jetzt()) + ` (${datumInZone(jetzt(), TZ)})`,
-  }).then(async (ki) => {
-    // Verworfene Antworten sieht das Team im Backoffice unter "Fehler"
-    if (ki?.verworfen) await setzen(g.id, { fehler: `Antwort von Claude verworfen (${ki.verworfen}), fester Text gesendet` });
+  }).then((ki) => {
+    // Sieht das Team im Backoffice unter "Fehler"
+    if (!ki) kiHinweise.set(g.id, `Ohne Claude: ${kiLetzterFehler() ?? 'keine Antwort'}, fester Text gesendet`);
+    else if (ki.verworfen) kiHinweise.set(g.id, `Antwort von Claude verworfen (${ki.verworfen}), fester Text gesendet`);
+    else kiHinweise.set(g.id, '');
     return ki;
   });
 }
@@ -631,57 +669,60 @@ export function nameUndFirma(text: string): [string, string] {
   return [sauber(teile[0]), sauber(teile.slice(1).join(' '))];
 }
 
-/** Schickt die Frage eines Schritts (mit Knöpfen), optional mit Text davor. */
-async function frageSenden(g: Gespraech, schritt: string, davor = '') {
+/**
+ * Schickt die Frage eines Schritts (mit Knöpfen), optional mit Text davor. `nachfrage`: Antwort nicht
+ * verstanden (zählt für die Übergabe ans Team), `kurz`: Frage wird wiederholt, lange Texte in Kurzform.
+ */
+async function frageSenden(g: Gespraech, schritt: string, davor = '', nachfrage = false, kurz = nachfrage) {
+  const schreiben_ = (text: string, knoepfe: Knopf[] = []) => schreiben(g, text, knoepfe, nachfrage ? 'nachfrage' : undefined);
   switch (schritt) {
     case 'kennenlernen':
-      return schreiben(g, vor(davor) + TEXTE.kennenlernenNochmal);
+      return schreiben_(vor(davor) + TEXTE.kennenlernenNochmal);
     case 'website_frage':
-      return schreiben(g, vor(davor) + TEXTE.websiteFrage(g.vorname), [
+      return schreiben_(vor(davor) + TEXTE.websiteFrage(g.vorname), [
         { id: 'w_ja', titel: 'Ja, haben wir' },
         { id: 'w_nein', titel: 'Noch keine' },
       ]);
     case 'email':
-      return schreiben(g, vor(davor) + TEXTE.email);
+      return schreiben_(vor(davor) + TEXTE.email);
     case 'start':
     case 'problem':
-      return schreiben(
-        g,
+      return schreiben_(
         vor(davor) + (g.hat_website ? TEXTE.problemWebsite : TEXTE.problemOhne),
         Object.entries(problemOptionen(g)).map(([id, titel]) => ({ id: `p_${id}`, titel })),
       );
     case 'problem_text':
-      return schreiben(g, vor(davor) + (g.hat_website ? TEXTE.problemText : TEXTE.problemTextOhne));
+      return schreiben_(vor(davor) + (g.hat_website ? TEXTE.problemText : TEXTE.problemTextOhne));
     case 'ziel':
-      return schreiben(g, vor(davor) + TEXTE.ziel);
+      return schreiben_(vor(davor) + TEXTE.ziel);
     case 'zeitpunkt':
-      return schreiben(g, vor(davor) + TEXTE.zeitpunkt, Object.entries(ZEITPUNKT).map(([id, titel]) => ({ id: `z_${id}`, titel })));
+      return schreiben_(vor(davor) + TEXTE.zeitpunkt, Object.entries(ZEITPUNKT).map(([id, titel]) => ({ id: `z_${id}`, titel })));
     case 'budget':
-      return schreiben(g, vor(davor) + TEXTE.budget, [
+      return schreiben_(vor(davor) + (kurz ? TEXTE.budgetKurz : TEXTE.budget), [
         { id: 'b_ja', titel: 'Ja, das passt' },
         { id: 'b_kommtdrauf', titel: 'Kommt drauf an' },
         { id: 'b_zuviel', titel: 'Eher zu viel' },
       ]);
     case 'einwand':
-      return schreiben(g, davor.trim() || TEXTE.einwandErsatz, [
+      return schreiben_(davor.trim() || TEXTE.einwandErsatz, [
         { id: 'e_ja', titel: 'Ja, dann schon' },
         { id: 'e_nein', titel: 'Eher nicht' },
       ]);
     case 'termin':
       return terminAnbieten(g, davor);
     case 'wunschzeit':
-      return schreiben(g, vor(davor) + TEXTE.wunschzeit);
+      return schreiben_(vor(davor) + TEXTE.wunschzeit);
     case 'entscheider':
-      return schreiben(g, vor(davor) + TEXTE.entscheider, [
+      return schreiben_(vor(davor) + TEXTE.entscheider, [
         { id: 'd_ich', titel: 'Nur ich' },
         { id: 'd_mehr', titel: 'Noch jemand' },
       ]);
     case 'entscheider_text':
-      return schreiben(g, vor(davor) + TEXTE.entscheiderText);
+      return schreiben_(vor(davor) + TEXTE.entscheiderText);
     case 'briefing':
-      return schreiben(g, vor(davor) + TEXTE.briefing, [{ id: 'f_keine', titel: 'Keine im Kopf' }]);
+      return schreiben_(vor(davor) + TEXTE.briefing, [{ id: 'f_keine', titel: 'Keine im Kopf' }]);
     default:
-      if (davor.trim()) return schreiben(g, davor.trim());
+      if (davor.trim()) return schreiben_(davor.trim());
   }
 }
 
@@ -703,9 +744,78 @@ async function anMenschen(g: Gespraech, davor = '') {
   await teamInformieren(g, 'Der Lead möchte mit einem Menschen sprechen. Bitte selbst übernehmen, der Bot pausiert in diesem Chat.');
 }
 
+/**
+ * Der Lead ist genervt oder der Bot hat ihn zweimal nicht verstanden: entschuldigen, nicht weiter
+ * nachbohren, ein Mensch übernimmt. Ein Bot, der stur dieselbe Frage wiederholt, kostet den Lead.
+ */
+async function entschuldigen(g: Gespraech, davor = '') {
+  await setzen(g.id, { status: 'mensch' });
+  await schreiben(g, `${davor.trim() || TEXTE.entschuldigung} ${TEXTE.uebergabe}`);
+  await teamInformieren(g, 'Der Lead ist genervt oder der Bot hat ihn nicht verstanden. Der Bot pausiert in diesem Chat, bitte selbst übernehmen (am besten kurz anrufen).');
+}
+
+/**
+ * Antwort nicht verstanden: einmal freundlich nachfragen (bei Knopffragen mit Hinweis auf die Knöpfe),
+ * beim zweiten Mal hintereinander übernimmt das Team, statt die Frage ein drittes Mal zu stellen.
+ */
+async function nachfragen(g: Gespraech, schritt: string, davor = '') {
+  const letzte = await eins<{ art: string }>("SELECT art FROM wa_nachrichten WHERE gespraech_id = ? AND richtung = 'aus' ORDER BY erstellt_am DESC LIMIT 1", g.id);
+  if (letzte?.art === 'nachfrage') return entschuldigen(g);
+  const knopffrage = ['start', 'problem', 'website_frage', 'zeitpunkt', 'budget', 'einwand', 'entscheider'].includes(schritt);
+  return frageSenden(g, schritt, davor.trim() || (knopffrage ? `${TEXTE.unverstanden} ${TEXTE.knopfHinweis}` : TEXTE.unverstanden), true);
+}
+
+/** Nächste offene Frage nach dem Problem. Schon beantwortete Fragen werden nicht noch einmal gestellt. */
+function naechsterSchritt(g: Gespraech, felder: Partial<Record<keyof Gespraech, string | number | null>> = {}) {
+  const x = { ...g, ...felder } as Gespraech;
+  if (!x.ziel) return 'ziel';
+  if (!x.zeitpunkt) return 'zeitpunkt';
+  if (!x.budget) return 'budget';
+  return 'termin';
+}
+
+/**
+ * Knopf aus einer älteren Nachricht (etwa "Etwas anderes" aus der ersten Vorlage, während der Bot
+ * schon nach dem Ziel fragt). Er beantwortet seine eigene Frage, nie die aktuelle.
+ */
+async function alterKnopf(g: Gespraech, knopf: string, e: { text: string; knopf: string | null }): Promise<unknown> {
+  if (knopf === 'n_spaeter') return schreiben(g, TEXTE.spaeter);
+  if (knopf === 'n_los') return frageSenden(g, g.schritt, 'Super, danke dir!');
+  const ziel = knopfSchritt(knopf);
+  const frueh = FRUEHE_SCHRITTE as readonly string[];
+  const frueher = ziel !== null && frueh.includes(ziel) && frueh.includes(g.schritt) && frueh.indexOf(ziel) < frueh.indexOf(g.schritt) && !g.buchung_id;
+  if (frueher && ziel === 'problem') {
+    const id = knopf.slice(2);
+    // "Etwas anderes": genau danach fragen, danach geht es bei der nächsten offenen Frage weiter
+    if (id === 'anderes') return weiter(g, 'problem_text', {});
+    if (id in problemOptionen(g)) {
+      await setzen(g.id, { problem: problemOptionen(g)[id] });
+      return frageSenden(g, g.schritt, TEXTE.problemQuittung[id] || TEXTE.angepasst, false, true);
+    }
+  }
+  if (frueher && ziel === 'zeitpunkt') {
+    const id = knopf.slice(2);
+    if (id in ZEITPUNKT) {
+      await setzen(g.id, { zeitpunkt: ZEITPUNKT[id], heiss: id === 'sofort' && g.budget !== 'Eher zu viel' ? 1 : 0 });
+      return frageSenden(g, g.schritt, TEXTE.angepasst, false, true);
+    }
+  }
+  // Budgetknopf während der Einwandbehandlung: neue Antwort auf die Budgetfrage
+  if (frueher && ziel === 'budget') {
+    await setzen(g.id, { schritt: 'budget' });
+    return schrittVerarbeiten({ ...g, schritt: 'budget' }, e);
+  }
+  // Sonst gehört der Knopf zu einer erledigten Frage: aktuelle Frage kurz wiederholen
+  return frageSenden(g, g.schritt, TEXTE.schonErledigt, false, true);
+}
+
 /** Reaktionen, die in jedem Schritt gleich sind. true = erledigt. */
 async function allgemein(g: Gespraech, ki: KiErgebnis | null, schritt: string) {
   if (!ki) return false;
+  if (ki.einordnung === 'genervt') {
+    await entschuldigen(g, ki.antwort);
+    return true;
+  }
   if (ki.einordnung === 'kein_interesse') {
     await verabschieden(g);
     return true;
@@ -718,14 +828,18 @@ async function allgemein(g: Gespraech, ki: KiErgebnis | null, schritt: string) {
     await schreiben(g, TEXTE.umbuchen(`${basisUrl()}/termin/${g.buchung_id}`));
     return true;
   }
-  if (ki.einordnung === 'frage' || ki.einordnung === 'einwand' || ki.einordnung === 'unklar') {
-    await frageSenden(g, schritt, ki.antwort || (ki.einordnung === 'unklar' ? TEXTE.unverstanden : ''));
+  if (ki.einordnung === 'unklar') {
+    await nachfragen(g, schritt, ki.antwort);
+    return true;
+  }
+  if (ki.einordnung === 'frage' || ki.einordnung === 'einwand') {
+    await frageSenden(g, schritt, ki.antwort, false, true);
     return true;
   }
   return false;
 }
 
-async function schrittVerarbeiten(g: Gespraech, e: { text: string; knopf: string | null }) {
+async function schrittVerarbeiten(g: Gespraech, e: { text: string; knopf: string | null }): Promise<unknown> {
   const text = e.text.trim();
   if (STOPP.test(text)) {
     await setzen(g.id, { status: 'abgemeldet' });
@@ -735,6 +849,18 @@ async function schrittVerarbeiten(g: Gespraech, e: { text: string; knopf: string
   const knopf = e.knopf;
   // Den vorausgefüllten Text der Landingpage noch einmal geschickt: keine Antwort, die offene Frage wiederholen
   if (!knopf && anfragenummerAusText(text) && g.schritt !== 'kennenlernen') return frageSenden(g, g.schritt, 'Deine Anfrage habe ich schon 🙂');
+  // Knopf aus einer älteren Nachricht: beantwortet seine eigene Frage, nicht die aktuelle
+  if (knopf && !knopfPasst(knopf, g.schritt)) return alterKnopf(g, knopf, e);
+  if (!knopf) {
+    // Ärger über den Chat: bei freien Antworten zählt nur Ärger über den Chat selbst
+    const freieAntwort = ['problem', 'start', 'problem_text', 'ziel', 'kennenlernen', 'entscheider_text', 'briefing', 'wunschzeit'].includes(g.schritt);
+    if (istGenervt(text, freieAntwort)) return entschuldigen(g);
+    // "Ich habe etwas anderes getippt, willst du nicht wissen, was mich stört?": genau danach fragen
+    const frueh = FRUEHE_SCHRITTE as readonly string[];
+    if (istKorrektur(text) && /st(ö|oe)r|problem|anderes|anders/i.test(text) && !g.buchung_id && frueh.indexOf(g.schritt) > frueh.indexOf('problem_text')) {
+      return weiter(g, 'problem_text', { problem: null }, TEXTE.korrektur);
+    }
+  }
 
   switch (g.schritt) {
     case 'kennenlernen': {
@@ -766,7 +892,7 @@ async function schrittVerarbeiten(g: Gespraech, e: { text: string; knopf: string
         if (await allgemein(g, ki, 'website_frage')) return;
         webseite = ki?.link || null;
         ja = ki?.wert === 'ja' ? true : ki?.wert === 'nein' ? false : null;
-        if (ja === null) return frageSenden(g, 'website_frage', TEXTE.unverstanden);
+        if (ja === null) return nachfragen(g, 'website_frage');
       }
       return weiter(g, 'problem', { hat_website: ja ? 1 : 0, webseite: ja ? webseite : null });
     }
@@ -801,36 +927,41 @@ async function schrittVerarbeiten(g: Gespraech, e: { text: string; knopf: string
       if (id === 'anderes' && !beschreibung) return weiter(g, 'problem_text', {});
       const problem = beschreibung ?? problemOptionen(g)[id!] ?? text;
       const quittung = ki?.antwort || TEXTE.problemQuittung[id!] || '';
-      return weiter(g, 'ziel', { problem }, quittung);
+      return weiter(g, naechsterSchritt(g, { problem }), { problem }, quittung);
     }
     case 'problem_text': {
       const ki = await verstehen(g, 'problem_text', text);
       if (ki && ki.einordnung !== 'beantwortet' && (await allgemein(g, ki, 'problem_text'))) return;
-      return weiter(g, 'ziel', { problem: ki?.wert || text.slice(0, 300) }, ki?.antwort || 'Danke dir, das hilft uns schon sehr.');
+      const problem = ki?.wert || text.slice(0, 300);
+      return weiter(g, naechsterSchritt(g, { problem }), { problem }, ki?.antwort || 'Danke dir, das hilft uns schon sehr.');
     }
     case 'ziel': {
       const ki = await verstehen(g, 'ziel', text);
       if (ki && ki.einordnung !== 'beantwortet' && (await allgemein(g, ki, 'ziel'))) return;
-      return weiter(g, 'zeitpunkt', { ziel: ki?.wert || text.slice(0, 300) }, ki?.antwort || 'Verstanden, das nehmen wir mit in den Entwurf.');
+      const ziel = ki?.wert || text.slice(0, 300);
+      return weiter(g, naechsterSchritt(g, { ziel }), { ziel }, ki?.antwort || 'Verstanden, das nehmen wir mit in den Entwurf.');
     }
     case 'zeitpunkt': {
       let id = knopf?.startsWith('z_') ? knopf.slice(2) : null;
       if (!id) {
         const ki = await verstehen(g, 'zeitpunkt', text);
         if (await allgemein(g, ki, 'zeitpunkt')) return;
-        id = ki?.wert && ki.wert in ZEITPUNKT ? ki.wert : 'offen';
+        id = ki?.wert && ki.wert in ZEITPUNKT ? ki.wert : zeitpunktAusText(text);
+        // Nicht raten: ohne klare Antwort noch einmal fragen (beim zweiten Mal übernimmt das Team)
+        if (!id) return nachfragen(g, 'zeitpunkt', ki?.antwort);
       }
-      return weiter(g, 'budget', { zeitpunkt: ZEITPUNKT[id] ?? id, heiss: id === 'sofort' ? 1 : 0 });
+      const felder = { zeitpunkt: ZEITPUNKT[id] ?? id, heiss: id === 'sofort' ? 1 : 0 };
+      return weiter(g, naechsterSchritt(g, felder), felder);
     }
     case 'budget': {
       let haltung: 'offen' | 'unsicher' | 'nein' | null = knopf === 'b_ja' ? 'offen' : knopf === 'b_kommtdrauf' ? 'unsicher' : knopf === 'b_zuviel' ? 'nein' : null;
       let ki: KiErgebnis | null = null;
       if (!haltung) {
         ki = await verstehen(g, 'budget', text);
-        if (ki?.einordnung === 'kein_interesse' || ki?.einordnung === 'will_mensch') return allgemein(g, ki, 'budget');
-        if (ki?.einordnung === 'frage') return frageSenden(g, 'budget', ki.antwort);
-        haltung = ki?.budget_haltung || null;
-        if (!haltung) return frageSenden(g, 'budget', ki?.antwort || TEXTE.unverstanden);
+        if (ki?.einordnung === 'kein_interesse' || ki?.einordnung === 'will_mensch' || ki?.einordnung === 'genervt') return allgemein(g, ki, 'budget');
+        if (ki?.einordnung === 'frage') return frageSenden(g, 'budget', ki.antwort, false, true);
+        haltung = ki?.budget_haltung || budgetAusText(text);
+        if (!haltung) return nachfragen(g, 'budget', ki?.antwort);
       }
       if (haltung === 'offen') return weiter(g, 'termin', { budget: 'Passt', heiss: g.zeitpunkt === ZEITPUNKT.sofort ? 1 : 0 }, ki?.antwort || 'Super, freut mich!');
       // Kommt drauf an oder eher zu viel: Einwandbehandlung, das Gespräch endet hier nicht
@@ -846,9 +977,9 @@ async function schrittVerarbeiten(g: Gespraech, e: { text: string; knopf: string
       let ki: KiErgebnis | null = null;
       if (!haltung || haltung === 'nein') {
         ki = await verstehen(g, 'einwand', text || 'Eher nicht');
-        if (ki?.einordnung === 'will_mensch') return allgemein(g, ki, 'einwand');
+        if (ki?.einordnung === 'will_mensch' || ki?.einordnung === 'genervt') return allgemein(g, ki, 'einwand');
         if (ki?.einordnung === 'frage' && ki.antwort) return frageSenden(g, 'einwand', ki.antwort);
-        haltung = haltung ?? (ki?.budget_haltung || 'unsicher');
+        haltung = haltung ?? (ki?.budget_haltung || (ki ? null : budgetAusText(text)) || 'unsicher');
         if (ki?.einordnung === 'kein_interesse') haltung = 'nein';
       }
       if (haltung === 'offen') return weiter(g, 'termin', { budget: `${g.budget}, nach Rückfrage offen` }, ki?.antwort || 'Sehr gut, dann schauen wir uns das gemeinsam an.');
@@ -876,7 +1007,7 @@ async function schrittVerarbeiten(g: Gespraech, e: { text: string; knopf: string
       const ki = await verstehen(g, 'wunschzeit', text);
       if (ki?.wunsch_datum || ki?.wunsch_tageszeit || ki?.wunsch_uhrzeit) return wunschAnbieten(g, ki);
       if (await allgemein(g, ki, 'wunschzeit')) return;
-      return frageSenden(g, 'wunschzeit', TEXTE.unverstanden);
+      return nachfragen(g, 'wunschzeit');
     }
     case 'entscheider': {
       let id = knopf === 'd_ich' ? 'ich' : knopf === 'd_mehr' ? 'mehr' : null;
