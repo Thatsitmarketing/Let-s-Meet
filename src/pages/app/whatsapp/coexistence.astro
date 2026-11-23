@@ -30,8 +30,13 @@ const bereit = Boolean(appId && configId && env.WHATSAPP_APP_SECRET?.trim());
       Das Team kann danach weiter ganz normal am Handy schreiben, der Bot läuft parallel.
     </p>
     <p class="leise klein">
-      Dafür öffnet sich ein Fenster von Meta. Dort die Option wählen, eine bestehende Nummer aus der WhatsApp Business App zu übernehmen, und am Firmenhandy in der App den QR Code bestätigen.
-      Wichtig: dabei nicht den Weg über SMS oder Anruf wählen, der nimmt die Nummer aus der App.
+      Dafür öffnet sich ein Fenster von Meta. Dort die Option wählen, die bestehende WhatsApp Business App zu verbinden, und die Firmennummer eingeben.
+      Am Firmenhandy kommt in der WhatsApp Business App eine Nachricht vom offiziellen Facebook Business Konto: Verbinden tippen, Chatverlauf teilen bestätigen und den Code, den WhatsApp anzeigt, im Fenster eingeben.
+    </p>
+    <p class="hinweis hinweis--fehler">
+      <Icon name="warnung" />
+      Zeigt das Fenster nur „Du hast keine vorhandenen Telefonnummern. Erstelle eine neue.“ mit SMS oder Anruf, dann bietet Meta keine Coexistence an: Fenster schließen, nicht auf Weiter.
+      Dieser Weg nimmt die Nummer aus der App. Ursachen stehen in docs/whatsapp-bot.md, Abschnitt 1a.
     </p>
   </section>
 
@@ -95,13 +100,18 @@ const bereit = Boolean(appId && configId && env.WHATSAPP_APP_SECRET?.trim());
       return;
     }
     // FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING = Coexistence, FINISH = Nummer direkt neu bei der Cloud API angelegt
-    letzteDaten = { ...data.data, ereignis: data.event };
-    const was = data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'
-      ? 'Firmennummer aus der WhatsApp Business App erkannt (Coexistence)'
-      : data.event === 'FINISH'
-        ? 'Achtung: Meta hat eine neue Nummer bei der Cloud API angelegt, nicht die bestehende aus der App übernommen'
-        : data.event;
-    zeige(`${was}. Jetzt im Fenster auf "Fertig" klicken oder es schließen.`, 'erfolg');
+    // v5 liefert messaging_account_ids statt waba_id, v4 (Rückfall) noch waba_id
+    const d = data.data || {};
+    const wabaId = d.waba_id || (Array.isArray(d.messaging_account_ids) ? d.messaging_account_ids[0] : '') || '';
+    letzteDaten = { ...d, waba_id: wabaId, ereignis: data.event };
+    const coexistence = data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' || d.is_on_biz_app === true;
+    if (coexistence) {
+      zeige('Firmennummer aus der WhatsApp Business App erkannt (Coexistence). Jetzt im Fenster auf "Fertig" klicken oder es schließen.', 'erfolg');
+    } else if (data.event === 'FINISH') {
+      zeige('Achtung: Meta hat eine Nummer direkt bei der Cloud API registriert, nicht die bestehende aus der App übernommen. Am Firmenhandy prüfen, ob die WhatsApp Business App noch angemeldet ist.', 'fehler');
+    } else {
+      zeige(`Meta meldet: ${data.event}.`, '');
+    }
   });
 
   // Antwort von FB.login selbst: liefert den Code, der server seitig eingetauscht wird
@@ -158,14 +168,14 @@ const bereit = Boolean(appId && configId && env.WHATSAPP_APP_SECRET?.trim());
       override_default_response_type: true,
       extras: {
         setup: {},
-        // Ohne diese beiden Felder zeigt Meta nicht die Option, eine bestehende Nummer aus der
-        // WhatsApp Business App zu übernehmen. sessionInfoVersion "3" ist der Stand aus Metas
-        // eigenem Beispiel für genau diesen Ablauf (Stand November 2026, siehe docs/whatsapp-bot.md).
-        // Zeigt das Fenster die Coexistence Option trotzdem nicht, zuerst hier sessionInfoVersion
-        // entfernen, Meta kann die Facebook Login Konfiguration inzwischen auf eine neuere Version
-        // gestellt haben, die die Version selbst wählt.
+        // Embedded Signup v5 (seit 20.10.2026). Die Versionen 2 und 3 (sessionInfoVersion "3")
+        // sind seit 15.10.2026 abgekündigt, Meta beantwortet sie nur noch als v4. In v5 ist die
+        // Übernahme einer Nummer aus der WhatsApp Business App (Coexistence) Standard, featureType
+        // bleibt trotzdem drin, damit Meta auch bei einem Rückfall auf v4 Coexistence anbietet.
+        // Zeigt das Popup trotzdem nur "Neue Nummer, SMS oder Anruf", fehlt bei Meta eine
+        // Voraussetzung (Tech Provider, Login Konfiguration), siehe docs/whatsapp-bot.md, 1a.
+        version: 'v5',
         featureType: 'whatsapp_business_app_onboarding',
-        sessionInfoVersion: '3',
       },
     });
   });
