@@ -632,7 +632,7 @@ async function verstehen(g: Gespraech, schritt: string, text: string): Promise<K
     heute: new Intl.DateTimeFormat('de-DE', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(jetzt()) + ` (${datumInZone(jetzt(), TZ)})`,
   }).then((ki) => {
     // Sieht das Team im Backoffice unter "Fehler"
-    if (!ki) kiHinweise.set(g.id, `Ohne Claude: ${kiLetzterFehler() ?? 'keine Antwort'}, fester Text gesendet`);
+    if (!ki) kiHinweise.set(g.id, `Ohne Claude: ${(kiLetzterFehler() ?? 'keine Antwort').replace(/\.$/, '')}, fester Text gesendet`);
     else if (ki.verworfen) kiHinweise.set(g.id, `Antwort von Claude verworfen (${ki.verworfen}), fester Text gesendet`);
     else kiHinweise.set(g.id, '');
     return ki;
