@@ -8,7 +8,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import { env } from 'cloudflare:workers';
-import { antwortVerwerfen, datenBlock, MAX_ANTWORT, MAX_VERLAUF_EINTRAG } from './schutz';
+import { antwortVerwerfen, datenBlock, MAX_ANTWORT, MAX_VERLAUF_EINTRAG, schluesselPruefen } from './schutz';
 
 export const EINORDNUNGEN = ['beantwortet', 'frage', 'einwand', 'kein_interesse', 'will_mensch', 'termin_aendern', 'genervt', 'unklar'] as const;
 
@@ -102,7 +102,8 @@ Bezieht sich die Nachricht auf eine frühere Frage, korrigiert der Lead eine fr�
 Felder, die nicht passen, bleiben leer.`;
 
 function client() {
-  const key = env.ANTHROPIC_API_KEY?.trim();
+  // Bereinigt: ein mitkopierter Zeilenumbruch oder ein unsichtbares Zeichen im Secret legt sonst jeden Aufruf lahm
+  const key = schluesselPruefen(env.ANTHROPIC_API_KEY).schluessel;
   return key ? new Anthropic({ apiKey: key, maxRetries: 1, timeout: 22000 }) : null;
 }
 
@@ -111,7 +112,7 @@ let letzterFehler: string | null = null;
 export const kiLetzterFehler = () => letzterFehler;
 
 export function kiAktiv() {
-  return Boolean(env.ANTHROPIC_API_KEY?.trim());
+  return Boolean(schluesselPruefen(env.ANTHROPIC_API_KEY).schluessel);
 }
 
 export async function kiVerstehen(e: {
@@ -183,7 +184,12 @@ export async function kiVerstehen(e: {
   } catch (fehler) {
     if (fehler instanceof Anthropic.APIError) console.error('Claude Fehler', fehler.status, fehler.message);
     else console.error('Claude fehlgeschlagen', fehler);
-    letzterFehler = `Claude nicht erreichbar (${fehler instanceof Anthropic.APIError ? `${fehler.status ?? 'ohne Status'}: ` : ''}${String((fehler as Error)?.message ?? fehler).slice(0, 200)})`;
+    const text = String((fehler as Error)?.message ?? fehler).slice(0, 200);
+    letzterFehler = /invalid header value/i.test(text)
+      ? 'Claude nicht erreichbar: ein Wert im Kopf der Anfrage ist ungültig, meist ein Zeilenumbruch im Secret ANTHROPIC_API_KEY.'
+      : fehler instanceof Anthropic.AuthenticationError
+        ? 'Claude lehnt den Schlüssel ab (401): ANTHROPIC_API_KEY ist falsch, gelöscht oder gehört zu einer anderen Organisation.'
+        : `Claude nicht erreichbar (${fehler instanceof Anthropic.APIError ? `${fehler.status ?? 'ohne Status'}: ` : ''}${text}).`;
     return null;
   }
 }
@@ -194,6 +200,12 @@ export async function kiVerstehen(e: {
  */
 export async function kiTesten(): Promise<{ ok: boolean; text: string }> {
   if (!kiAktiv()) return { ok: false, text: 'ANTHROPIC_API_KEY ist im Worker let-s-meet nicht gesetzt (Secret, genau dieser Name). Ohne Claude nutzt der Bot nur feste Texte.' };
+  const pruefung = schluesselPruefen(env.ANTHROPIC_API_KEY);
+  // Hinweise zum Secret, ohne den Schlüssel zu zeigen
+  const zumSchluessel = [
+    pruefung.korrigiert ? 'Das Secret ANTHROPIC_API_KEY enthält Zeichen, die nicht in einen Schlüssel gehören (Leerzeichen, Zeilenumbruch, Anführungszeichen, unsichtbare Zeichen oder typografische Bindestriche). Der Bot nutzt ihn bereinigt, bitte trotzdem im Worker neu einfügen.' : '',
+    pruefung.formatOk ? '' : `Der Schlüssel sieht nicht wie ein Anthropic API Schlüssel aus (erwartet: beginnt mit „sk-ant-“, nur Buchstaben, Ziffern, Bindestrich und Unterstrich; Länge jetzt ${pruefung.laenge} Zeichen).`,
+  ].filter(Boolean).join(' ');
   const start = Date.now();
   const ki = await kiVerstehen({
     aufgabe: 'Frage: "Und was soll die neue Website für euch erreichen?" Freitext. Spiegle das Ziel kurz in "antwort", ohne Frage.',
@@ -202,9 +214,9 @@ export async function kiTesten(): Promise<{ ok: boolean; text: string }> {
     eingang: 'Mehr Anfragen über Google und ein modernerer Auftritt',
     heute: new Date().toISOString().slice(0, 10),
   });
-  if (!ki) return { ok: false, text: letzterFehler ?? 'Claude hat nicht geantwortet.' };
+  if (!ki) return { ok: false, text: [letzterFehler ?? 'Claude hat nicht geantwortet.', zumSchluessel].filter(Boolean).join(' ') };
   const dauer = ((Date.now() - start) / 1000).toFixed(1).replace('.', ',');
-  return { ok: true, text: `Claude antwortet (${dauer} Sekunden, Einordnung „${ki.einordnung}“): ${ki.antwort || '(ohne Text)'}` };
+  return { ok: true, text: [`Claude antwortet (${dauer} Sekunden, Einordnung „${ki.einordnung}“): ${ki.antwort || '(ohne Text)'}`, zumSchluessel].filter(Boolean).join(' ') };
 }
 
 /** Gedankenstriche und Markdown raus, falls doch welche durchrutschen. */

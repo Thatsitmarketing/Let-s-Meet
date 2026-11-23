@@ -21,6 +21,30 @@ export const KI_TAGESLIMIT_STANDARD = 1500;
 /** Sprachnachrichten über dieser Größe werden nicht umgewandelt (rund 10 Minuten). */
 export const MAX_AUDIO_BYTES = 6 * 1024 * 1024;
 
+/**
+ * API Schlüssel aus dem Secret prüfen und bereinigen. Beim Einfügen in Cloudflare rutschen leicht
+ * Zeilenumbrüche, Leerzeichen, Anführungszeichen, unsichtbare Zeichen oder typografische Bindestriche
+ * mit. Dann lehnt fetch im Worker die Anfrage mit "Invalid header value." ab, bevor sie Anthropic
+ * erreicht (Testchat 2026-11-23). Der Schlüssel selbst wird nie ausgegeben.
+ */
+export function schluesselPruefen(roh: string | null | undefined) {
+  const original = (roh ?? '').trim();
+  const ohneVorsatz = original.replace(/^(bearer\s+|x-api-key:\s*|anthropic_api_key\s*=\s*)/i, '');
+  const s = ohneVorsatz
+    .replace(/[\u2010-\u2015\u2212]/g, '-')
+    .replace(/[^\x21-\x7E]/g, '')
+    .replace(/^["'`]+|["'`]+$/g, '');
+  const bindestriche = ohneVorsatz.match(/[\u2010-\u2015\u2212]/g)?.length ?? 0;
+  return {
+    schluessel: s,
+    /** Zeichen, die entfernt oder ersetzt wurden (0 = Secret ist sauber) */
+    korrigiert: original.length - s.length + bindestriche,
+    /** Anthropic Schlüssel beginnen mit sk-ant- und bestehen nur aus Buchstaben, Ziffern, - und _ */
+    formatOk: /^sk-ant-[A-Za-z0-9_-]{20,}$/.test(s),
+    laenge: s.length,
+  };
+}
+
 /** Steuerzeichen und unsichtbare Zeichen raus, Länge begrenzen. */
 export function saeubern(text: string | null | undefined, max: number) {
   return (text ?? '')

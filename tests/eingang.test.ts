@@ -78,3 +78,20 @@ test('Knöpfe gehören zu ihrem Schritt, ein alter Knopf passt nicht zur nächst
   assert.ok(knopfPasst('t_0', 'wunschzeit'));
   assert.equal(knopfSchritt('x_unbekannt'), null);
 });
+
+test('API Schlüssel aus dem Secret wird bereinigt (Fehler "Invalid header value")', async () => {
+  const { schluesselPruefen } = await import('../src/lib/whatsapp/schutz.ts');
+  const echt = 'sk-ant-api03-' + 'a1B2_c3D4-'.repeat(8);
+  assert.deepEqual(schluesselPruefen(echt), { schluessel: echt, korrigiert: 0, formatOk: true, laenge: echt.length });
+  for (const kaputt of [`${echt}\n`, `"${echt}"`, `Bearer ${echt}`, `${echt.slice(0, 20)}\n${echt.slice(20)}`, `\u200B${echt}`, `${echt.slice(0, 30)}\u00A0${echt.slice(30)}`]) {
+    const p = schluesselPruefen(kaputt);
+    assert.equal(p.schluessel, echt, JSON.stringify(kaputt));
+    assert.ok(p.formatOk);
+  }
+  // typografischer Bindestrich (etwa aus Word oder Notizen) wird zum normalen
+  const p = schluesselPruefen(echt.replace('sk-ant-', 'sk\u2011ant\u2011'));
+  assert.equal(p.schluessel, echt);
+  assert.ok(p.korrigiert > 0);
+  assert.equal(schluesselPruefen('mein-schluessel').formatOk, false);
+  assert.equal(schluesselPruefen(undefined).schluessel, '');
+});
