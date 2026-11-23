@@ -38,6 +38,9 @@ export interface Anfrage {
   antworten: string | null;
   seite: string | null;
   dublette: number;
+  /** Gespräch des WhatsApp Bots, wenn die Anfrage per WhatsApp übernommen wurde (seit 2026-11-23) */
+  whatsapp_gespraech_id: string | null;
+  whatsapp_am: string | null;
   erstellt_am: string;
 }
 
@@ -73,6 +76,18 @@ export async function anfrageAnlegen(
     id, nutzerId, kontaktId, a.quelle, a.name, email, a.telefon, a.unternehmen,
     a.antworten.length ? JSON.stringify(a.antworten) : null, a.seite, a.dublette ? 1 : 0, jetzt,
   );
+  // WhatsApp Lead mit derselben Anfragenummer kam schon vorher an: gleich verknüpfen (sonst in leadAnlegen)
+  const nummer = a.antworten.find((x) => x.frage === 'Anfragenummer')?.antwort?.trim().toUpperCase();
+  if (nummer) {
+    const g = await eins<{ id: string; erstellt_am: string }>(
+      "SELECT id, erstellt_am FROM wa_gespraeche WHERE referenz = ? AND anfrage_id IS NULL AND zuordnung = 'formular' ORDER BY erstellt_am DESC LIMIT 1",
+      nummer,
+    ).catch(() => null);
+    if (g) {
+      await ausfuehren('UPDATE wa_gespraeche SET anfrage_id = ? WHERE id = ?', id, g.id);
+      await ausfuehren('UPDATE anfragen SET whatsapp_gespraech_id = ?, whatsapp_am = ? WHERE id = ?', g.id, g.erstellt_am, id);
+    }
+  }
   return { id, kontaktId, erstelltAm: jetzt };
 }
 

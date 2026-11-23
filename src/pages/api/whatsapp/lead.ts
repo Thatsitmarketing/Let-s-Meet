@@ -1,6 +1,7 @@
 /**
  * Schnittstelle der Landingpage "Kostenloser Website-Entwurf" (serverseitig, nie aus dem Browser).
- * POST JSON { name, firma?, webseite?, telefon, email?, hat_website?, hinweise?, quelle? }
+ * POST JSON { name, firma?, webseite?, telefon, email?, hat_website?, hinweise?, quelle?, referenz? }
+ * (referenz = Anfragenummer aus dem Funnel, sechs Zeichen, verknüpft das Gespräch mit der Anfrage)
  * mit Authorization: Bearer WHATSAPP_LEAD_SCHLUESSEL. Nur Leads mit WhatsApp Einwilligung schicken.
  * Antwort { id, status } mit status gesendet, geplant, vorhanden oder abgemeldet.
  */
@@ -63,6 +64,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       hatWebsite: hatWebsite(d.hat_website, webseiteRoh),
       hinweise: hinweise || null,
       quelle: trimmen(d.quelle, 80) || 'landingpage entwurf',
+      referenz: /^[A-HJKMNP-Z2-9]{6}$/.test(trimmen(d.referenz, 10).toUpperCase()) ? trimmen(d.referenz, 10).toUpperCase() : null,
     },
     (p) => locals.cfContext.waitUntil(p.catch((f) => console.error('WhatsApp Start fehlgeschlagen', f))),
   );

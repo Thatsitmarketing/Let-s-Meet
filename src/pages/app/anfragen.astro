@@ -98,6 +98,9 @@ const exportParams = new URLSearchParams({ ...(quelle ? { quelle } : {}), ...(su
                 <td class="s-pb" data-label="Quelle">
                   <span class="pb"><span class:list={['farbe', schluessel && `q-${schluessel}`]} aria-hidden="true"></span>{schluessel ? ANFRAGE_QUELLEN[schluessel].name : z.quelle}</span>
                   {z.dublette === 1 && <span class="unter-pb leise" title="Dieselbe E Mail oder Nummer kam in den 30 Tagen davor schon einmal">Wiederholte Anfrage</span>}
+                  {z.whatsapp_gespraech_id && (
+                    <a class="pille pille--erfolg wa" href={`/app/whatsapp/${z.whatsapp_gespraech_id}`} title="Der WhatsApp Bot führt das Setting, niemand muss anrufen">Per WhatsApp übernommen</a>
+                  )}
                 </td>
                 <td class="s-mail" data-label="E Mail"><a href={`mailto:${z.email}`}>{z.email}</a></td>
                 <td class="s-tel" data-label="Telefon">{telefon ? <a href={`tel:${telefon.replace(/[^\d+]/g, '')}`}>{telefon}</a> : <span class="leer-wert">–</span>}</td>
@@ -135,6 +138,7 @@ const exportParams = new URLSearchParams({ ...(quelle ? { quelle } : {}), ...(su
   .farbe { display: inline-block; width: 10px; height: 10px; flex: none; background: var(--n-400); }
   .q-website-entwurf { background: #2B6CB0; }
   .unter-pb { display: block; margin-top: 2px; font-size: 0.8125rem; }
+  .wa { display: block; width: fit-content; margin-top: 6px; text-decoration: none; white-space: nowrap; }
 
   .werkzeuge { display: grid; gap: var(--raum-4); }
   .suche { display: flex; align-items: center; gap: var(--raum-2); position: relative; max-width: 720px; }

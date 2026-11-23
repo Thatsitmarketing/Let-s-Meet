@@ -11,8 +11,10 @@
  *
  * Claude liest nur freie Antworten ein und schreibt Spiegelung, Rückfragen und Einwandbehandlung (ki.ts).
  * Schreibt das Team aus der WhatsApp Business App in einen Chat, pausiert der Bot dort (Status "mensch").
- * "Stopp" meldet ab. Unbekannte Nummern ignoriert der Bot komplett: über die Firmennummer laufen auch
- * ganz normale Kundenchats.
+ * "Stopp" meldet ab. Unbekannte Nummern ignoriert der Bot: über die Firmennummer laufen auch ganz
+ * normale Kundenchats. Ausnahme (seit 2026-11-23): schreibt ein Interessent der Landingpage selbst
+ * zuerst, ordnet der Bot ihn über Absendernummer oder Anfragenummer einer Anfrage zu und startet
+ * das Setting ohne Vorlage (selbstGeschrieben, Zuordnung in zuordnung.ts).
  */
 import { env } from 'cloudflare:workers';
 import { alle, ausfuehren, eins, jetztIso, neueId } from '../db';
@@ -24,7 +26,10 @@ import { datumInZone, teileInZone } from '../zeit';
 import { kiAktiv, kiVerstehen, type KiErgebnis } from './ki';
 import { gelesenUndTippt, sendeKnoepfe, sendeVorlage, type Knopf } from './meta';
 import { botTerminart, slotKurz, slotLang, tagLang, vorschlaegeZumWunsch, zweiVorschlaege } from './termine';
-import { KI_TAGESLIMIT_STANDARD, LIMIT_PRO_STUNDE, LIMIT_PRO_TAG, MAX_EINGANG, saeubern } from './schutz';
+import { KI_TAGESLIMIT_STANDARD, LIMIT_PRO_STUNDE, LIMIT_PRO_TAG, MAX_EINGANG, namenPruefen, saeubern } from './schutz';
+import { angabenDerAnfrage, anfrageZuordnen, anfrageZurAnfragenummer, anfragenummerAusText, type AnfrageTreffer } from './zuordnung';
+import { crmMelden } from '../crm';
+import { emailGueltig } from '../eingabe';
 
 const TZ = 'Europe/Berlin';
 
@@ -60,6 +65,11 @@ export interface Gespraech {
   erinnerung_gesendet: number;
   in_arbeit_bis: string | null;
   fehler: string | null;
+  /** Anfragenummer aus dem Funnel (sechs Zeichen) */
+  referenz: string | null;
+  anfrage_id: string | null;
+  /** formular (Lead mit Einwilligung), nummer und anfragenummer (selbst geschrieben, zugeordnet), keine (nicht zugeordnet) */
+  zuordnung: 'formular' | 'nummer' | 'anfragenummer' | 'keine';
   erstellt_am: string;
   aktualisiert_am: string;
 }
@@ -117,7 +127,7 @@ export const TEXTE = {
   einwandErsatz:
     'Verstehe ich gut. Lass mich kurz fragen: Was ist ein neuer Kunde für euch wert? Oft machen schon zwei, drei zusätzliche Kunden im Jahr die Website bezahlt. Wenn dich der Entwurf zu 100 % überzeugt und du siehst, was er bringt, wäre das dann grundsätzlich drin?',
   verabschiedung: (v: string, firma: string) =>
-    `Danke dir für die ehrliche Antwort, ${v}! Dann ist der Entwurf gerade vermutlich nicht der richtige Schritt für euch, und wir möchten dir nicht unnötig Zeit stehlen. Falls sich bei euch etwas ändert, schreib uns einfach hier, wir sind gern für dich da. Alles Gute für dich und ${firma}!`,
+    `Danke dir für die ehrliche Antwort${v ? `, ${v}` : ''}! Dann ist der Entwurf gerade vermutlich nicht der richtige Schritt für euch, und wir möchten dir nicht unnötig Zeit stehlen. Falls sich bei euch etwas ändert, schreib uns einfach hier, wir sind gern für dich da. Alles Gute für dich und ${firma}!`,
   termin: (zuerst: string) =>
     `${zuerst}Dann lass uns den Termin festmachen, in dem dir Tim den Entwurf vorstellt. 60 Minuten per Google Meet, auf Wunsch auch bei uns im Büro in Gelsenkirchen. Welcher Termin passt dir?`,
   wunschzeit: 'Klar! Wann passt es dir am besten? Schreib mir einfach Tag und ungefähre Uhrzeit, zum Beispiel „Donnerstag nachmittags“.',
@@ -129,13 +139,23 @@ export const TEXTE = {
   entscheiderText: 'Super, bring die Person gern mit! Leite die Einladung aus deiner Mail einfach weiter. Wer ist es denn, damit Tim Bescheid weiß?',
   briefing:
     'Letzte Frage, damit der Entwurf richtig gut wird: Gibt es eine Website, die dir richtig gut gefällt? Schick mir einfach den Link. Wenn dir keine einfällt, ist das auch völlig okay.',
-  fertig: (v: string, wann: string) => `Danke dir, ${v}! Dann legen wir mit deinem Entwurf los. Wir sehen uns ${wann} 🙌`,
+  fertig: (v: string, wann: string) => `Danke dir${v ? `, ${v}` : ''}! Dann legen wir mit deinem Entwurf los. Wir sehen uns ${wann} 🙌`,
   abgemeldet: 'Alles klar, wir schreiben dir hier nicht mehr. Falls du doch Fragen hast, melde dich jederzeit.',
   mensch: 'Klar, ich gebe das direkt ans Team weiter, wir melden uns zeitnah bei dir.',
   spaeter: 'Alles klar, kein Stress. Schreib mir einfach, wenn es dir besser passt 🙂',
-  nachhaken: (v: string) => `Kurz nachgehakt, ${v} 🙂`,
+  nachhaken: (v: string) => `Kurz nachgehakt${v ? `, ${v}` : ''} 🙂`,
   umbuchen: (link: string) => `Kein Problem! Hier kannst du den Termin selbst verschieben oder absagen: ${link}`,
   unverstanden: 'Das habe ich nicht ganz verstanden.',
+
+  // Interessent schreibt selbst zuerst (Knopf "Per WhatsApp weiter" der Landingpage), keine Vorlage nötig
+  selbstStart: (v: string, firma: string) =>
+    `Hi ${v}, schön, dass du dich meldest 👋 Hier ist das Team von That's it. Marketing. Danke für deine Anfrage zum kostenlosen Website-Entwurf für ${firma}! Damit wir den Entwurf genau auf euch zuschneiden, habe ich ein paar kurze Fragen.`,
+  kennenlernen:
+    "Hi, schön, dass du dich meldest 👋 Hier ist das Team von That's it. Marketing. Damit ich deine Anfrage zum kostenlosen Website-Entwurf zuordnen kann: Wie heißt du und für welche Firma ist der Entwurf?",
+  kennenlernenNochmal: 'Magst du mir kurz deinen Namen und den Namen eurer Firma schreiben? Zum Beispiel „Lisa Becker, Becker Bau“.',
+  websiteFrage: (v: string) => `Danke dir${v ? `, ${v}` : ''}! Habt ihr schon eine eigene Website?`,
+  email: 'Fast geschafft! An welche E-Mail-Adresse dürfen wir dir die Bestätigung mit dem Google Meet Link schicken?',
+  emailUngueltig: 'Die Adresse sieht nicht ganz vollständig aus. Schreib sie mir bitte noch einmal, zum Beispiel name@firma.de.',
 };
 
 const STOPP = /^(stop+|stopp+|abmelden|abbestellen|keine nachrichten( mehr)?|bitte nicht mehr schreiben)[.!]*$/i;
@@ -273,6 +293,8 @@ export interface LeadDaten {
   hatWebsite: boolean;
   hinweise: string | null;
   quelle: string | null;
+  /** Anfragenummer aus dem Funnel, falls die Landingpage sie mitschickt */
+  referenz?: string | null;
 }
 
 export async function leadAnlegen(d: LeadDaten, imHintergrund: (p: Promise<unknown>) => void) {
@@ -284,11 +306,15 @@ export async function leadAnlegen(d: LeadDaten, imHintergrund: (p: Promise<unkno
   const id = neueId();
   const jetztText = jetztIso();
   const faellig = naechsteSchreibzeit().toISOString();
+  // Kam die Anfrage aus dem Funnel schon an, wird sie gleich verknüpft (sonst in anfrageAnlegen)
+  const anfrage = d.referenz ? await anfrageZurAnfragenummer(alle, d.referenz).catch(() => null) : null;
   await ausfuehren(
-    `INSERT INTO wa_gespraeche (id, telefon, name, vorname, firma, webseite, email, hat_website, quelle, hinweise, schritt, status, start_faellig_am, erstellt_am, aktualisiert_am)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'start', 'offen', ?, ?, ?)`,
-    id, d.telefon, d.name, vorname(d.name), d.firma, d.webseite, d.email, d.hatWebsite ? 1 : 0, d.quelle, d.hinweise, faellig, jetztText, jetztText,
+    `INSERT INTO wa_gespraeche (id, telefon, name, vorname, firma, webseite, email, hat_website, quelle, hinweise, schritt, status, start_faellig_am, referenz, anfrage_id, zuordnung, erstellt_am, aktualisiert_am)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'start', 'offen', ?, ?, ?, 'formular', ?, ?)`,
+    id, d.telefon, d.name, vorname(d.name), d.firma, d.webseite, d.email, d.hatWebsite ? 1 : 0, d.quelle, d.hinweise, faellig,
+    d.referenz ?? null, anfrage?.id ?? null, jetztText, jetztText,
   );
+  if (anfrage) await ausfuehren('UPDATE anfragen SET whatsapp_gespraech_id = ?, whatsapp_am = COALESCE(whatsapp_am, ?) WHERE id = ?', id, jetztText, anfrage.id);
   if (darfSchreiben()) imHintergrund(startSenden(id));
   return { id, status: darfSchreiben() ? ('gesendet' as const) : ('geplant' as const) };
 }
@@ -317,10 +343,21 @@ export interface Eingang {
   knopf: string | null;
 }
 
-/** Speichert die Nachricht eines bekannten Leads und arbeitet sie ab. Unbekannte Nummern: null. */
+/** Wie lange eine Nummer kein zweites Gespräch bekommt */
+const DUBLETTE_TAGE = 30;
+
+/**
+ * Speichert die Nachricht eines bekannten Leads und arbeitet sie ab. Ohne Gespräch versucht der Bot,
+ * den Chat einer Anfrage der Landingpage zuzuordnen (selbstGeschrieben). Sonst: null, der Bot schweigt.
+ */
 export async function eingangVerarbeiten(telefon: string, e: Eingang) {
   const g = await eins<Gespraech>('SELECT * FROM wa_gespraeche WHERE telefon = ? ORDER BY erstellt_am DESC LIMIT 1', telefon);
-  if (!g) return null;
+  if (!g) return selbstGeschrieben(telefon, e);
+  // Altes, abgeschlossenes Gespräch (über 30 Tage) und eine neue Anfrage: neues Setting. Nach "Stopp" nie.
+  if (g.status !== 'abgemeldet' && g.status !== 'offen' && Date.now() - Date.parse(g.erstellt_am) > DUBLETTE_TAGE * 86_400_000) {
+    const neu = await selbstGeschrieben(telefon, e, g.erstellt_am);
+    if (neu) return neu;
+  }
   const aktiv = g.status === 'offen' || g.status === 'gebucht' || g.status === 'anrufen';
   const neu = await protokoll(g, 'ein', e.art, e.text, e.waId, e.knopf, aktiv ? 0 : 1);
   if (!neu) return g.id; // Meta schickt Webhooks bei Zeitüberschreitung doppelt
@@ -345,6 +382,99 @@ export async function eingangVerarbeiten(telefon: string, e: Eingang) {
   if (e.art !== 'knopf') await gelesenUndTippt(e.waId);
   await abarbeiten(g.id);
   return g.id;
+}
+
+/**
+ * Ein Interessent schreibt selbst zuerst (Knopf "Per WhatsApp weiter" der Landingpage Website Entwurf).
+ * Zuordnung über die Absendernummer, sonst über die Anfragenummer im Text (zuordnung.ts).
+ * Treffer: Gespräch anlegen, Anfrage in Let's Meet und Close als übernommen markieren, Setting starten.
+ * Ohne Treffer, aber erkennbar zur Landingpage: nach Name und Firma fragen, als nicht zugeordnet markieren.
+ * Alles andere ist ein normaler Kundenchat: null, nichts wird gespeichert.
+ * Kein Vorlagenzwang: der Kunde hat zuerst geschrieben, das Servicefenster von 24 Stunden ist offen.
+ */
+async function selbstGeschrieben(telefon: string, e: Eingang, nurNeuerAls: string | null = null): Promise<string | null> {
+  if (e.art === 'knopf') return null;
+  const z = await anfrageZuordnen(alle, telefon, e.text);
+  if (!z) return null;
+  if (nurNeuerAls && (!z.anfrage || z.anfrage.erstellt_am <= nurNeuerAls)) return null;
+
+  // Gibt es zu dieser Anfrage schon ein Gespräch (etwa der WhatsApp Lead mit der Nummer aus dem Formular)?
+  if (z.anfrage) {
+    const vorhanden = await eins<Gespraech>(
+      'SELECT * FROM wa_gespraeche WHERE (id = ? OR anfrage_id = ? OR (referenz IS NOT NULL AND referenz = ?)) AND telefon != ? ORDER BY erstellt_am DESC LIMIT 1',
+      z.anfrage.whatsapp_gespraech_id ?? '', z.anfrage.id, z.anfragenummer ?? angabenDerAnfrage(z.anfrage).anfragenummer ?? '', telefon,
+    );
+    if (vorhanden && vorhanden.status === 'abgemeldet') return null;
+    if (vorhanden && Date.now() - Date.parse(vorhanden.erstellt_am) < DUBLETTE_TAGE * 86_400_000) {
+      // Der Lead schreibt von einer anderen Nummer. Noch keine Antwort im alten Chat: das Gespräch zieht um.
+      if (vorhanden.status === 'offen' && !vorhanden.letzte_eingang_am && !(await eins('SELECT id FROM wa_gespraeche WHERE telefon = ?', telefon))) {
+        await setzen(vorhanden.id, { telefon, zuordnung: z.weg, start_gesendet_am: vorhanden.start_gesendet_am ?? jetztIso(), letzte_eingang_am: jetztIso() });
+        const umgezogen = (await gespraech(vorhanden.id))!;
+        await protokoll(umgezogen, 'ein', e.art, e.text, e.waId, null, 1);
+        await anfrageUebernommen(umgezogen, z.anfrage, z.weg);
+        await gelesenUndTippt(e.waId);
+        await setzen(umgezogen.id, { schritt: 'problem' });
+        await frageSenden({ ...umgezogen, schritt: 'problem' }, 'problem', TEXTE.selbstStart(umgezogen.vorname, firmaText(umgezogen)));
+        return umgezogen.id;
+      }
+      await teamInformieren(vorhanden, `Der Lead schreibt jetzt auch von der Nummer +${telefon} (${z.weg === 'nummer' ? 'Nummer aus der Anfrage' : `Anfragenummer ${z.anfragenummer}`}). Der Bot antwortet dort nicht, bitte selbst übernehmen.`);
+      return vorhanden.id;
+    }
+  }
+
+  const a = z.anfrage;
+  const angaben = a ? angabenDerAnfrage(a) : null;
+  const name = a ? namenPruefen(a.name, 120) ?? a.name.slice(0, 120) : 'Unbekannt';
+  const id = neueId();
+  const jetztText = jetztIso();
+  const abgemeldet = STOPP.test(e.text.trim());
+  // Zwei schnelle Nachrichten dürfen kein zweites Gespräch anlegen: nur einfügen, wenn die Nummer frei ist
+  const res = await ausfuehren(
+    `INSERT INTO wa_gespraeche (id, telefon, name, vorname, firma, webseite, email, hat_website, quelle, hinweise, schritt, status,
+       start_faellig_am, start_gesendet_am, letzte_eingang_am, referenz, anfrage_id, zuordnung, erstellt_am, aktualisiert_am)
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'whatsapp selbst', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+     WHERE NOT EXISTS (SELECT 1 FROM wa_gespraeche WHERE telefon = ? AND erstellt_am > ?)`,
+    id, telefon, name, a ? vorname(name) : '', a?.unternehmen ? namenPruefen(a.unternehmen, 160) : null,
+    angaben?.website ?? null, a?.email ?? null, angaben ? (angaben.hatWebsite ? 1 : 0) : 1,
+    a ? 'problem' : 'kennenlernen', abgemeldet ? 'abgemeldet' : 'offen',
+    jetztText, jetztText, jetztText, z.anfragenummer ?? angaben?.anfragenummer ?? null, a?.id ?? null, z.weg, jetztText, jetztText,
+    telefon, nurNeuerAls ?? '',
+  );
+  if (!res.meta?.changes) return null;
+  const g = (await gespraech(id))!;
+  await protokoll(g, 'ein', e.art, e.text, e.waId, null, 1);
+  if (abgemeldet) {
+    await schreiben(g, TEXTE.abgemeldet);
+    return id;
+  }
+  await gelesenUndTippt(e.waId);
+  if (a) {
+    await anfrageUebernommen(g, a, z.weg);
+    await frageSenden(g, 'problem', TEXTE.selbstStart(g.vorname, firmaText(g)));
+  } else {
+    await schreiben(g, TEXTE.kennenlernen);
+  }
+  return id;
+}
+
+/** Anfrage in Let's Meet und Close als "per WhatsApp übernommen" markieren, damit niemand mehr anruft. */
+async function anfrageUebernommen(g: Gespraech, a: AnfrageTreffer, weg: string) {
+  const am = jetztIso();
+  await ausfuehren('UPDATE anfragen SET whatsapp_gespraech_id = ?, whatsapp_am = ? WHERE id = ?', g.id, am, a.id);
+  await setzen(g.id, { anfrage_id: a.id });
+  await crmMelden('anfrage.whatsapp_uebernommen', {
+    anfrage_id: a.id,
+    quelle: 'website-entwurf',
+    name: a.name,
+    email: a.email,
+    telefon: a.telefon,
+    whatsapp: `+${g.telefon}`,
+    unternehmen: a.unternehmen,
+    anfragenummer: g.referenz,
+    zuordnung: weg === 'nummer' ? 'Absendernummer' : 'Anfragenummer',
+    chat: `${basisUrl()}/app/whatsapp/${g.id}`,
+    zeit: am,
+  });
 }
 
 /** Nachricht vom Team aus der WhatsApp Business App: der Bot hält sich ab jetzt raus. */
@@ -398,6 +528,12 @@ const problemOptionen = (g: Gespraech) => (g.hat_website ? PROBLEM_WEBSITE : PRO
 function aufgabe(g: Gespraech, schritt: string) {
   const optionen = (o: Record<string, string>) => Object.entries(o).map(([id, t]) => `${id} (${t})`).join(', ');
   switch (schritt) {
+    case 'kennenlernen':
+      return `Frage: "${TEXTE.kennenlernen}" Der Lead hat selbst geschrieben und ist noch keiner Anfrage zugeordnet. wert = "Vorname Nachname | Firma" (Teile, die fehlen, leer lassen, nichts erfinden). Kurze Antwort ohne Frage, gern leer.`;
+    case 'website_frage':
+      return 'Frage: Habt ihr schon eine eigene Website? Knopffrage, Options IDs: ja, nein. Nennt der Lead eine Adresse, trage sie in "link" ein und wert ist ja.';
+    case 'email':
+      return 'Frage: An welche E-Mail-Adresse dürfen wir die Terminbestätigung schicken? wert = die genannte Adresse. Keine Frage in "antwort", gern leer.';
     case 'start':
     case 'problem':
       return `Frage: "${g.hat_website ? TEXTE.problemWebsite : TEXTE.problemOhne}" Knopffrage, Options IDs: ${optionen(problemOptionen(g))}. Beschreibt der Lead etwas anderes, ist wert "anderes:" gefolgt von der Kurzfassung.`;
@@ -470,9 +606,33 @@ function bisherigerVerlauf(nachrichten: WaNachricht[]) {
 
 const vor = (text: string | undefined | null) => (text?.trim() ? `${text.trim()}\n\n` : '');
 
+/**
+ * Name und Firma ohne Claude: "Ich bin Lisa Becker von Becker Bau", "Lisa Becker, Becker Bau GmbH"
+ * oder zwei Zeilen. Begrüßungen und Floskeln fallen weg.
+ */
+export function nameUndFirma(text: string): [string, string] {
+  const t = text
+    .replace(/^\s*(hallo|hi|hey|moin|servus|guten (tag|morgen|abend))[\s,!.]*/i, '')
+    .replace(/\b(ich bin|ich hei(ß|ss)e|mein name ist|hier ist|hier schreibt|das ist)\s+/gi, '')
+    .replace(/\b(die firma|unsere firma|firma|unternehmen)( (hei(ß|ss)t|ist))?:?\s*/gi, '')
+    .trim();
+  const teile = t.split(/\s*(?:\n|,|;|\s+-\s+|\s+von der\s+|\s+von\s+|\s+vom\s+|\s+bei der\s+|\s+bei\s+|\s+für\s+|\s+fuer\s+)\s*/i).filter(Boolean);
+  const sauber = (x = '') => x.replace(/[.!?]+$/, '').trim();
+  return [sauber(teile[0]), sauber(teile.slice(1).join(' '))];
+}
+
 /** Schickt die Frage eines Schritts (mit Knöpfen), optional mit Text davor. */
 async function frageSenden(g: Gespraech, schritt: string, davor = '') {
   switch (schritt) {
+    case 'kennenlernen':
+      return schreiben(g, vor(davor) + TEXTE.kennenlernenNochmal);
+    case 'website_frage':
+      return schreiben(g, vor(davor) + TEXTE.websiteFrage(g.vorname), [
+        { id: 'w_ja', titel: 'Ja, haben wir' },
+        { id: 'w_nein', titel: 'Noch keine' },
+      ]);
+    case 'email':
+      return schreiben(g, vor(davor) + TEXTE.email);
     case 'start':
     case 'problem':
       return schreiben(
@@ -563,8 +723,54 @@ async function schrittVerarbeiten(g: Gespraech, e: { text: string; knopf: string
     return;
   }
   const knopf = e.knopf;
+  // Den vorausgefüllten Text der Landingpage noch einmal geschickt: keine Antwort, die offene Frage wiederholen
+  if (!knopf && anfragenummerAusText(text) && g.schritt !== 'kennenlernen') return frageSenden(g, g.schritt, 'Deine Anfrage habe ich schon 🙂');
 
   switch (g.schritt) {
+    case 'kennenlernen': {
+      // Selbst geschrieben, keine Anfrage gefunden: Name und Firma erfragen, E-Mail gleich mitnehmen
+      const email = text.match(/[^\s@<>()"',;]+@[^\s@<>()"',;]+\.[a-z]{2,}/i)?.[0]?.toLowerCase() ?? null;
+      const rest = email ? text.replace(email, ' ') : text;
+      const ki = await verstehen(g, 'kennenlernen', rest);
+      if (ki && ki.einordnung !== 'beantwortet' && ki.einordnung !== 'unklar' && (await allgemein(g, ki, 'kennenlernen'))) return;
+      const [nameRoh, firmaRoh] = ki?.wert ? ki.wert.split('|').map((t) => t.trim()) : nameUndFirma(rest);
+      const name = namenPruefen(nameRoh, 120);
+      const firma = namenPruefen(firmaRoh, 160);
+      const felder = { ...(email && emailGueltig(email) ? { email } : {}), ...(firma ? { firma } : {}) };
+      if (!name || name.length < 2) {
+        // Ein zweites Mal nachfragen (Zähler einwand_versuche ist in diesem Schritt noch frei), dann übernimmt das Team
+        if (g.einwand_versuche >= 1) return anMenschen(g);
+        await setzen(g.id, { ...felder, einwand_versuche: 1 });
+        return frageSenden(g, 'kennenlernen', ki?.antwort ?? '');
+      }
+      return weiter(g, 'website_frage', { ...felder, name, vorname: vorname(name), einwand_versuche: 0 });
+    }
+    case 'website_frage': {
+      let ja: boolean | null = knopf === 'w_ja' ? true : knopf === 'w_nein' ? false : null;
+      let webseite: string | null = text.match(/(https?:\/\/\S+|(?:www\.)?[a-z0-9-]+\.[a-z]{2,}(?:\/\S*)?)/i)?.[0] ?? null;
+      if (ja === null && webseite) ja = true;
+      if (ja === null && /\b(nein|nö|noch nicht|keine|nicht)\b/i.test(text)) ja = false;
+      if (ja === null && /\b(ja|jo|jap|klar|haben wir|gibt es)\b/i.test(text)) ja = true;
+      if (ja === null) {
+        const ki = await verstehen(g, 'website_frage', text);
+        if (await allgemein(g, ki, 'website_frage')) return;
+        webseite = ki?.link || null;
+        ja = ki?.wert === 'ja' ? true : ki?.wert === 'nein' ? false : null;
+        if (ja === null) return frageSenden(g, 'website_frage', TEXTE.unverstanden);
+      }
+      return weiter(g, 'problem', { hat_website: ja ? 1 : 0, webseite: ja ? webseite : null });
+    }
+    case 'email': {
+      const email = text.match(/[^\s@<>()"',;]+@[^\s@<>()"',;]+\.[a-z]{2,}/i)?.[0]?.toLowerCase() ?? '';
+      if (!emailGueltig(email)) {
+        const ki = await verstehen(g, 'email', text);
+        if (ki && ki.einordnung !== 'beantwortet' && ki.einordnung !== 'unklar' && (await allgemein(g, ki, 'email'))) return;
+        return schreiben(g, TEXTE.emailUngueltig);
+      }
+      await setzen(g.id, { email });
+      // Der gewählte Termin wartet in angebotene_slots
+      return buchen((await gespraech(g.id))!, slotsLesen(g)[0]);
+    }
     case 'start':
     case 'problem': {
       if (knopf === 'n_los') return frageSenden(g, 'problem', 'Super, danke dir!');
@@ -744,7 +950,11 @@ async function keinTermin(g: Gespraech, davor = '') {
 async function buchen(g: Gespraech, slot: string | undefined) {
   const bt = await botTerminart();
   if (!bt || !slot) return terminAnbieten(g, TEXTE.unverstanden);
-  if (!g.email) return anMenschen(g, 'Für die Bestätigung fehlt mir noch deine E-Mail-Adresse.');
+  if (!g.email) {
+    // Selbst geschrieben ohne Anfrage: erst die E-Mail für die Bestätigung, der Termin wartet so lange
+    await setzen(g.id, { angebotene_slots: JSON.stringify([slot]), schritt: 'email' });
+    return schreiben(g, TEXTE.email);
+  }
   if (!(await slotFrei({ terminart: bt.terminart, nutzer: bt.nutzer, startUtc: slot }))) return terminAnbieten(g, TEXTE.slotWeg);
   // Der Bot läuft schon im Hintergrund (waitUntil des Webhooks), Mails und CRM werden hier abgewartet
   const nebenher: Promise<unknown>[] = [];
@@ -929,6 +1139,13 @@ export async function whatsappAufraeumen() {
   return alt.length;
 }
 
+export const ZUORDNUNG_TEXT: Record<Gespraech['zuordnung'], string> = {
+  formular: 'Formular mit WhatsApp Einwilligung',
+  nummer: 'Selbst geschrieben, über die Absendernummer zugeordnet',
+  anfragenummer: 'Selbst geschrieben, über die Anfragenummer zugeordnet',
+  keine: 'Selbst geschrieben, nicht zugeordnet',
+};
+
 export const STATUS_TEXT: Record<Gespraech['status'], string> = {
   offen: 'Bot im Gespräch',
   gebucht: 'Termin gebucht',
@@ -939,6 +1156,9 @@ export const STATUS_TEXT: Record<Gespraech['status'], string> = {
 };
 
 export const SCHRITT_TEXT: Record<string, string> = {
+  kennenlernen: 'Name und Firma (nicht zugeordnet)',
+  website_frage: 'Website vorhanden?',
+  email: 'E-Mail für die Bestätigung',
   start: 'Erste Nachricht geplant',
   problem: 'Was stört',
   problem_text: 'Was stört (Freitext)',
