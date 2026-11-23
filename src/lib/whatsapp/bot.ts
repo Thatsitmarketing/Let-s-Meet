@@ -1107,6 +1107,29 @@ export async function botPausieren(id: string, pausieren: boolean) {
   else await setzen(id, { status: g.buchung_id ? 'gebucht' : 'offen', nachfass_stufe: 0, team_informiert_am: null });
 }
 
+/**
+ * Nach "Stopp" wieder freischalten, etwa wenn der Kunde ausdrücklich doch wieder Nachrichten möchte.
+ * Der Bot schreibt nicht von sich aus: erst wenn der Kunde schreibt, macht er beim alten Schritt weiter.
+ * Nachhaken und "bitte anrufen" bleiben aus, bis er sich meldet (eingangVerarbeiten setzt nachfass_stufe zurück).
+ * Ist nur noch die Sperre übrig (Gespräch gelöscht), fällt sie weg und die Nummer startet wie neu.
+ */
+export async function botFreischalten(id: string) {
+  const g = await gespraech(id);
+  if (!g || g.status !== 'abgemeldet') return null;
+  if (g.name === 'Abgemeldet' && !g.vorname) {
+    await ausfuehren('DELETE FROM wa_nachrichten WHERE gespraech_id = ?', id);
+    await ausfuehren('DELETE FROM wa_gespraeche WHERE id = ?', id);
+    return 'entfernt' as const;
+  }
+  await setzen(id, {
+    status: g.buchung_id ? 'gebucht' : 'offen',
+    nachfass_stufe: 3,
+    team_informiert_am: jetztIso(),
+    fehler: null,
+  });
+  return 'freigeschaltet' as const;
+}
+
 /** Aufbewahrung der Gespräche: 12 Monate nach dem letzten Kontakt (so steht es in der Datenschutzerklärung). */
 export const WA_AUFBEWAHRUNG_TAGE = 365;
 

@@ -2,7 +2,7 @@
 import App from '../../../layouts/App.astro';
 import Icon from '../../../components/ui/Icon.astro';
 import { alle, eins } from '../../../lib/db';
-import { botPausieren, gespraechLoeschen, SCHRITT_TEXT, STATUS_TEXT, ZUORDNUNG_TEXT, type Gespraech, type WaNachricht } from '../../../lib/whatsapp/bot';
+import { botFreischalten, botPausieren, gespraechLoeschen, SCHRITT_TEXT, STATUS_TEXT, ZUORDNUNG_TEXT, type Gespraech, type WaNachricht } from '../../../lib/whatsapp/bot';
 import { formatDatumMittel, formatZeit } from '../../../lib/zeit';
 
 const tz = 'Europe/Berlin';
@@ -13,6 +13,10 @@ if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
   const aktion = form.get('aktion');
   if (aktion === 'pausieren' || aktion === 'fortsetzen') await botPausieren(id, aktion === 'pausieren');
+  if (aktion === 'freischalten' && istAdmin) {
+    // Nur noch die Sperre übrig: der Eintrag fällt weg, die Gesprächsseite gibt es dann nicht mehr
+    if ((await botFreischalten(id)) === 'entfernt') return Astro.redirect('/app/whatsapp?freigeschaltet=1');
+  }
   if (aktion === 'loeschen' && istAdmin) {
     await gespraechLoeschen(id);
     return Astro.redirect('/app/whatsapp');
@@ -43,6 +47,7 @@ const angaben: [string, string | null][] = [
   ['Fehler', g.fehler],
 ];
 const pausiert = g.status === 'mensch';
+const nurSperre = g.status === 'abgemeldet' && g.name === 'Abgemeldet' && !g.vorname;
 ---
 <App titel={g.name} eyebrow="WhatsApp Bot">
   <Fragment slot="aktionen">
@@ -80,6 +85,19 @@ const pausiert = g.status === 'mensch';
           <form method="post">
             <input type="hidden" name="aktion" value={pausiert ? 'fortsetzen' : 'pausieren'} />
             <button class="knopf knopf--breit" type="submit">{pausiert ? 'Bot wieder übernehmen lassen' : 'Bot pausieren, Team übernimmt'}</button>
+          </form>
+        </section>
+      )}
+      {istAdmin && g.status === 'abgemeldet' && (
+        <section class="karte block">
+          <p class="leise klein">
+            {nurSperre
+              ? 'Der Kunde hat „Stopp“ geschrieben, das Gespräch ist gelöscht. Freischalten entfernt die Sperre: Schickt die Nummer eine neue Anfrage oder schreibt selbst über die Landingpage, startet der Bot von vorn.'
+              : 'Der Kunde hat „Stopp“ geschrieben. Freischalten nur, wenn er ausdrücklich wieder Nachrichten möchte. Der Bot schreibt nicht von sich aus: Erst wenn der Kunde schreibt, macht er dort weiter, wo das Gespräch stand.'}
+          </p>
+          <form method="post" data-rueckfrage={`${g.name} wirklich für den Bot freischalten? Nur, wenn der Kunde wieder Nachrichten möchte.`}>
+            <input type="hidden" name="aktion" value="freischalten" />
+            <button class="knopf knopf--breit" type="submit"><Icon name="chat" />Für den Bot freischalten</button>
           </form>
         </section>
       )}
