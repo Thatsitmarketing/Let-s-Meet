@@ -29,6 +29,7 @@ import { botTerminart, slotKurz, slotLang, tagLang, vorschlaegeZumWunsch, zweiVo
 import { KI_TAGESLIMIT_STANDARD, LIMIT_PRO_STUNDE, LIMIT_PRO_TAG, MAX_EINGANG, namenPruefen, saeubern } from './schutz';
 import { angabenDerAnfrage, anfrageZuordnen, anfrageZurAnfragenummer, anfragenummerAusText, type AnfrageTreffer } from './zuordnung';
 import { crmMelden } from '../crm';
+import { EINWAND_ERSATZ, einwandAntwort } from './einwand';
 import { emailGueltig } from '../eingabe';
 
 const TZ = 'Europe/Berlin';
@@ -124,8 +125,7 @@ export const TEXTE = {
   zeitpunkt: 'Wann möchtet ihr mit der neuen Website starten?',
   budget:
     'Danke dir! Kurz zum Ablauf: Wir erstellen dir den Entwurf kostenlos und Tim, unser Geschäftsführer, stellt ihn dir in einem Strategiegespräch von 60 Minuten vor. Wenn er dich überzeugt, setzen wir die komplette Website für euch um.\n\nDamit du es einordnen kannst: Unsere Websites starten ab 5.000 €, weil wir sie individuell bauen, mit Struktur, Texten und Technik. Über 350 Unternehmen haben wir so schon begleitet. Wäre das ein Rahmen, der für euch passt, wenn dich der Entwurf überzeugt?',
-  einwandErsatz:
-    'Verstehe ich gut. Lass mich kurz fragen: Was ist ein neuer Kunde für euch wert? Oft machen schon zwei, drei zusätzliche Kunden im Jahr die Website bezahlt. Wenn dich der Entwurf zu 100 % überzeugt und du siehst, was er bringt, wäre das dann grundsätzlich drin?',
+  einwandErsatz: EINWAND_ERSATZ[0],
   verabschiedung: (v: string, firma: string) =>
     `Danke dir für die ehrliche Antwort${v ? `, ${v}` : ''}! Dann ist der Entwurf gerade vermutlich nicht der richtige Schritt für euch, und wir möchten dir nicht unnötig Zeit stehlen. Falls sich bei euch etwas ändert, schreib uns einfach hier, wir sind gern für dich da. Alles Gute für dich und ${firma}!`,
   termin: (zuerst: string) =>
@@ -549,7 +549,11 @@ function aufgabe(g: Gespraech, schritt: string) {
       return `Einwandbehandlung zum Budget. Bisherige Antwort: ${g.budget ?? ''}. Setze budget_haltung: offen (lässt sich auf das Gespräch ein), unsicher, nein (klar kein Budget oder kein Interesse). ${
         g.einwand_versuche >= 2
           ? 'Es gab schon zwei Anläufe: keine weitere Einwandbehandlung, "antwort" leer lassen.'
-          : `Das ist Anlauf ${g.einwand_versuche + 1} von 2${g.einwand_versuche ? ', nimm einen anderen Blickwinkel als beim ersten Mal' : ''}. Ist die Haltung unsicher oder nein, behandle den Einwand in "antwort" nach dem Setting Skript und ende mit einer Bedingungsfrage, die man mit ja oder nein beantworten kann.`
+          : `Das ist Anlauf ${g.einwand_versuche + 1} von 2${
+              g.einwand_versuche
+                ? '. Nimm einen anderen Blickwinkel als beim ersten Mal und wiederhole weder Argumente noch Formulierungen aus deinen bisherigen Nachrichten im Verlauf (kam schon die Frage nach dem Wert eines neuen Kunden, dann jetzt zum Beispiel: Entwurf und Gespräch sind kostenlos und unverbindlich, die Entscheidung fällt erst danach)'
+                : ''
+            }. ${g.budget === 'Eher zu viel' ? 'Der Lead findet den Rahmen eher zu viel: gehe auf den Preis ein, ohne ihn kleinzureden. ' : ''}Ist die Haltung unsicher oder nein, behandle den Einwand in "antwort" nach dem Setting Skript und ende mit einer Bedingungsfrage, die man mit ja oder nein beantworten kann.`
       } Ist sie offen, schreibe eine kurze positive Überleitung ohne Frage.`;
     case 'termin':
       return `Terminwahl. Angeboten: ${slotsLesen(g).map((s, i) => `t_${i} (${slotLang(s, TZ)})`).join(', ')}, t_andere (andere Zeit). Wählt der Lead einen, ist wert die ID. Nennt er einen anderen Wunsch, ist wert "t_andere" und fülle wunsch_datum, wunsch_uhrzeit oder wunsch_tageszeit.`;
@@ -602,6 +606,12 @@ function bisherigerVerlauf(nachrichten: WaNachricht[]) {
   const liste = [...nachrichten];
   while (liste.length && liste[liste.length - 1].richtung === 'ein') liste.pop();
   return liste.map((n) => ({ von: n.richtung === 'ein' ? ('lead' as const) : ('wir' as const), text: n.text }));
+}
+
+/** Die letzten Nachrichten des Bots in diesem Chat, damit sich die Einwandbehandlung nicht wiederholt. */
+async function letzteAusgaenge(id: string) {
+  const liste = await alle<{ text: string | null }>("SELECT text FROM wa_nachrichten WHERE gespraech_id = ? AND richtung = 'aus' ORDER BY erstellt_am DESC LIMIT 8", id);
+  return liste.map((n) => n.text ?? '');
 }
 
 const vor = (text: string | undefined | null) => (text?.trim() ? `${text.trim()}\n\n` : '');
@@ -829,7 +839,7 @@ async function schrittVerarbeiten(g: Gespraech, e: { text: string; knopf: string
       const neu = (await gespraech(g.id))!;
       const einwand = await verstehen(neu, 'einwand', knopf ? (haltung === 'nein' ? 'Eher zu viel' : 'Kommt drauf an') : text);
       await setzen(g.id, { einwand_versuche: 1 });
-      return frageSenden(neu, 'einwand', einwand?.antwort || TEXTE.einwandErsatz);
+      return frageSenden(neu, 'einwand', einwandAntwort(einwand?.antwort, await letzteAusgaenge(g.id), 1));
     }
     case 'einwand': {
       let haltung: 'offen' | 'unsicher' | 'nein' | null = knopf === 'e_ja' ? 'offen' : knopf === 'e_nein' ? 'nein' : null;
@@ -848,7 +858,8 @@ async function schrittVerarbeiten(g: Gespraech, e: { text: string; knopf: string
         return weiter(g, 'termin', { budget: `${g.budget}, weiter unsicher` }, 'Lass es uns einfach anschauen, der Entwurf ist ja kostenlos und unverbindlich.');
       }
       await setzen(g.id, { einwand_versuche: g.einwand_versuche + 1 });
-      return frageSenden(g, 'einwand', ki?.antwort || TEXTE.einwandErsatz);
+      // Zweiter Anlauf nie mit demselben Text wie der erste (fester Ersatztext oder Claude wiederholt sich)
+      return frageSenden(g, 'einwand', einwandAntwort(ki?.antwort, await letzteAusgaenge(g.id), g.einwand_versuche + 1));
     }
     case 'termin': {
       const slots = slotsLesen(g);
