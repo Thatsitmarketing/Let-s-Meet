@@ -9,13 +9,13 @@ Präsentation zum Vorstellen im Team: `docs/praesentation/WhatsApp-Setting-Bot.p
 1. Meta Business Suite öffnen, unter Einstellungen das Unternehmen prüfen lassen (Unternehmensverifizierung). Ohne sie gilt die Grenze von 250 neuen Kontakten pro Tag, das reicht für den Start.
 2. developers.facebook.com, „App erstellen“, Typ **Business**, Anwendungsfall **WhatsApp**. Die App mit dem Business Portfolio von That's it. Marketing verknüpfen.
 3. In der App unter WhatsApp, „Erste Schritte“ bzw. API Setup, „Telefonnummer hinzufügen“: in der Praxis (Stand 2026-11) bietet dieser Dialog nur **SMS** oder **Anruf** an, also eine reine API Registrierung. Das würde die Nummer aus der WhatsApp Business App nehmen. Diesen Weg nicht fortsetzen, wenn die Nummer in der App bleiben soll. Eine Option „Bestehende WhatsApp Business App Nummer verbinden“ direkt im Dashboard war nicht zu finden.
-4. Stattdessen Abschnitt **1a** unten: die interne Seite `/app/whatsapp/coexistence` nutzt Embedded Signup, den einzigen Weg, der Coexistence tatsächlich anbietet. Dort am Firmenhandy in der WhatsApp Business App den QR Code bestätigen und den Chatverlauf übernehmen. Die Nummer bleibt in der App nutzbar, das Team kann weiter normal schreiben.
+4. Stattdessen Abschnitt **1a** unten: die interne Seite `/app/whatsapp/coexistence` nutzt Embedded Signup, den einzigen Weg, der Coexistence tatsächlich anbietet. Dort am Firmenhandy in der WhatsApp Business App die Verbindung bestätigen und den Chatverlauf übernehmen. Die Nummer bleibt in der App nutzbar, das Team kann weiter normal schreiben.
 5. Wichtig für Coexistence: die WhatsApp Business App mindestens alle 14 Tage einmal öffnen, sonst trennt Meta die Verbindung.
 6. Unter WhatsApp, API Setup die **Phone number ID** notieren (nicht die Telefonnummer selbst), falls die Seite aus Abschnitt 1a sie nicht schon angezeigt hat.
 
 ### 1a. Coexistence über die interne Seite /app/whatsapp/coexistence (Embedded Signup)
 
-Seit 2026-11-19 gibt es dafür eine Admin Seite im Backoffice, weil der normale Anmeldedialog im Meta Dashboard keine Coexistence Option bietet (siehe Schritt 3 oben). Der einzige Weg ist **WhatsApp Embedded Signup** mit `featureType: "whatsapp_business_app_onboarding"`.
+Seit 2026-11-19 gibt es dafür eine Admin Seite im Backoffice, weil der normale Anmeldedialog im Meta Dashboard keine Coexistence Option bietet (siehe Schritt 3 oben). Der einzige Weg ist **WhatsApp Embedded Signup**. Seit 2026-11-23 ruft die Seite Embedded Signup v5 auf (`extras.version: "v5"`, dort ist Coexistence Standard) und gibt zusätzlich `featureType: "whatsapp_business_app_onboarding"` mit. Die alte Angabe `sessionInfoVersion: "3"` ist raus: Meta hat v2 und v3 am 15.10.2026 abgekündigt und beantwortet sie nur noch als v4. v5 meldet im Ereignis `messaging_account_ids` statt `waba_id`, die Seite nimmt die erste ID als WABA ID.
 
 Voraussetzungen, bevor der Knopf etwas bringt:
 
@@ -24,8 +24,13 @@ Voraussetzungen, bevor der Knopf etwas bringt:
 * Eine Facebook Login for Business Konfiguration für Embedded Signup ist angelegt (Konfigurations ID in `WHATSAPP_EMBEDDED_CONFIG_ID`), mit den Rechten `whatsapp_business_management` und `whatsapp_business_messaging`.
 * `WHATSAPP_APP_SECRET` ist als Secret im Worker **let-s-meet** gesetzt (App Einstellungen, Allgemein, App Secret bei Meta).
 * Die WhatsApp Business App am Firmenhandy ist Version 2.24.17 oder neuer, die Nummer ist dort nicht abgemeldet.
+* Die App ist bei Meta **Tech Provider** (oder Solution Partner). Ohne diesen Status bietet Embedded Signup keine Coexistence an, laut Meta Doku Pflicht.
+* Die Login Konfiguration ist vom Typ **WhatsApp Embedded Signup** (Vorlage „WhatsApp Embedded Signup Configuration With 60 Expiration Token“ oder eigene Konfiguration mit dieser Login Variante). Eine normale Facebook Login Konfiguration reicht nicht.
+* Die Rechte `whatsapp_business_management` und `whatsapp_business_messaging` haben erweiterten Zugriff (App Review), sonst lassen sich nur Konten mit Rolle in der App verbinden.
 
-Ablauf: `/app/whatsapp/coexistence` öffnen (nur Admins), Knopf „WhatsApp Firmennummer verbinden“. Im Popup von Meta die Option wählen, eine bestehende Nummer aus der WhatsApp Business App zu übernehmen, am Firmenhandy den QR Code bestätigen. Die Seite zeigt den Fortschritt live (aus dem `postMessage` Ereignis `WA_EMBEDDED_SIGNUP` des Popups) und meldet am Ende WABA ID und Phone Number ID.
+**Popup zeigt nur „Du hast keine vorhandenen Telefonnummern. Erstelle eine neue.“ mit SMS oder Anruf:** Das ist der normale Ablauf für eine neue Nummer, Meta bietet dann keine Coexistence an. Fenster schließen, nicht auf Weiter, sonst verschwindet die Nummer aus der App. Bei Coexistence ersetzt Meta die Kontoauswahl durch die Option, die bestehende WhatsApp Business App zu verbinden. Prüfen in dieser Reihenfolge: Tech Provider Status der App, Typ der Login Konfiguration (`WHATSAPP_EMBEDDED_CONFIG_ID`), erweiterter Zugriff, Version der WhatsApp Business App, ob Coexistence für Deutschland und das Konto freigeschaltet ist.
+
+Ablauf: `/app/whatsapp/coexistence` öffnen (nur Admins), Knopf „WhatsApp Firmennummer verbinden“. Im Popup von Meta die Option wählen, eine bestehende Nummer aus der WhatsApp Business App zu übernehmen, Firmennummer eingeben, am Firmenhandy die Nachricht vom Facebook Business Konto bestätigen (Verbinden, Chatverlauf teilen) und den Code von WhatsApp im Fenster eingeben. Die Seite zeigt den Fortschritt live (aus dem `postMessage` Ereignis `WA_EMBEDDED_SIGNUP` des Popups) und meldet am Ende WABA ID und Phone Number ID.
 
 Technisch: `FB.login()` liefert nach „Fertig“ einen Code, der nur 5 Minuten gültig ist. Die Seite schickt ihn an `POST /api/app/whatsapp/onboarding` (nur angemeldet, nur Admin), die Route tauscht ihn server seitig gegen einen dauerhaften Business Token ein (`GET /oauth/access_token` mit `WHATSAPP_APP_ID` und `WHATSAPP_APP_SECRET`) und meldet die App gleich an der WABA an (`POST /<waba_id>/subscribed_apps`), damit Webhooks ankommen. Der Token selbst geht nie an den Browser und nie ins Protokoll, nur Erfolg oder Fehler.
 
