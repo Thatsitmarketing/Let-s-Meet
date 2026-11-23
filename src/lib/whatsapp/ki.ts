@@ -132,7 +132,8 @@ export async function kiVerstehen(e: {
   try {
     const res = await c.beta.messages.create({
       model: env.WHATSAPP_KI_MODELL?.trim() || 'claude-opus-5-5',
-      max_tokens: 1200,
+      // Nachdenken zählt mit, deshalb mit Puffer. Bezahlt wird nur, was genutzt wird
+      max_tokens: 4000,
       betas: ['server-side-fallback-2026-07-01'],
       // Bei einer Ablehnung wiederholt die API dieselbe Anfrage auf dem empfohlenen Ersatzmodell
       fallbacks: 'default',
