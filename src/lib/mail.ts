@@ -314,3 +314,75 @@ ${d.details ? details(d.details) : ''}
 ${d.knoepfe.map((k) => knopf(k.href, k.text, k.art)).join('')}`,
   );
 }
+
+/** Eine Nachricht aus dem WhatsApp Verlauf für die Team Mail */
+export interface WaVerlaufZeile {
+  von: 'lead' | 'bot' | 'team';
+  name: string;
+  text: string;
+  zeit: string; // bereits formatiert
+}
+
+/**
+ * Mail ans Team aus dem WhatsApp Bot (bitte anrufen, Team übernimmt, zur Info). Aufbau wie
+ * „Neuer Termin“ an das Büro: Anlass hervorgehoben, Kontakt und Angaben als Tabelle, Verlauf als
+ * Nachrichten mit Absender und Uhrzeit, Knöpfe zum Chat und zum Anrufen.
+ */
+export function mailWhatsappTeam(
+  basis: string,
+  d: {
+    grund: string;
+    zurInfo: boolean;
+    name: string;
+    firma: string | null;
+    telefon: string; // mit +
+    email: string | null;
+    webseite: string | null;
+    status: string;
+    angaben: { label: string; wert: string }[];
+    verlauf: WaVerlaufZeile[];
+    chatUrl: string;
+  },
+) {
+  const zeile = (label: string, wert: string) =>
+    `<tr><td style="padding:10px 12px 10px 0;border-bottom:1px solid ${MARKE.linie};width:110px;vertical-align:top;font-size:13px;color:${MARKE.grau};">${label}</td><td style="padding:10px 0;border-bottom:1px solid ${MARKE.linie};font-size:15px;overflow-wrap:anywhere;">${wert}</td></tr>`;
+  const tabelle = (zeilen: string) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 24px;border-top:2px solid ${MARKE.schwarz};table-layout:fixed;">${zeilen}</table>`;
+  const zwischentitel = (text: string) => `<p style="margin:0 0 4px;font-family:'Barlow Condensed',${SCHRIFT};font-size:12px;letter-spacing:3px;text-transform:uppercase;color:${MARKE.grau};">${m(text)}</p>`;
+  const telLink = `tel:${d.telefon.replace(/[^\d+]/g, '')}`;
+  const webLink = d.webseite ? (/^https?:\/\//i.test(d.webseite) ? d.webseite : `https://${d.webseite}`) : null;
+
+  const kontakt = [
+    zeile('Telefon', `<a href="${m(telLink)}" style="color:${MARKE.schwarz};white-space:nowrap;">${m(d.telefon.replace(/^\+(49|43|41)(\d{3,4})(\d+)$/, '+$1 $2 $3'))}</a>`),
+    d.email ? zeile('E-Mail', `<a href="mailto:${m(d.email)}" style="color:${MARKE.schwarz};">${m(d.email)}</a>`) : '',
+    webLink ? zeile('Website', `<a href="${m(webLink)}" style="color:${MARKE.schwarz};">${m(d.webseite!)}</a>`) : '',
+    zeile('Status', m(d.status)),
+  ].join('');
+  const angaben = d.angaben.filter((a) => a.wert.trim()).map((a) => zeile(m(a.label), `<span style="white-space:pre-wrap;">${m(a.wert)}</span>`)).join('');
+
+  // Verlauf: Lead mit orangenem Strich, Bot und Team grau. Knöpfe "[A | B]" als leise Zeile darunter
+  const nachricht = (n: WaVerlaufZeile) => {
+    const knoepfe = n.text.match(/\n\[([^\]]*)\]\s*$/)?.[1];
+    const text = knoepfe ? n.text.replace(/\n\[[^\]]*\]\s*$/, '') : n.text;
+    const lead = n.von === 'lead';
+    return `<tr><td style="padding:0 0 12px;">
+<div style="border-left:3px solid ${lead ? MARKE.orange : MARKE.linie};padding:2px 0 2px 12px;">
+<p style="margin:0 0 2px;font-size:12px;color:${MARKE.grau};"><strong style="color:${MARKE.schwarz};">${m(n.name)}</strong> &middot; ${m(n.zeit)}</p>
+<p style="margin:0;font-size:14px;line-height:1.55;white-space:pre-wrap;">${m(text.length > 600 ? `${text.slice(0, 600)} …` : text)}</p>
+${knoepfe ? `<p style="margin:4px 0 0;font-size:12px;color:${MARKE.grau};">Knöpfe: ${m(knoepfe.split('|').map((k) => k.trim()).join(' · '))}</p>` : ''}
+</div></td></tr>`;
+  };
+
+  return rahmen(
+    basis,
+    d.grund,
+    `${eyebrow(d.zurInfo ? 'WhatsApp Bot · Zur Info' : 'WhatsApp Bot · Bitte übernehmen')}
+${titel(d.name)}
+${d.firma ? `<p style="margin:-12px 0 18px;font-size:15px;color:${MARKE.grau};">${m(d.firma)}</p>` : ''}
+<p style="margin:0 0 20px;border-left:3px solid ${MARKE.orange};padding-left:12px;"><strong>${m(d.grund)}</strong></p>
+${tabelle(kontakt)}
+${angaben ? `${zwischentitel('Angaben aus dem Chat')}${tabelle(angaben)}` : ''}
+${d.verlauf.length ? `${zwischentitel('Letzte Nachrichten')}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 20px;">${d.verlauf.map(nachricht).join('')}</table>` : ''}
+${knopf(d.chatUrl, 'Chat ansehen', 'schwarz')}${knopf(telLink, 'Anrufen', 'rahmen')}`,
+  );
+}
+

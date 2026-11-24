@@ -20,9 +20,9 @@ import { env } from 'cloudflare:workers';
 import { alle, ausfuehren, eins, jetztIso, neueId } from '../db';
 import { basisUrl, buchungAnlegen, SlotVergeben } from '../buchungen';
 import { buchungNachId, buero } from '../abfragen';
-import { mailArbeitsablauf, mailSenden } from '../mail';
+import { mailSenden, mailWhatsappTeam } from '../mail';
 import { slotFrei } from '../slots';
-import { datumInZone, teileInZone } from '../zeit';
+import { datumInZone, formatDatumMittel, formatZeit, teileInZone } from '../zeit';
 import { kiAktiv, kiLetzterFehler, kiVerstehen, type KiErgebnis } from './ki';
 import { gelesenUndTippt, sendeKnoepfe, sendeVorlage, type Knopf } from './meta';
 import { botTerminart, slotKurz, slotLang, tagLang, vorschlaegeZumWunsch, zweiVorschlaege } from './termine';
@@ -31,7 +31,7 @@ import { angabenDerAnfrage, anfrageZuordnen, anfrageZurAnfragenummer, anfragenum
 import { crmMelden } from '../crm';
 import { EINWAND_ERSATZ, einwandAntwort } from './einwand';
 import { emailGueltig } from '../eingabe';
-import { budgetAusText, FRUEHE_SCHRITTE, istAutoAntwort, istGenervt, istKorrektur, knopfPasst, knopfSchritt, zeitpunktAusText } from './eingang';
+import { budgetAusText, FRUEHE_SCHRITTE, istAutoAntwort, istGenervt, istKorrektur, knopfPasst, knopfSchritt, wiederEinstieg, zeitpunktAusText } from './eingang';
 
 const TZ = 'Europe/Berlin';
 
@@ -154,6 +154,11 @@ export const TEXTE = {
   korrektur: 'Doch, unbedingt, sorry!',
   schonErledigt: 'Danke, die Frage haben wir schon 🙂',
   angepasst: 'Alles klar, hab ich angepasst.',
+  // Lead meldet sich nach der Verabschiedung wieder
+  zurueck: (v: string) =>
+    `Schön, dass du dich wieder meldest${v ? `, ${v}` : ''} 🙂 Sollen wir den Termin mit Tim doch festmachen? Entwurf und Gespräch sind kostenlos und unverbindlich, entscheiden musst du erst danach.`,
+  zurueckJa: 'Super, das freut mich!',
+  zurueckNein: 'Alles klar, dann bleibt es dabei. Wenn du es dir anders überlegst, schreib einfach hier, wir sind da.',
 
   // Interessent schreibt selbst zuerst (Knopf "Per WhatsApp weiter" der Landingpage), keine Vorlage nötig
   selbstStart: (v: string, firma: string) =>
@@ -263,37 +268,41 @@ async function fehlerMelden(g: Gespraech, fehler: unknown) {
   }
 }
 
-/** Mail ans Team mit Link auf den Chat im Backoffice. */
+/** Mail ans Team mit Link auf den Chat im Backoffice, aufgebaut wie die übrigen Mails von Let's Meet. */
 export async function teamInformieren(g: Gespraech, grund: string) {
   const basis = basisUrl();
   const an = env.WHATSAPP_TEAM_EMAIL?.trim() || (await buero())?.email;
   if (!an) return;
-  const verlauf = await alle<WaNachricht>('SELECT * FROM wa_nachrichten WHERE gespraech_id = ? ORDER BY erstellt_am DESC LIMIT 8', g.id);
-  const text = [
-    grund,
-    '',
-    `Name: ${g.name}`,
-    g.firma ? `Firma: ${g.firma}` : '',
-    `Telefon: +${g.telefon}`,
-    g.email ? `E-Mail: ${g.email}` : '',
-    g.webseite ? `Webseite: ${g.webseite}` : '',
-    g.problem ? `Problem: ${g.problem}` : '',
-    g.ziel ? `Ziel: ${g.ziel}` : '',
-    g.zeitpunkt ? `Zeitpunkt: ${g.zeitpunkt}` : '',
-    g.budget ? `Budget: ${g.budget}` : '',
-    g.hinweise ? `Hinweise: ${g.hinweise}` : '',
-    verlauf.length ? `\nLetzte Nachrichten:\n${verlauf.reverse().map((n) => `${n.richtung === 'ein' ? g.vorname : n.richtung === 'team' ? 'Team' : 'Bot'}: ${n.text}`).join('\n')}` : '',
-  ].filter((z) => z !== '').join('\n');
+  const verlauf = (await alle<WaNachricht>('SELECT * FROM wa_nachrichten WHERE gespraech_id = ? ORDER BY erstellt_am DESC LIMIT 8', g.id)).reverse();
+  const zeit = (iso: string) => `${formatDatumMittel(iso, TZ)}, ${formatZeit(iso, TZ)} Uhr`;
+  const zurInfo = /zur info|keine aktion/i.test(grund);
   await mailSenden({
     an,
-    betreff: `WhatsApp Lead: ${g.name}${g.firma ? `, ${g.firma}` : ''}`,
-    html: mailArbeitsablauf(basis, {
-      vorschau: grund,
-      eyebrow: 'WhatsApp Bot',
-      ueberschrift: g.name,
-      text,
-      details: null,
-      knoepfe: [{ href: `${basis}/app/whatsapp/${g.id}`, text: 'Chat ansehen', art: 'schwarz' }],
+    betreff: `WhatsApp ${zurInfo ? 'zur Info' : 'bitte übernehmen'}: ${g.name}${g.firma ? `, ${g.firma}` : ''}`,
+    html: mailWhatsappTeam(basis, {
+      grund,
+      zurInfo,
+      name: g.name,
+      firma: g.firma,
+      telefon: `+${g.telefon}`,
+      email: g.email,
+      webseite: g.webseite,
+      status: `${STATUS_TEXT[g.status] ?? g.status}, Schritt „${SCHRITT_TEXT[g.schritt] ?? g.schritt}“`,
+      angaben: [
+        { label: 'Was stört', wert: g.problem ?? '' },
+        { label: 'Ziel', wert: g.ziel ?? '' },
+        { label: 'Zeitpunkt', wert: g.zeitpunkt ?? '' },
+        { label: 'Budget', wert: g.budget ?? '' },
+        { label: 'Entscheider', wert: g.entscheider ?? '' },
+        { label: 'Hinweise', wert: g.hinweise ?? '' },
+      ],
+      verlauf: verlauf.map((n) => ({
+        von: n.richtung === 'ein' ? ('lead' as const) : n.richtung === 'team' ? ('team' as const) : ('bot' as const),
+        name: n.richtung === 'ein' ? g.vorname || g.name : n.richtung === 'team' ? 'Team (App)' : 'Bot',
+        text: n.art === 'auto' ? `${n.text}\n(Abwesenheitsnotiz, vom Bot ignoriert)` : n.text,
+        zeit: zeit(n.erstellt_am),
+      })),
+      chatUrl: `${basis}/app/whatsapp/${g.id}`,
     }),
   }).catch((f) => console.error('Teammail fehlgeschlagen', f));
   await setzen(g.id, { team_informiert_am: jetztIso() });
@@ -375,7 +384,9 @@ export async function eingangVerarbeiten(telefon: string, e: Eingang) {
     const neu = await selbstGeschrieben(telefon, e, g.erstellt_am);
     if (neu) return neu;
   }
-  const aktiv = g.status === 'offen' || g.status === 'gebucht' || g.status === 'anrufen';
+  // Nach der Verabschiedung (ohne Termin) öffnet jede neue Nachricht das Gespräch wieder, der Bot fragt nach dem Termin
+  const wiederOffen = g.status === 'verabschiedet' && !g.buchung_id;
+  const aktiv = g.status === 'offen' || g.status === 'gebucht' || g.status === 'anrufen' || wiederOffen;
   // Abwesenheitsnotiz aus der WhatsApp Business App des Leads: nur protokollieren, keine Antwort,
   // zählt nicht als Rückmeldung (das Nachfassen nach 3 Stunden läuft weiter)
   if (e.art === 'text' && !e.knopf && istAutoAntwort(e.text)) {
@@ -387,9 +398,12 @@ export async function eingangVerarbeiten(telefon: string, e: Eingang) {
   await setzen(g.id, { letzte_eingang_am: jetztIso(), nachfass_stufe: 0 });
 
   if (g.status === 'verabschiedet') {
-    await setzen(g.id, { status: 'mensch' });
-    await teamInformieren(g, 'Der Lead hat sich nach der Verabschiedung wieder gemeldet. Bitte selbst übernehmen.');
-    return g.id;
+    if (!wiederOffen) {
+      await setzen(g.id, { status: 'mensch' });
+      await teamInformieren(g, 'Der Lead hat sich nach der Verabschiedung wieder gemeldet. Bitte selbst übernehmen.');
+      return g.id;
+    }
+    await setzen(g.id, { status: 'offen', schritt: 'zurueck' });
   }
   if (!aktiv) return g.id;
   // Missbrauch: wer den Bot mit Nachrichten flutet, bekommt keine Antworten mehr, das Team übernimmt
@@ -584,6 +598,9 @@ function aufgabe(g: Gespraech, schritt: string) {
                 : ''
             }. ${g.budget === 'Eher zu viel' ? 'Der Lead findet den Rahmen eher zu viel: gehe auf den Preis ein, ohne ihn kleinzureden. ' : ''}Ist die Haltung unsicher oder nein, behandle den Einwand in "antwort" nach dem Setting Skript und ende mit einer Bedingungsfrage, die man mit ja oder nein beantworten kann.`
       } Ist sie offen, schreibe eine kurze positive Überleitung ohne Frage.`;
+    case 'zurueck':
+    case 'zurueck_frage':
+      return `Der Lead wurde vorher höflich verabschiedet (Budget ab 5.000 € passte nicht, Antwort: ${g.budget ?? 'unklar'}) und meldet sich jetzt wieder. Frage: "Sollen wir den Termin mit Tim doch festmachen?" Options IDs: ja (will doch einen Termin, das Gespräch oder den Entwurf), nein (bleibt beim Nein), danke (nur Dank oder Gruß zum Abschied, ohne Anliegen). Bei ja eine kurze, herzliche Überleitung ohne Frage. Bei einer Rückfrage beantworte sie in "antwort".`;
     case 'termin':
       return `Terminwahl. Angeboten: ${slotsLesen(g).map((s, i) => `t_${i} (${slotLang(s, TZ)})`).join(', ')}, t_andere (andere Zeit). Wählt der Lead einen, ist wert die ID. Nennt er einen anderen Wunsch, ist wert "t_andere" und fülle wunsch_datum, wunsch_uhrzeit oder wunsch_tageszeit.`;
     case 'wunschzeit':
@@ -708,6 +725,12 @@ async function frageSenden(g: Gespraech, schritt: string, davor = '', nachfrage 
         { id: 'e_ja', titel: 'Ja, dann schon' },
         { id: 'e_nein', titel: 'Eher nicht' },
       ]);
+    case 'zurueck':
+    case 'zurueck_frage':
+      return schreiben_(davor.trim() || TEXTE.zurueck(g.vorname), [
+        { id: 'r_ja', titel: 'Ja, gerne' },
+        { id: 'r_nein', titel: 'Eher nicht' },
+      ]);
     case 'termin':
       return terminAnbieten(g, davor);
     case 'wunschzeit':
@@ -761,7 +784,7 @@ async function entschuldigen(g: Gespraech, davor = '') {
 async function nachfragen(g: Gespraech, schritt: string, davor = '') {
   const letzte = await eins<{ art: string }>("SELECT art FROM wa_nachrichten WHERE gespraech_id = ? AND richtung = 'aus' ORDER BY erstellt_am DESC LIMIT 1", g.id);
   if (letzte?.art === 'nachfrage') return entschuldigen(g);
-  const knopffrage = ['start', 'problem', 'website_frage', 'zeitpunkt', 'budget', 'einwand', 'entscheider'].includes(schritt);
+  const knopffrage = ['start', 'problem', 'website_frage', 'zeitpunkt', 'budget', 'einwand', 'entscheider', 'zurueck', 'zurueck_frage'].includes(schritt);
   return frageSenden(g, schritt, davor.trim() || (knopffrage ? `${TEXTE.unverstanden} ${TEXTE.knopfHinweis}` : TEXTE.unverstanden), true);
 }
 
@@ -992,6 +1015,39 @@ async function schrittVerarbeiten(g: Gespraech, e: { text: string; knopf: string
       // Zweiter Anlauf nie mit demselben Text wie der erste (fester Ersatztext oder Claude wiederholt sich)
       return frageSenden(g, 'einwand', einwandAntwort(ki?.antwort, await letzteAusgaenge(g.id), g.einwand_versuche + 1));
     }
+    case 'zurueck':
+    case 'zurueck_frage': {
+      // Wiedereinstieg nach der Verabschiedung: will der Lead doch, geht es direkt zur Terminwahl
+      const knopfJa = knopf === 'r_ja' || knopf === 'e_ja' || knopf === 'b_ja';
+      const knopfNein = knopf === 'r_nein' || knopf === 'e_nein' || knopf === 'b_zuviel';
+      let antwort: 'ja' | 'nein' | 'danke' | null = knopfJa ? 'ja' : knopfNein ? 'nein' : knopf ? null : wiederEinstieg(text);
+      let ki: KiErgebnis | null = null;
+      if (!antwort && !knopf) {
+        ki = await verstehen(g, g.schritt, text);
+        if (ki?.einordnung === 'genervt' || ki?.einordnung === 'will_mensch') return allgemein(g, ki, g.schritt);
+        if (ki?.einordnung === 'frage' && ki.antwort) {
+          await setzen(g.id, { schritt: 'zurueck_frage' });
+          return frageSenden(g, 'zurueck_frage', `${ki.antwort}\n\nSollen wir den Termin mit Tim doch festmachen?`);
+        }
+        const w = ki?.wert?.trim().toLowerCase();
+        antwort = w === 'ja' || ki?.budget_haltung === 'offen' ? 'ja' : w === 'nein' || ki?.einordnung === 'kein_interesse' ? 'nein' : w === 'danke' ? 'danke' : null;
+      }
+      if (antwort === 'ja') {
+        await setzen(g.id, { budget: `${g.budget ?? 'Unklar'}, nach Verabschiedung doch Termin gewünscht`, heiss: 0, einwand_versuche: 0 });
+        return terminAnbieten((await gespraech(g.id))!, ki?.antwort || TEXTE.zurueckJa);
+      }
+      if (antwort === 'nein') {
+        await setzen(g.id, { status: 'verabschiedet', schritt: 'fertig' });
+        return schreiben(g, TEXTE.zurueckNein);
+      }
+      // Nur Dank oder Gruß zum Abschied: nicht noch einmal nachhaken
+      if (antwort === 'danke') return setzen(g.id, { status: 'verabschiedet', schritt: 'fertig' });
+      if (g.schritt === 'zurueck') {
+        await setzen(g.id, { schritt: 'zurueck_frage' });
+        return frageSenden(g, 'zurueck_frage', ki?.antwort ? `${ki.antwort}\n\n${TEXTE.zurueck('')}` : '');
+      }
+      return nachfragen(g, 'zurueck_frage', ki?.antwort);
+    }
     case 'termin': {
       const slots = slotsLesen(g);
       if (knopf === 't_andere') return weiter(g, 'wunschzeit', {});
@@ -1044,6 +1100,11 @@ async function schrittVerarbeiten(g: Gespraech, e: { text: string; knopf: string
       return schreiben(g, vor(antwort) + TEXTE.fertig(g.vorname, b ? slotLang(b.start_utc, TZ) : 'bald'));
     }
     default: {
+      // Gespräch endete ohne Termin (verabschiedet, danach im Backoffice fortgesetzt): Wiedereinstieg wie oben
+      if (!g.buchung_id && g.schritt === 'fertig') {
+        await setzen(g.id, { schritt: 'zurueck' });
+        return schrittVerarbeiten({ ...g, schritt: 'zurueck' }, e);
+      }
       const ki = await verstehen(g, 'fertig', text);
       if (!ki) return; // ohne Claude keine freie Antwort, das Team sieht die Nachricht im Backoffice
       if (await allgemein(g, ki, 'fertig')) return;
@@ -1336,5 +1397,7 @@ export const SCHRITT_TEXT: Record<string, string> = {
   entscheider: 'Entscheider',
   entscheider_text: 'Entscheider',
   briefing: 'Website, die gefällt',
+  zurueck: 'Wieder gemeldet nach Verabschiedung',
+  zurueck_frage: 'Wieder gemeldet, Termin doch?',
   fertig: 'Fertig',
 };
