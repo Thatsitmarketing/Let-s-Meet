@@ -17,6 +17,8 @@ declare namespace Cloudflare {
     /** Gemeinsamer Schlüssel der vier Playbook Landingpages für /api/playbook/anfordern */
     PLAYBOOK_SCHLUESSEL?: string;
     ANFRAGE_SCHLUESSEL?: string;
+    /** Tool Wechsel (/auth/switch), gleicher Wert in allen That's it. Tools, mindestens 32 Zeichen. Ohne ihn 404 */
+    LINK_SECRET?: string;
     /** Close Automat (thatsit-close-automat), siehe src/lib/crm.ts */
     CRM_WEBHOOK_URL?: string;
     CRM_WEBHOOK_SECRET?: string;

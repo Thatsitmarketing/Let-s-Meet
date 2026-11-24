@@ -37,6 +37,13 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
     kopf.set('X-Frame-Options', 'DENY');
     kopf.set('Content-Security-Policy', "frame-ancestors 'none'");
     kopf.set('Cache-Control', 'no-store');
+  } else if (pfad === '/auth' || pfad.startsWith('/auth/')) {
+    // Tool Wechsel: das Token steht in der Adresse, deshalb kein Referrer, kein Zwischenspeichern, nicht einbetten
+    kopf.set('X-Robots-Tag', 'noindex, nofollow');
+    kopf.set('Content-Security-Policy', "frame-ancestors 'none'");
+    kopf.set('X-Frame-Options', 'DENY');
+    kopf.set('Referrer-Policy', 'no-referrer');
+    kopf.set('Cache-Control', 'no-store');
   } else if (pfad.startsWith('/api/whatsapp/')) {
     kopf.set('X-Robots-Tag', 'noindex, nofollow');
     kopf.set('Cache-Control', 'no-store');

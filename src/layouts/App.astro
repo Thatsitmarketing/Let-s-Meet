@@ -3,6 +3,8 @@ import Basis from './Basis.astro';
 import Logo from '../components/ui/Logo.astro';
 import Icon, { type IconName } from '../components/ui/Icon.astro';
 import Avatar from '../components/Avatar.astro';
+import { env } from 'cloudflare:workers';
+import { geheimGueltig } from '../lib/wechsel';
 
 interface Props {
   titel: string;
@@ -27,6 +29,8 @@ const navi: { href: string; text: string; icon: IconName; nurAdmin?: boolean }[]
   { href: '/app/einstellungen', text: 'Einstellungen', icon: 'regler' },
   { href: '/app/team', text: 'Team', icon: 'team', nurAdmin: true },
 ];
+// Tool Menü nur, wenn der Wechsel eingerichtet ist (LINK_SECRET), sonst führen die Einträge ins Leere
+const wechselAktiv = geheimGueltig(env.LINK_SECRET);
 const aktiv = (href: string) => pfad === href || pfad.startsWith(href + '/');
 ---
 <Basis titel={`${titel} | Let's Meet Backoffice`} klasse="app">
@@ -72,7 +76,10 @@ const aktiv = (href: string) => pfad === href || pfad.startsWith(href + '/');
           {eyebrow && <p class="eyebrow">{eyebrow}</p>}
           <h1>{titel}<span class="punkt">.</span></h1>
         </div>
-        <div class="aktionen"><slot name="aktionen" /></div>
+        <div class="kopf-rechts">
+          <div class="aktionen"><slot name="aktionen" /></div>
+          {wechselAktiv && <thatsit-switcher app="meet" class="tool-menue"></thatsit-switcher>}
+        </div>
       </header>
       {meldung && (
         <p class:list={['hinweis', `hinweis--${meldung.art}`, 'meldung']} role={meldung.art === 'fehler' ? 'alert' : 'status'}>
@@ -82,6 +89,7 @@ const aktiv = (href: string) => pfad === href || pfad.startsWith(href + '/');
       <slot />
     </main>
   </div>
+  {wechselAktiv && <script is:inline src="/thatsit-switcher.js" defer></script>}
 </Basis>
 
 <script>
@@ -160,7 +168,9 @@ const aktiv = (href: string) => pfad === href || pfad.startsWith(href + '/');
   .inhalt { padding: var(--raum-8) clamp(1rem, 3vw, 3rem) var(--raum-16); max-width: 1840px; width: 100%; min-width: 0; }
   .seitenkopf { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--raum-4); flex-wrap: wrap; margin-bottom: var(--raum-8); }
   .titelgruppe { display: grid; gap: var(--raum-2); }
+  .kopf-rechts { display: flex; align-items: flex-start; gap: var(--raum-3); flex-wrap: wrap; }
   .aktionen { display: flex; gap: var(--raum-2); flex-wrap: wrap; }
+  .tool-menue { margin-left: auto; }
   .meldung { margin-bottom: var(--raum-6); }
 
   @media (max-width: 960px) {

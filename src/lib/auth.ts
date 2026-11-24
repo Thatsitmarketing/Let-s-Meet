@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import type { AstroCookies } from 'astro';
 import { eins } from './db';
+import { sitzungWertBauen, sitzungWertLesen } from './sitzung-wert';
 import type { Nutzer } from './typen';
 
 export const SITZUNG_COOKIE = 'lm_sitzung';
@@ -69,9 +70,10 @@ export async function signaturPruefen(signiert: string, zweck: 'sitzung' | 'oaut
   return gleich(await hmac(`${zweck}:${wert}`), signiert.slice(punkt + 1)) ? wert : null;
 }
 
-export async function sitzungStarten(cookies: AstroCookies, nutzerId: string, sicher: boolean) {
+/** `twofa` nur setzen, wenn die Person in einem anderen Tool mit 2FA angemeldet war (Tool Wechsel). */
+export async function sitzungStarten(cookies: AstroCookies, nutzerId: string, sicher: boolean, twofa = false) {
   const ablauf = Date.now() + SITZUNG_STUNDEN * 3600_000;
-  cookies.set(SITZUNG_COOKIE, await signieren(`${nutzerId}|${ablauf}`), {
+  cookies.set(SITZUNG_COOKIE, await signieren(sitzungWertBauen(nutzerId, ablauf, twofa)), {
     httpOnly: true,
     secure: sicher,
     sameSite: 'strict',
@@ -84,12 +86,16 @@ export function sitzungBeenden(cookies: AstroCookies) {
   cookies.delete(SITZUNG_COOKIE, { path: '/' });
 }
 
-export async function nutzerAusSitzung(cookies: AstroCookies): Promise<Nutzer | null> {
+export async function sitzungAusCookies(cookies: AstroCookies): Promise<{ nutzer: Nutzer; twofa: boolean } | null> {
   const roh = cookies.get(SITZUNG_COOKIE)?.value;
   if (!roh) return null;
   const wert = await signaturPruefen(roh).catch(() => null);
-  if (!wert) return null;
-  const [id, ablauf] = wert.split('|');
-  if (!id || Number(ablauf) < Date.now()) return null;
-  return eins<Nutzer>('SELECT * FROM nutzer WHERE id = ? AND aktiv = 1', id);
+  const sitzung = wert ? sitzungWertLesen(wert) : null;
+  if (!sitzung || sitzung.ablauf < Date.now()) return null;
+  const nutzer = await eins<Nutzer>('SELECT * FROM nutzer WHERE id = ? AND aktiv = 1', sitzung.id);
+  return nutzer ? { nutzer, twofa: sitzung.twofa } : null;
+}
+
+export async function nutzerAusSitzung(cookies: AstroCookies): Promise<Nutzer | null> {
+  return (await sitzungAusCookies(cookies))?.nutzer ?? null;
 }
