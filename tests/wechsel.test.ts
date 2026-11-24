@@ -128,13 +128,20 @@ test('Ohne LINK_SECRET oder mit zu kurzem Secret antworten beide Routen mit 404'
   assert.equal(geheimGueltig(GEHEIM), true);
 });
 
-test('Ausgang ohne 2FA Beleg der Sitzung: 403 mit deutscher Seite, kein Token', async () => {
-  const antwort = await wechselAusgang(GEHEIM, new Request('https://x.test/auth/switch?to=scraper'), { nutzer: konto, twofa: false });
-  assert.equal(antwort.status, 403);
-  assert.equal(antwort.headers.get('location'), null);
-  const html = await antwort.text();
-  assert.match(html, /Zum Wechseln melde dich bitte einmal in einem Tool mit 2FA an, zum Beispiel im Lead System/);
-  assert.doesNotMatch(html, /token=/);
+test('Ausgang ohne 2FA Beleg der Sitzung: Umweg über das Lead System, kein Token', async () => {
+  const ohne = { nutzer: konto, twofa: false };
+  const zuCrm = await wechselAusgang(GEHEIM, new Request('https://x.test/auth/switch?to=crm&next=%2Fleads'), ohne);
+  assert.equal(zuCrm.status, 302);
+  zuCrm.headers.set('x-test', '1'); // Header müssen veränderbar sein, die Middleware setzt weitere
+  const l = new URL(zuCrm.headers.get('location')!);
+  assert.equal(l.origin + l.pathname, 'https://leads.thatsit.marketing/auth/switch');
+  assert.equal(l.searchParams.get('to'), 'crm');
+  assert.equal(l.searchParams.get('next'), '/leads');
+  assert.equal(l.searchParams.get('token'), null);
+  const zuLead = await wechselAusgang(GEHEIM, new Request('https://x.test/auth/switch?to=scraper'), ohne);
+  assert.equal(zuLead.status, 302);
+  assert.equal(zuLead.headers.get('location'), 'https://leads.thatsit.marketing/');
+  assert.doesNotMatch(zuLead.headers.get('location')!, /token=/);
 });
 
 test('Ausgang ohne Anmeldung: 401 mit Link zur Anmeldung', async () => {
@@ -167,9 +174,9 @@ test('Ausgang: unbekanntes Ziel und das eigene Tool geben 404', async () => {
 
 test('Das Token aus dem Lead System kommt hier an (Gegenprobe mit dem Ausgang der Vorlage)', async () => {
   const dest = (await leads.out(new Request('https://leads.thatsit.marketing/auth/switch?to=meet&next=%2Fapp%2Ftermine'), victor)).headers.get('location')!;
-  assert.match(dest, /^https:\/\/meet\.thatsit\.marketing\/auth\/switch\/in\?/);
+  assert.match(dest, /^https:\/\/letsmeet\.thatsit\.marketing\/auth\/switch\/in\?/);
   const u = umgebung();
-  const antwort = await rein(dest.replace('https://meet.thatsit.marketing', 'https://letsmeet.thatsit.marketing'), u);
+  const antwort = await rein(dest, u);
   assert.equal(antwort.status, 200);
   assert.equal(u.gestartet[0].email, MAIL);
 });

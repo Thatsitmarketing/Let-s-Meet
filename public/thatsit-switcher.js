@@ -14,6 +14,7 @@
     'button:focus-visible,a:focus-visible{outline:2px solid #C9A23A;outline-offset:2px}',
     '.p{position:absolute;right:0;top:46px;z-index:2147483000;width:312px;max-width:calc(100vw - 16px);background:#1B1B1B;color:#F2EFE8;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,.5)}',
     '.p[hidden]{display:none}',
+    ':host([align=left]) .p{left:0;right:auto}',
     '.h{margin:0 0 12px;color:#C9A23A;font-weight:700;display:flex;align-items:center;gap:8px}',
     '.h::before{content:"";width:8px;height:8px;background:#DC9833}',
     '.g{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}',
@@ -46,7 +47,18 @@
       }).join('') + '</div></div>';
     var btn = root.querySelector('button.t');
     var panel = root.querySelector('.p');
-    function setOpen(open) { panel.hidden = !open; btn.setAttribute('aria-expanded', String(open)); }
+    // Optional: align="left" öffnet das Fenster linksbündig (schmale Seitenleiste), popup="fixed" legt es über die Seite,
+    // damit eine scrollende Seitenleiste (overflow) es nicht abschneidet. Ohne Attribute wie bisher.
+    var fixedPopup = this.getAttribute('popup') === 'fixed';
+    function place() {
+      var r = btn.getBoundingClientRect(), w = panel.offsetWidth, h = panel.offsetHeight;
+      var left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+      var top = r.bottom + 6 + h > window.innerHeight - 8 ? Math.max(8, r.top - 6 - h) : r.bottom + 6;
+      panel.style.position = 'fixed'; panel.style.right = 'auto';
+      panel.style.left = left + 'px'; panel.style.top = top + 'px';
+    }
+    function setOpen(open) { panel.hidden = !open; btn.setAttribute('aria-expanded', String(open)); if (open && fixedPopup) place(); }
+    if (fixedPopup) window.addEventListener('resize', function () { if (!panel.hidden) place(); });
     btn.addEventListener('click', function (e) { e.stopPropagation(); setOpen(panel.hidden); });
     document.addEventListener('click', function (e) { if (!self.contains(e.target)) setOpen(false); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !panel.hidden) { setOpen(false); btn.focus(); } });
