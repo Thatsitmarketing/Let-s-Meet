@@ -95,3 +95,11 @@ test('API Schlüssel aus dem Secret wird bereinigt (Fehler "Invalid header value
   assert.equal(schluesselPruefen('mein-schluessel').formatOk, false);
   assert.equal(schluesselPruefen(undefined).schluessel, '');
 });
+
+test('Wiedereinstieg nach der Verabschiedung', async () => {
+  const { wiederEinstieg } = await import('../src/lib/whatsapp/eingang.ts');
+  for (const t of ['okay ich will doch', 'Ja gerne', 'Doch, lass uns einen Termin machen', 'Hab mich umentschieden', 'Ich bin doch überzeugt']) assert.equal(wiederEinstieg(t), 'ja', t);
+  for (const t of ['Nein danke', 'nö', 'Bleibt dabei, zu teuer']) assert.equal(wiederEinstieg(t), 'nein', t);
+  for (const t of ['Danke dir!', 'Dankeschön 🙂', 'Tschüss']) assert.equal(wiederEinstieg(t), 'danke', t);
+  for (const t of ['hallo', 'Hi', 'Wie lange dauert das?']) assert.equal(wiederEinstieg(t), null, t);
+});

@@ -95,6 +95,7 @@ export function knopfSchritt(knopf: string): string | null {
     {
       p: 'problem',
       n: 'problem',
+      r: 'zurueck',
       w: 'website_frage',
       z: 'zeitpunkt',
       b: 'budget',
@@ -115,6 +116,24 @@ export function knopfPasst(knopf: string, schritt: string) {
   if (!ziel) return false;
   if (ziel === schritt) return true;
   if (ziel === 'problem' && (schritt === 'start' || schritt === 'problem')) return true;
+  // Nach der Verabschiedung: eigene Knöpfe und die alten Knöpfe der Budget und Einwandfrage zählen als Antwort
+  if (schritt.startsWith('zurueck') && (ziel === 'zurueck' || ziel === 'einwand' || ziel === 'budget')) return true;
   if (ziel === 'termin' && schritt === 'wunschzeit') return true;
   return false;
+}
+
+/**
+ * Der Lead meldet sich nach der Verabschiedung wieder ("okay ich will doch", "hallo", "danke").
+ * ja: will doch einen Termin, nein: bleibt beim Nein, danke: nur Dank oder Gruß zum Abschied,
+ * null: unklar (der Bot fragt nach, ob er den Termin doch festmachen soll).
+ */
+export function wiederEinstieg(text: string): 'ja' | 'nein' | 'danke' | null {
+  const t = ` ${klein(text).replace(/[.!?🙂😊👍🙏]+/gu, ' ').replace(/\s+/g, ' ').trim()} `;
+  if (!t.trim()) return null;
+  // Wortgrenzen über Leerzeichen, weil \b bei Umlauten am Wortrand nicht greift ("nö", "überzeugt")
+  const hat = (woerter: string) => new RegExp(` (${woerter}) `).test(t);
+  if (hat('nein|nö|noe|kein interesse|eher nicht|lieber nicht|nicht mehr|lass mal|passt nicht|zu teuer|bleibt dabei')) return 'nein';
+  if (hat('will doch|möchte doch|moechte doch|doch interesse|doch gerne?|doch lieber|doch einen termin|doch ein gespräch|doch noch|ja|jo|jap|gerne?|termin|bin dabei|machen wir|lass uns|überzeugt|ueberzeugt|anders überlegt|anders ueberlegt|umentschieden')) return 'ja';
+  if (t.trim().length < 60 && /^ (danke|vielen dank|danke dir|dankeschön|dankeschoen|danke schön|ok danke|okay danke|alles klar danke|dir auch|euch auch|tschüss|tschuess|ciao|bye|schönen tag|schoenen tag) /.test(t)) return 'danke';
+  return null;
 }
