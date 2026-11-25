@@ -39,8 +39,8 @@ export const APPS = [
   },
   {
     "id": "crm",
-    "name": "CRM",
-    "long": "Closed CRM",
+    "name": "Close",
+    "long": "Close CRM",
     "url": "https://crm.thatsit.marketing",
     "confirmed": false
   },
