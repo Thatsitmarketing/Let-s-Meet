@@ -99,7 +99,8 @@ export async function verifyToken(secret, token, { typ, aud, now = Math.floor(Da
 // Nur relative Pfade zulassen, damit der Rücksprung kein Open Redirect wird.
 export const safeNext = (n) => (typeof n === 'string' && /^\/(?![\/\\])/.test(n) ? n : '/');
 
-export function createLink({ appId, secret, allowedEmails, resolveUser, urls = {}, seenJti, now = () => Math.floor(Date.now() / 1000) }) {
+// require2fa: false (Standard) = jede angemeldete Sitzung darf direkt wechseln. true = nur mit 2FA Beleg, sonst Umweg über HOME_ID.
+export function createLink({ appId, secret, allowedEmails, resolveUser, urls = {}, seenJti, require2fa = false, now = () => Math.floor(Date.now() / 1000) }) {
   if (!appId || !secret) throw new Error('appId und secret sind Pflicht');
   if (!allowedEmails && !resolveUser) throw new Error('allowedEmails oder resolveUser setzen: sonst käme jeder mit gültigem Token rein');
   const apps = APPS.map((a) => ({ ...a, url: (urls[a.id] || a.url).replace(/\/$/, '') }));
@@ -117,13 +118,13 @@ export function createLink({ appId, secret, allowedEmails, resolveUser, urls = {
 
   return {
     apps,
-    // Ausgang: nur für angemeldete Nutzer, die ihre 2FA in diesem Tool bestanden haben.
+    // Ausgang: für jeden angemeldeten Nutzer. Mit require2fa zusätzlich nur mit 2FA Beleg in dieser Sitzung.
     async out(request, user) {
       const u = new URL(request.url);
       const target = apps.find((a) => a.id === u.searchParams.get('to'));
       if (!target || target.id === appId) return new Response('Unbekanntes Ziel', { status: 404 });
       if (!user || !user.email) return new Response('Nicht angemeldet', { status: 401 });
-      if (user.twofa !== true) {
+      if (require2fa && user.twofa !== true) {
         // Kein 2FA Beleg in dieser Sitzung: nicht in eine Sackgasse laufen lassen, sondern zum Tool mit echter 2FA
         // (HOME_ID) schicken. Dort anmelden (einmal mit 2FA), danach geht der Wechsel zum gewünschten Ziel direkt weiter.
         const home = apps.find((a) => a.id === HOME_ID);
@@ -139,7 +140,7 @@ export function createLink({ appId, secret, allowedEmails, resolveUser, urls = {
       const t = now();
       const token = await signToken(secret, {
         typ: 'switch', iss: appId, aud: target.id, email: user.email, name: user.name || user.email, role: user.role || 'member',
-        amr: ['pwd', 'otp'], iat: t, exp: t + 60, jti: rid(),
+        amr: user.twofa === true ? ['pwd', 'otp'] : ['pwd'], iat: t, exp: t + 60, jti: rid(),
       });
       const dest = new URL('/auth/switch/in', target.url);
       dest.searchParams.set('token', token);
@@ -153,7 +154,8 @@ export function createLink({ appId, secret, allowedEmails, resolveUser, urls = {
       try {
         c = await verifyToken(secret, u.searchParams.get('token'), { typ: 'switch', aud: appId, now: now() });
         if (!apps.some((a) => a.id === c.iss) || c.iss === appId) throw new Error('Aussteller unbekannt');
-        if (!Array.isArray(c.amr) || !c.amr.includes('otp')) throw new Error('2FA Beleg fehlt');
+        if (!Array.isArray(c.amr)) throw new Error('Token ohne amr');
+        if (require2fa && !c.amr.includes('otp')) throw new Error('2FA Beleg fehlt');
         if (!(await firstUse(c.jti, c.exp))) throw new Error('Token wurde schon benutzt');
       } catch (e) {
         return new Response(`Wechsel abgelehnt: ${e.message}`, { status: 401 });

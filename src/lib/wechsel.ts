@@ -1,6 +1,7 @@
 /**
  * Tool Wechsel: von einem anderen That's it. Tool nach Let's Meet (und zurück) ohne neue Anmeldung.
- * Ohne 2FA Beleg der Sitzung führt der Ausgang per 302 zum Lead System (HOME_ID), das nach der Anmeldung mit 2FA das Token ausstellt.
+ * Standard (seit 2026-11-25): jede angemeldete Sitzung darf direkt wechseln, ohne 2FA Pflicht. Mit require2fa (LINK_REQUIRE_2FA=1)
+ * führt der Ausgang ohne 2FA Beleg der Sitzung per 302 zum Lead System (HOME_ID), das nach der Anmeldung mit 2FA das Token ausstellt.
  * Die Prüfung der Token liegt in thatsit-link.mjs (Kopie aus dem Repo thatsit-hub), hier hängt die
  * Anbindung an Let's Meet: eigene Seiten, Konto Suche und das Merken benutzter Token.
  *
@@ -18,6 +19,21 @@ export const APP_ID = 'meet';
 export const MIN_GEHEIMNIS = 32;
 
 /** Ohne gültiges LINK_SECRET (mindestens 32 Zeichen) gibt es den Wechsel nicht, beide Routen antworten 404. */
+/** Strenger Modus nur, wenn LINK_REQUIRE_2FA genau '1' ist. Standard: aus. */
+export const zweiFaktorPflicht = (wert: string | undefined) => wert === '1';
+
+/** Liest nur zur Anzeige, ob das Token einen 2FA Beleg trägt. Die Prüfung der Signatur macht createLink vor startSession. */
+export function tokenHatOtp(anfrage: Request): boolean {
+  try {
+    const token = new URL(anfrage.url).searchParams.get('token') ?? '';
+    const roh = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const amr = JSON.parse(atob(roh.padEnd(roh.length + ((4 - (roh.length % 4)) % 4), '='))).amr;
+    return Array.isArray(amr) && amr.includes('otp');
+  } catch {
+    return false;
+  }
+}
+
 export const geheimGueltig = (geheim: string | undefined): geheim is string => typeof geheim === 'string' && geheim.length >= MIN_GEHEIMNIS;
 
 export type Konto = Pick<Nutzer, 'id' | 'email' | 'name' | 'rolle'>;
@@ -81,12 +97,13 @@ export async function wechselAusgang(
   geheim: string | undefined,
   anfrage: Request,
   sitzung: { nutzer: Pick<Nutzer, 'email' | 'name' | 'rolle'>; twofa: boolean } | null,
+  require2fa = false,
 ): Promise<Response> {
   if (!geheimGueltig(geheim)) return new Response('Nicht gefunden', { status: 404, headers: { 'cache-control': 'no-store' } });
-  const link = createLink({ appId: APP_ID, secret: geheim, resolveUser: async () => null });
+  const link = createLink({ appId: APP_ID, secret: geheim, require2fa, resolveUser: async () => null });
   const antwort = await link.out(anfrage, sitzung ? wechselNutzer(sitzung.nutzer, sitzung.twofa) : null);
   if (antwort.status === 302) {
-    // Entweder Token für das Zieltool oder, ohne 2FA Beleg der Sitzung, der Umweg über das Lead System (HOME_ID, dort 2FA,
+    // Token für das Zieltool oder, nur im strengen Modus ohne 2FA Beleg der Sitzung, der Umweg über das Lead System (HOME_ID, dort 2FA,
     // kein Token in der Adresse). Beides ist eine Navigation aus dem eigenen Backoffice, ein normaler 302 genügt.
     // Response.redirect liefert unveränderliche Header, die Middleware setzt aber weitere
     return new Response(null, { status: 302, headers: { location: antwort.headers.get('location') ?? '/app', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' } });
@@ -96,7 +113,7 @@ export async function wechselAusgang(
       antwort.status,
       'Wechseln geht noch nicht',
       sitzung
-        ? 'Der Wechsel ist von hier aus gerade nicht möglich. Melde dich bitte im Lead System mit 2FA an, danach klappt er mit einem Klick im Tool Menü.'
+        ? 'Der Wechsel ist von hier aus gerade nicht möglich. Versuche es bitte noch einmal über das Tool Menü.'
         : 'Melde dich bitte zuerst im Backoffice an, danach geht der Wechsel mit einem Klick im Tool Menü.',
       { href: sitzung ? '/app' : '/app/login', text: sitzung ? 'Zurück ins Backoffice' : 'Zur Anmeldung' },
     );
@@ -112,12 +129,14 @@ export async function wechselEingang(
   geheim: string | undefined,
   anfrage: Request,
   deps: WechselAbhaengigkeiten,
-  sitzungStarten: (konto: Konto) => Promise<void>,
+  sitzungStarten: (konto: Konto, twofa: boolean) => Promise<void>,
+  require2fa = false,
 ): Promise<Response> {
   if (!geheimGueltig(geheim)) return new Response('Nicht gefunden', { status: 404, headers: { 'cache-control': 'no-store' } });
   const link = createLink({
     appId: APP_ID,
     secret: geheim,
+    require2fa,
     seenJti: deps.jtiMerken,
     resolveUser: async (u) => {
       const konto = await deps.kontoSuchen(u.email.toLowerCase());
@@ -126,7 +145,7 @@ export async function wechselEingang(
   });
   const antwort = await link.in(anfrage, {
     startSession: async (konto: Konto, next: string) => {
-      await sitzungStarten(konto);
+      await sitzungStarten(konto, tokenHatOtp(anfrage));
       return weiterleitungsseite(wechselZiel(next));
     },
   });

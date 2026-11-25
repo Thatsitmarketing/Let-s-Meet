@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createLink, signToken } from '../src/lib/thatsit-link.mjs';
-import { geheimGueltig, wechselAusgang, wechselEingang, wechselNutzer, wechselZiel, type Konto } from '../src/lib/wechsel.ts';
+import { geheimGueltig, wechselAusgang, wechselEingang, wechselNutzer, wechselZiel, zweiFaktorPflicht, type Konto } from '../src/lib/wechsel.ts';
 import { sitzungWertBauen, sitzungWertLesen } from '../src/lib/sitzung-wert.ts';
 
 const GEHEIM = 'gemeinsames-verbund-geheimnis-mit-mehr-als-32-zeichen';
@@ -35,12 +35,12 @@ function umgebung(konten: Konto[] = [konto]) {
       kontoSuchen: async (email: string) => konten.find((k) => k.email === email) ?? null,
       jtiMerken: async (jti: string) => (benutzt.has(jti) ? false : (benutzt.add(jti), true)),
     },
-    starten: async (k: Konto) => { gestartet.push(k); },
+    starten: async (k: Konto, _twofa?: boolean) => { gestartet.push(k); },
   };
 }
 
-const rein = (url: string, u = umgebung(), geheim: string | undefined | null = GEHEIM) =>
-  wechselEingang(geheim === null ? undefined : geheim, new Request(url), u.deps, u.starten);
+const rein = (url: string, u = umgebung(), geheim: string | undefined | null = GEHEIM, streng = false) =>
+  wechselEingang(geheim === null ? undefined : geheim, new Request(url), u.deps, u.starten, streng);
 
 test('Gültiges Token: Konto gefunden, Sitzung gestartet, lokale Rolle bleibt, Weiterleitung per meta refresh', async () => {
   const u = umgebung();
@@ -104,11 +104,32 @@ test('Groß und Kleinschreibung der Mailadresse spielt keine Rolle', async () =>
   assert.equal(u.gestartet.length, 1);
 });
 
-test('Ohne 2FA Beleg im Token gibt es keine Sitzung', async () => {
+test('Standard: Token ohne 2FA Beleg (amr pwd) startet eine Sitzung, ohne amr nicht', async () => {
   const u = umgebung();
-  assert.equal((await rein(await tokenUrl({ amr: ['pwd'] }), u)).status, 401);
+  assert.equal((await rein(await tokenUrl({ amr: ['pwd'] }), u)).status, 200);
   assert.equal((await rein(await tokenUrl({ amr: undefined }), u)).status, 401);
+  assert.equal(u.gestartet.length, 1);
+});
+
+test('Strenger Modus (require2fa): ohne 2FA Beleg im Token keine Sitzung', async () => {
+  const u = umgebung();
+  assert.equal((await rein(await tokenUrl({ amr: ['pwd'] }), u, GEHEIM, true)).status, 401);
+  assert.equal((await rein(await tokenUrl({ amr: undefined }), u, GEHEIM, true)).status, 401);
   assert.equal(u.gestartet.length, 0);
+  assert.equal((await rein(await tokenUrl({ amr: ['pwd', 'otp'] }), u, GEHEIM, true)).status, 200);
+});
+
+test('Sitzung trägt das 2FA Flag nur, wenn das Token einen Beleg hatte', async () => {
+  const flags: boolean[] = [];
+  const u = umgebung();
+  for (const amr of [['pwd'], ['pwd', 'otp']]) {
+    const url = await tokenUrl({ amr });
+    await wechselEingang(GEHEIM, new Request(url), u.deps, async (_k, twofa) => { flags.push(twofa); });
+  }
+  assert.deepEqual(flags, [false, true]);
+  assert.equal(zweiFaktorPflicht('1'), true);
+  assert.equal(zweiFaktorPflicht(undefined), false);
+  assert.equal(zweiFaktorPflicht('0'), false);
 });
 
 test('Andere Tokentypen (App zu App) und das eigene Tool als Aussteller werden abgelehnt', async () => {
@@ -128,9 +149,26 @@ test('Ohne LINK_SECRET oder mit zu kurzem Secret antworten beide Routen mit 404'
   assert.equal(geheimGueltig(GEHEIM), true);
 });
 
-test('Ausgang ohne 2FA Beleg der Sitzung: Umweg über das Lead System, kein Token', async () => {
+test('Standard: Ausgang ohne 2FA Beleg stellt direkt ein Token aus (amr pwd), kein Umweg', async () => {
   const ohne = { nutzer: konto, twofa: false };
   const zuCrm = await wechselAusgang(GEHEIM, new Request('https://x.test/auth/switch?to=crm&next=%2Fleads'), ohne);
+  assert.equal(zuCrm.status, 302);
+  const l = new URL(zuCrm.headers.get('location')!);
+  assert.equal(l.pathname, '/auth/switch/in');
+  assert.notEqual(l.origin, 'https://leads.thatsit.marketing');
+  const crm = createLink({ appId: 'crm', secret: GEHEIM, allowedEmails: MAIL });
+  let gesehen: any;
+  assert.equal((await crm.in(new Request(l), { startSession: async (u) => { gesehen = u; return new Response('ok'); } })).status, 200);
+  assert.equal(gesehen.email, MAIL);
+  const zuLead = await wechselAusgang(GEHEIM, new Request('https://x.test/auth/switch?to=scraper'), ohne);
+  assert.equal(new URL(zuLead.headers.get('location')!).pathname, '/auth/switch/in');
+  const strengesZiel = createLink({ appId: 'crm', secret: GEHEIM, allowedEmails: MAIL, require2fa: true });
+  assert.equal((await strengesZiel.in(new Request(l), { startSession: async () => new Response('ok') })).status, 401, 'strenges Zieltool lehnt Token ohne otp ab');
+});
+
+test('Strenger Modus: Ausgang ohne 2FA Beleg der Sitzung führt über das Lead System, kein Token', async () => {
+  const ohne = { nutzer: konto, twofa: false };
+  const zuCrm = await wechselAusgang(GEHEIM, new Request('https://x.test/auth/switch?to=crm&next=%2Fleads'), ohne, true);
   assert.equal(zuCrm.status, 302);
   zuCrm.headers.set('x-test', '1'); // Header müssen veränderbar sein, die Middleware setzt weitere
   const l = new URL(zuCrm.headers.get('location')!);
@@ -138,7 +176,7 @@ test('Ausgang ohne 2FA Beleg der Sitzung: Umweg über das Lead System, kein Toke
   assert.equal(l.searchParams.get('to'), 'crm');
   assert.equal(l.searchParams.get('next'), '/leads');
   assert.equal(l.searchParams.get('token'), null);
-  const zuLead = await wechselAusgang(GEHEIM, new Request('https://x.test/auth/switch?to=scraper'), ohne);
+  const zuLead = await wechselAusgang(GEHEIM, new Request('https://x.test/auth/switch?to=scraper'), ohne, true);
   assert.equal(zuLead.status, 302);
   assert.equal(zuLead.headers.get('location'), 'https://leads.thatsit.marketing/');
   assert.doesNotMatch(zuLead.headers.get('location')!, /token=/);
