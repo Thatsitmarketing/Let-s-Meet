@@ -13,8 +13,8 @@ export const APPS = [
     "id": "projekte",
     "name": "Projekte",
     "long": "Webdesign CRM, Projektmanagement",
-    "url": "https://projekte.thatsit.marketing",
-    "confirmed": false
+    "url": "https://webdesigncrm.aged-brook-9137.workers.dev",
+    "confirmed": true
   },
   {
     "id": "meet",
@@ -27,7 +27,7 @@ export const APPS = [
     "id": "sales-helper",
     "name": "Sales Helper",
     "long": "KI Assistent für Live Calls",
-    "url": "https://ki-sales-helper.aged-brook-9137.workers.dev",
+    "url": "https://saleshelper.thatsit.marketing",
     "confirmed": true
   },
   {
@@ -41,8 +41,8 @@ export const APPS = [
     "id": "crm",
     "name": "Close",
     "long": "Close CRM",
-    "url": "https://crm.thatsit.marketing",
-    "confirmed": false
+    "url": "https://close.thatsit.marketing",
+    "confirmed": true
   },
   {
     "id": "scraper",
