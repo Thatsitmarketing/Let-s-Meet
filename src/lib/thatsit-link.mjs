@@ -20,8 +20,8 @@ export const APPS = [
     "id": "meet",
     "name": "Let's Meet",
     "long": "Terminbuchung und WhatsApp Bot",
-    "url": "https://meet.thatsit.marketing",
-    "confirmed": false
+    "url": "https://letsmeet.thatsit.marketing",
+    "confirmed": true
   },
   {
     "id": "sales-helper",
@@ -39,8 +39,8 @@ export const APPS = [
   },
   {
     "id": "crm",
-    "name": "CRM",
-    "long": "Closed CRM",
+    "name": "Close",
+    "long": "Close CRM",
     "url": "https://crm.thatsit.marketing",
     "confirmed": false
   },
@@ -52,6 +52,9 @@ export const APPS = [
     "confirmed": true
   }
 ];
+
+// Das Tool, in dem die echte 2FA (TOTP) steckt. Wer in einem anderen Tool ohne 2FA Beleg wechseln will, wird dorthin geführt.
+export const HOME_ID = 'scraper';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -120,7 +123,19 @@ export function createLink({ appId, secret, allowedEmails, resolveUser, urls = {
       const target = apps.find((a) => a.id === u.searchParams.get('to'));
       if (!target || target.id === appId) return new Response('Unbekanntes Ziel', { status: 404 });
       if (!user || !user.email) return new Response('Nicht angemeldet', { status: 401 });
-      if (user.twofa !== true) return new Response('2FA fehlt, Wechsel nicht möglich', { status: 403 });
+      if (user.twofa !== true) {
+        // Kein 2FA Beleg in dieser Sitzung: nicht in eine Sackgasse laufen lassen, sondern zum Tool mit echter 2FA
+        // (HOME_ID) schicken. Dort anmelden (einmal mit 2FA), danach geht der Wechsel zum gewünschten Ziel direkt weiter.
+        const home = apps.find((a) => a.id === HOME_ID);
+        if (!home || appId === HOME_ID) return new Response('2FA fehlt, Wechsel nicht möglich', { status: 403 });
+        const next = safeNext(u.searchParams.get('next'));
+        const via = new URL(target.id === HOME_ID ? '/' : '/auth/switch', home.url);
+        if (target.id !== HOME_ID) {
+          via.searchParams.set('to', target.id);
+          via.searchParams.set('next', next);
+        }
+        return Response.redirect(via.toString(), 302);
+      }
       const t = now();
       const token = await signToken(secret, {
         typ: 'switch', iss: appId, aud: target.id, email: user.email, name: user.name || user.email, role: user.role || 'member',

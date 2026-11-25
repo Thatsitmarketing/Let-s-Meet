@@ -16,6 +16,8 @@ export interface Link {
   in(request: Request, optionen: { startSession: (user: any, next: string) => Promise<Response> | Response }): Promise<Response>;
 }
 export const APPS: LinkApp[];
+/** Tool mit echter 2FA: Wechsel ohne 2FA Beleg führt dorthin statt in eine Sackgasse. */
+export const HOME_ID: string;
 export function createLink(optionen: LinkOptionen): Link;
 export function signToken(secret: string, payload: Record<string, unknown>): Promise<string>;
 export function verifyToken(secret: string, token: string, optionen?: { typ?: string; aud?: string; now?: number }): Promise<Record<string, any>>;

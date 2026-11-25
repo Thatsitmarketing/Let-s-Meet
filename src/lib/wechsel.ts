@@ -1,5 +1,6 @@
 /**
  * Tool Wechsel: von einem anderen That's it. Tool nach Let's Meet (und zurück) ohne neue Anmeldung.
+ * Ohne 2FA Beleg der Sitzung führt der Ausgang per 302 zum Lead System (HOME_ID), das nach der Anmeldung mit 2FA das Token ausstellt.
  * Die Prüfung der Token liegt in thatsit-link.mjs (Kopie aus dem Repo thatsit-hub), hier hängt die
  * Anbindung an Let's Meet: eigene Seiten, Konto Suche und das Merken benutzter Token.
  *
@@ -85,6 +86,8 @@ export async function wechselAusgang(
   const link = createLink({ appId: APP_ID, secret: geheim, resolveUser: async () => null });
   const antwort = await link.out(anfrage, sitzung ? wechselNutzer(sitzung.nutzer, sitzung.twofa) : null);
   if (antwort.status === 302) {
+    // Entweder Token für das Zieltool oder, ohne 2FA Beleg der Sitzung, der Umweg über das Lead System (HOME_ID, dort 2FA,
+    // kein Token in der Adresse). Beides ist eine Navigation aus dem eigenen Backoffice, ein normaler 302 genügt.
     // Response.redirect liefert unveränderliche Header, die Middleware setzt aber weitere
     return new Response(null, { status: 302, headers: { location: antwort.headers.get('location') ?? '/app', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' } });
   }
@@ -92,7 +95,9 @@ export async function wechselAusgang(
     return seite(
       antwort.status,
       'Wechseln geht noch nicht',
-      'Zum Wechseln melde dich bitte einmal in einem Tool mit 2FA an, zum Beispiel im Lead System. Danach kommst du hier mit einem Klick im Tool Menü hin und zurück.',
+      sitzung
+        ? 'Der Wechsel ist von hier aus gerade nicht möglich. Melde dich bitte im Lead System mit 2FA an, danach klappt er mit einem Klick im Tool Menü.'
+        : 'Melde dich bitte zuerst im Backoffice an, danach geht der Wechsel mit einem Klick im Tool Menü.',
       { href: sitzung ? '/app' : '/app/login', text: sitzung ? 'Zurück ins Backoffice' : 'Zur Anmeldung' },
     );
   }
