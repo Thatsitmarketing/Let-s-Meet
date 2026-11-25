@@ -19,6 +19,7 @@ declare namespace Cloudflare {
     ANFRAGE_SCHLUESSEL?: string;
     /** Tool Wechsel (/auth/switch), gleicher Wert in allen That's it. Tools, mindestens 32 Zeichen. Ohne ihn 404 */
     LINK_SECRET?: string;
+    LINK_REQUIRE_2FA?: string;
     /** Close Automat (thatsit-close-automat), siehe src/lib/crm.ts */
     CRM_WEBHOOK_URL?: string;
     CRM_WEBHOOK_SECRET?: string;

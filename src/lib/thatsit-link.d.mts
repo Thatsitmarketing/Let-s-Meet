@@ -8,6 +8,7 @@ export interface LinkOptionen {
   resolveUser?: (user: { email: string; name?: string; role?: string }) => Promise<any | null> | any | null;
   urls?: Record<string, string>;
   seenJti?: (jti: string, exp: number) => Promise<boolean> | boolean;
+  require2fa?: boolean;
   now?: () => number;
 }
 export interface Link {
