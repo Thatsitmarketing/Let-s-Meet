@@ -13,7 +13,7 @@ export const APPS = [
     "id": "projekte",
     "name": "Projekte",
     "long": "Webdesign CRM, Projektmanagement",
-    "url": "https://webdesigncrm.aged-brook-9137.workers.dev",
+    "url": "https://kunden.thatsit.marketing",
     "confirmed": true
   },
   {
