@@ -50,6 +50,13 @@ export const APPS = [
     "long": "Lead System, Suche und Analyse",
     "url": "https://leads.thatsit.marketing",
     "confirmed": true
+  },
+  {
+    "id": "mail",
+    "name": "Mail",
+    "long": "Mail Service, Versand über Amazon SES",
+    "url": "https://mail.thatsit.marketing",
+    "confirmed": true
   }
 ];
 

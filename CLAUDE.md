@@ -138,3 +138,5 @@ Alle Werte in `src/styles/tokens.css`, abgeleitet aus dem Branding Guide.
 * Neue Einträge im Änderungsverlauf kommen oben in `docs/aenderungsverlauf.md`, neue Punkte zum Projektstand unten in `docs/projektstand.md`.
 * Längere Funktions und Referenzbeschreibungen gehören nach `docs/<thema>.md` und bekommen hier in „Wo was steht“ eine Zeile.
 * Diese Datei bleibt unter rund 40 KB und enthält nur Ziel, Stack, Befehle, feste Regeln und Verweise.
+
+2026-11-27: Tool Wechsel: Registry und Menü um den Mail Service ergänzt (App ID `mail`, https://mail.thatsit.marketing). `thatsit-link` und `thatsit-switcher.js` weichen damit vom Stand im Hub nur um diesen Eintrag ab. Keine Migration, keine neuen Secrets.
